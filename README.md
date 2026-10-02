@@ -58,6 +58,8 @@ pip install -r backend/requirements-dev.txt
 
 GitHub Actions runs backend tests, frontend type checking/build, and a Compose-backed integration smoke test using the explicitly gated mock model and embedding providers plus real PostgreSQL/Qdrant. Mock mode is for testing only and does not demonstrate model answer quality or live API access. The ordinary deployment defaults to OpenAI generation and local Sentence Transformers embeddings. For a lighter test build, CI sets INSTALL_LOCAL_EMBEDDINGS=false; the default laptop image installs CPU-only PyTorch. Runtime transitive dependencies are pinned in backend/requirements.lock and backend/requirements-local.lock.
 
+See [the verification record](docs/VERIFICATION.md) for passed checks and explicit unrun stages.
+
 ## OCI migration status
 
 This release's supported deployment is local Compose. OCI migration is **not an endpoint-only switch**. It requires provisioned services, service-specific adapters, identity policies, migration validation and reindexing. Implemented adapters cover OCI Object Storage, Queue, and Enterprise AI Responses and managed vector stores. Settings expose provider and destination configuration; credential-free SDK/HTTP contracts are tested. Existing content is moved with a checksum-verified, writer-stopped migration tool before activation. OCI PostgreSQL uses the configured SQLAlchemy database URL; OKE deployment still needs operator-provisioned infrastructure and secrets. No live OCI tenancy or OpenAI API account is claimed as tested. See [migration steps](docs/OCI_MIGRATION.md).

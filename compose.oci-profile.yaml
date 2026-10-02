@@ -1,0 +1,10 @@
+# Optional private OCI signing profile mounted read-only; never put it in this repository.
+# Use: docker compose -f compose.yaml -f compose.oci-profile.yaml up --build -d
+# OCI config's key_file path must be /run/oci/private_key.pem.
+services:
+  api:
+    volumes:
+      - ${AEGIS_OCI_PROFILE_DIR:?Set an absolute private OCI profile directory}:/run/oci:ro
+  worker:
+    volumes:
+      - ${AEGIS_OCI_PROFILE_DIR:?Set an absolute private OCI profile directory}:/run/oci:ro

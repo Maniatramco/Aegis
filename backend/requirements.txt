@@ -1,0 +1,12 @@
+fastapi==0.142.2
+uvicorn==0.54.0
+SQLAlchemy==2.1.2
+psycopg[binary]==3.3.6
+pydantic==2.13.5
+python-multipart==0.0.32
+cryptography==50.0.2
+httpx==0.28.1
+pypdf==6.19.0
+python-docx==1.2.0
+qdrant-client==1.19.1
+jsonschema==4.26.0

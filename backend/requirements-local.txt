@@ -1,0 +1,4 @@
+# Docker preinstalls the CPU-only torch wheel from the official PyTorch registry.
+sentence-transformers==6.1.0
+torch==2.14.1
+transformers==5.18.0
