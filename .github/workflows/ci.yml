@@ -31,6 +31,16 @@ jobs:
         working-directory: frontend
       - run: npm run typecheck && npm run build
         working-directory: frontend
+  local-embedding-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the default laptop image with CPU embeddings
+        run: docker build --build-arg INSTALL_LOCAL_EMBEDDINGS=true -t aegis-local-embedding ./backend
+      - name: Run real local inference inside the default image
+        run: |
+          docker run --rm --entrypoint python -e HF_HOME=/data/model-cache aegis-local-embedding -c "from app.providers import embed; vectors=embed(['Aegis keeps original documents in storage.', 'A separate sample sentence.']); assert len(vectors)==2 and all(len(v)==384 for v in vectors); assert all(abs(sum(x*x for x in v)-1)<0.01 for v in vectors); print('PASS: real normalized local embeddings in default Docker image')"
   compose-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
