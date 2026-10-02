@@ -50,7 +50,9 @@ services:
       timeout: 4s
       retries: 20
       start_period: 10s
-    networks: [private]
+    # A publishable bridge is required for the localhost-bound UI port.
+    # Database/vector services stay exclusively on the internal network.
+    networks: [private, edge]
   api:
     <<: *backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -93,3 +95,4 @@ networks:
   private:
     internal: true
   outbound: {}
+  edge: {}
