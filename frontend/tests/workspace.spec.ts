@@ -138,15 +138,26 @@ async function askAndCheckRouting(page: Page, question: string, datasetId: strin
   await page.getByRole("button", { name: "Send", exact: true }).click();
   const response = await pending;
   expect(response.ok()).toBeTruthy();
-  expect(response.request().postDataJSON()).toMatchObject({ dataset_id: datasetId, model_id: modelId });
-  const stream = await response.text();
-  const done = stream.split("\n\n").find(event => event.startsWith("event: done\n"));
-  expect(done, "The real answer stream must finish with persisted routing evidence").toBeTruthy();
-  const result = JSON.parse(done!.split("\n").find(line => line.startsWith("data: "))!.slice(6));
-  expect(result.message.model_selection).toMatchObject({ dataset_id: datasetId, model_id: modelId });
-  expect(result.message.mock).toBe(true);
+  expect(response.request().postDataJSON()).toMatchObject({ text: question, dataset_id: datasetId, model_id: modelId });
+  // Chromium may discard the body of an SSE resource. Verify the completed UI
+  // and canonical stored conversation instead of asking CDP to retrieve it.
+  const conversationPath = new URL(response.url()).pathname.replace(/\/messages\/stream$/, "");
+  let message: Record<string, any> | undefined;
+  await expect.poll(async () => {
+    const conversation = await checked(await page.request.get(conversationPath));
+    const messages: Record<string, any>[] = conversation.messages;
+    const requestIndex = messages.findLastIndex(item => item.role === "user" && item.text === question &&
+      item.model_selection?.dataset_id === datasetId && item.model_selection?.model_id === modelId);
+    message = requestIndex >= 0 ? messages[requestIndex + 1] : undefined;
+    return message?.role === "assistant" ? message.status : undefined;
+  }, { message: "The selected-model answer must complete and persist", timeout: 30000 }).toBe("completed");
+  expect(message!.model_selection).toMatchObject({ dataset_id: datasetId, model_id: modelId });
+  expect(message!.mock).toBe(true);
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
   await expect(page.getByTitle("Copy answer").last()).toBeVisible();
-  return result.message;
+  await expect(page.locator(".chat-messages .message").last()).toContainText(message!.text);
+  await expect(page.getByRole("button", { name: "Dismiss error" })).toHaveCount(0);
+  return message!;
 }
 
 test("switches zero, one and multiple mapped models and routes chat and extraction to the selection", async ({ page }) => {
