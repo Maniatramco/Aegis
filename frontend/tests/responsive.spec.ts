@@ -3,9 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { checked, seedMockCatalog, seedDataset, uploadReady, seedTemplate } from "./fixtures";
 
+test.use({ actionTimeout: 15000 });
 const output = path.join(process.cwd(), "screenshots", "responsive");
 const screens = ["Home", "Datasets", "Ask Aegis", "Extract", "Templates", "Dashboard", "Index inspector", "Jobs & activity", "Connections", "Services & migration", "Setup"];
 async function navigate(page: Page, name: string) {
+  await expect(page.locator("main h1")).toBeVisible();
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
   const nav = page.getByRole("navigation");
@@ -38,7 +40,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   const session = await checked(await page.request.post("/api/auth/login", { data: { username: process.env.AEGIS_SMOKE_USERNAME || "smoke", password } }));
   const headers = { "X-CSRF-Token": session.csrf_token };
   const models = await seedMockCatalog(page.request, headers, "Responsive synthetic");
-  const dataset = await seedDataset(page.request, headers, "Responsive review · synthetic documents", [models.fast, models.careful], models.embedding);
+  const dataset = await seedDataset(page.request, headers, `Responsive review · synthetic documents ${Date.now()}`, [models.fast, models.careful], models.embedding);
   const sourceDocument = await uploadReady(page.request, headers, dataset, "Synthetic-" + "LongDocumentName".repeat(6) + ".txt", "SYNTHETIC responsive testing document. Reference R-2026. Original documents remain stored. Review and verify the result. ".repeat(20));
   const template = await seedTemplate(page.request, headers, "Synthetic-" + "LongTemplateName".repeat(5));
   const report: unknown[] = [];
