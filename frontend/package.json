@@ -8,7 +8,7 @@
     "start": "next start -H 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test workspace.spec.ts",
-    "test:screenshots": "playwright test screenshots.spec.ts"
+    "test:screenshots": "playwright test screenshots.spec.ts responsive.spec.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
