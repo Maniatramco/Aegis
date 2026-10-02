@@ -50,7 +50,17 @@ def await_job(job_id):
     raise AssertionError('Job did not reach completion before the integration timeout: ' + job_id)
 
 
-assert request('/auth/status')['setup_required']
+# Container 'running' is not HTTP readiness; wait for the published web proxy.
+deadline = time.monotonic() + 60
+while True:
+    try:
+        status = request('/auth/status')
+        break
+    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        if time.monotonic() >= deadline:
+            raise
+        time.sleep(1)
+assert status['setup_required']
 request('/documents', expected=401)
 values = dict(line.split('=', 1) for line in Path('.env').read_text().splitlines() if '=' in line and not line.startswith('#'))
 password = os.getenv('AEGIS_SMOKE_PASSWORD') or 'Smoke-test-only-' + uuid.uuid4().hex
