@@ -1,11 +1,16 @@
 # Verification record
 
-Verified in the build workspace on 2026-10-02. Mock-provider checks never claim live model answer quality.
+Verified in the build workspace and GitHub-hosted CI on 2026-10-02. Mock-provider checks never claim live model answer quality.
+
+All four jobs passed on commit `c9f211b415e183746bc00529aea27042df224802`: [Validate Aegis run](https://github.com/Maniatramco/Aegis/actions/runs/36995570646). Subsequent documentation-only commits may have their own repeat runs.
 
 ## Passed
 
 - Backend pytest suite: 155 tests passed. Coverage includes auth/CSRF, ownership and document scope, traversal and archive guards, durable-job leases/cancellation/retry, cleanup fencing, encrypted credential masking, named profile isolation, schema validation, extraction evidence, provider contracts, queue reconciliation, and checksum-verified storage migration.
 - Full same-origin integration smoke: Next.js API proxy → FastAPI → separate worker, with SQLite/file search and explicitly gated mock providers. Upload/indexing, scoped citations, original download, template versions, extraction/export, reindex/delete, session logout passed.
+- Real Docker Compose deployment with PostgreSQL and Qdrant: startup/readiness, durable queued-worker restart, upload/index, scoped citations, downloads, template versions, extraction/export, reindex/delete and logout passed. The discovered localhost publishing issue was fixed with a dedicated web bridge while database/vector services remain internal.
+- Four Chromium browser workflow tests passed: all ten screens and session refresh; knowledge-base creation, upload, ready status, preview and index; schema template and masked connections; mobile navigation and signout.
+- Default Docker image built with CPU-only PyTorch and produced real normalized 384-dimensional local embeddings.
 - Frontend TypeScript type checking and optimized Next.js production build passed.
 - npm dependency audit: zero reported vulnerabilities.
 - Python production runtime lock audit: zero reported vulnerabilities.
@@ -13,10 +18,9 @@ Verified in the build workspace on 2026-10-02. Mock-provider checks never claim 
 - YAML parsing, shell syntax, repository whitespace checks and targeted secret-pattern scan passed. Source packaging excludes credentials, runtime data, caches and dependencies.
 - OCI Object Storage/Queue tests exercise the actual pinned SDK argument/model contracts with transport mocked. OCI Responses/vector store tests exercise verified HTTP/auth contracts and mocked complete workflows, including stream cancellation and source reconciliation.
 
-## Not yet run or blocked
+## Explicitly unverified or unsupported
 
-- Docker Compose container build/runtime, PostgreSQL/Qdrant service integration and browser interaction tests are configured in GitHub Actions but have not run. This workspace has no Docker daemon, and the cloud browser blocked direct localhost access. A successful source build is not a substitute for these checks.
-- Repository publication is blocked by the connected GitHub integration returning HTTP 403: `Resource not accessible by integration` on a repository Contents write. No push or GitHub Actions success is claimed until access is corrected and the exact remote commit is verified.
+- Direct interactive inspection in this workspace's cloud browser was blocked for localhost; browser interaction tests instead passed on the GitHub-hosted runner against the real Compose deployment.
 - Live OpenAI calls, live OCI tenancy authentication/resources, real OCI ingestion/retrieval and OKE deployment have not been exercised. They require the recipient's own credentials and provisioned resources. SDK/HTTP mocks do not prove live compatibility, quota, region availability or IAM policies.
 - Scanned/image-only PDFs require external OCR before upload; built-in OCR is not included.
 - Cold storage migration requires genuinely stopped writers; the operator assertion cannot detect a separate deployment sharing the same storage.
@@ -32,4 +36,4 @@ pip install -r backend/requirements-dev.txt
 ./scripts/local-smoke.sh
 ```
 
-The CI workflow adds real container services and Playwright UI tests. Do not interpret a configured workflow as a passed workflow.
+The CI workflow adds real container services, default-image CPU inference and Playwright UI tests. See the linked completed run for evidence; local mock tests alone do not substitute for these checks.
