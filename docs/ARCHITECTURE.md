@@ -20,11 +20,17 @@ These are the intended boundaries; API route names and implemented behavior are 
 
 ## Provider choices and failure semantics
 
-The deployment defaults to Qdrant search, OpenAI models/embeddings and PostgreSQL. A sentence-transformers embedding option can run locally where its model dependencies are installed. Explicit mock/test modes are for deterministic tests and demos; their outputs are not real model inference and must not be represented as such.
+The deployment defaults to Qdrant search, OpenAI generation, local Sentence Transformers embeddings, and PostgreSQL. Dataset mappings select the generation and indexing configurations used by individual operations. Explicit mock/test modes are for deterministic tests and demos; their outputs are not real model inference and must not be represented as such.
 
 OCI adapters provide real SDK/compatible-API paths but have not been live-tenancy validated; see [OCI readiness](OCI_READINESS.md). Provider validation should reject unsupported names and missing dependencies without silently selecting a mock. Credential-free status can say "configured" but must not say "verified". Service health and integration readiness are different signals.
 
 Keep provider credentials in server-side environment/secret facilities only. Never include API keys, database passwords or signed object URLs in browser payloads, job logs or capability responses.
+
+## Dataset and model configuration
+
+Datasets retain the existing knowledge-base identities and document parent links. Their versioned storage artifacts hold configuration and mappings; model catalog records reference versioned connection profiles. Generation choices are capability-specific. Indexing has one embedding configuration per dataset generation, and retrieval checks compatible index provenance. No provider credential is copied into dataset metadata or public run history.
+
+Selected models are validated before execution and recorded with immutable configuration references for provenance. Per-request provider context must remain isolated across concurrent requests and worker threads. Deployment storage and queue settings are separate from model selection. See [dataset workflows](DATASETS.md).
 
 ## Consistency and job processing
 

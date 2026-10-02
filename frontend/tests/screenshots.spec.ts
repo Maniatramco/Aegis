@@ -1,6 +1,7 @@
-import { test, expect, type Page, type APIResponse, type Response } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { checked, seedMockCatalog, seedDataset, uploadReady } from "./fixtures";
 
 // Run only against the disposable, explicitly mock-enabled Compose deployment.
 // Never retain traces/storageState: those can contain authentication material.
@@ -50,10 +51,6 @@ Success criteria: originals remain downloadable; all completed ingestion jobs ha
 ready document; each answer can be checked against a selected source; failed jobs show
 an actionable status; provider secrets never appear in screenshots or exported settings.`;
 
-async function checked(response: APIResponse | Response) {
-  expect(response.ok(), `API request returned ${response.status()}`).toBeTruthy();
-  return response.json();
-}
 async function navigate(page: Page, name: string) {
   await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
   await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
@@ -70,7 +67,7 @@ async function capture(page: Page, filename: string) {
   await page.screenshot({ path: path.join(output, filename), fullPage: true, animations: "disabled" });
 }
 
-test("capture all ten real Aegis screens with synthetic source documents", async ({ page }) => {
+test("capture all ten real Aegis screens and dataset model configuration with synthetic sources", async ({ page }) => {
   test.setTimeout(240000);
   const password = process.env.AEGIS_SMOKE_PASSWORD;
   if (!password) throw new Error("AEGIS_SMOKE_PASSWORD is required; run scripts/smoke.py first.");
@@ -82,26 +79,15 @@ test("capture all ten real Aegis screens with synthetic source documents", async
   const settings = await checked(await page.request.get("/api/settings"));
   expect(settings.model_provider).toBe("mock");
   expect(settings.embedding_provider).toBe("mock");
-  const bases = await checked(await page.request.get("/api/knowledge-bases"));
-  const kb = bases.find((item: { name: string }) => item.name === collection) || await checked(await page.request.post("/api/knowledge-bases", {
-    headers, data: { name: collection, description: "Synthetic invoice and delivery evidence for actual UI screenshots." },
-  }));
-  const existing = await checked(await page.request.get(`/api/documents?kb_id=${kb.id}`));
+  const models = await seedMockCatalog(page.request, headers, "Aegis");
+  const datasets = await checked(await page.request.get("/api/datasets"));
+  const kb = datasets.find((item: { name: string; embedding_model_id: string }) => item.name === collection && item.embedding_model_id === models.embedding.id) ||
+    await seedDataset(page.request, headers, collection, [models.fast, models.careful], models.embedding);
+  const existing = await checked(await page.request.get(`/api/documents?dataset_id=${kb.id}`));
   const documents = [];
   for (const [name, content] of [[invoiceName, invoice], [projectName, project]]) {
-    let doc = existing.find((item: { name: string }) => item.name === name);
-    if (!doc) {
-      const upload = await checked(await page.request.post("/api/documents/upload", {
-        headers, multipart: { kb_id: kb.id, files: { name, mimeType: "text/plain", buffer: Buffer.from(content) } },
-      }));
-      doc = upload.documents[0];
-    }
-    await expect.poll(async () => {
-      const current = await checked(await page.request.get(`/api/documents/${doc.id}`));
-      if (current.status === "failed") throw new Error(`Synthetic document indexing failed: ${name}`);
-      return current.status;
-    }, { timeout: 120000 }).toBe("ready");
-    documents.push(doc);
+    const document = existing.find((item: { name: string; status: string; requires_reindex: boolean }) => item.name === name && item.status === "ready" && !item.requires_reindex);
+    documents.push(document || await uploadReady(page.request, headers, kb, name, content));
   }
   const templates = await checked(await page.request.get("/api/templates"));
   const template = templates.find((item: { name: string }) => item.name === templateName) || await checked(await page.request.post("/api/templates", {
@@ -115,15 +101,23 @@ test("capture all ten real Aegis screens with synthetic source documents", async
   await expect(page.getByRole("heading", { name: "Workspace overview", exact: true })).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: invoiceName })).toBeVisible();
   await capture(page, "01-dashboard.png");
-  await navigate(page, "Knowledge library");
-  await page.getByLabel("Upload knowledge base").selectOption(kb.id);
+  await navigate(page, "Datasets");
+  await page.getByRole("button", { name: `Open dataset ${collection}`, exact: true }).first().click();
+  await page.getByRole("button", { name: "Documents", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: invoiceName }).getByText("ready", { exact: true })).toBeVisible();
-  await capture(page, "02-knowledge-library.png");
+  await capture(page, "02-datasets.png");
+  await page.getByRole("button", { name: "Map models", exact: true }).click();
+  await expect(page.getByLabel(`Mapped model ${models.fast.name}`, { exact: true })).toBeChecked();
+  await expect(page.getByLabel(`Mapped model ${models.careful.name}`, { exact: true })).toBeChecked();
+  await expect(page.getByLabel("Default chat model", { exact: true })).toHaveValue(models.fast.id);
+  await capture(page, "11-dataset-models.png");
 
   await navigate(page, "Ask Aegis");
-  await page.getByLabel("Chat knowledge base").selectOption(kb.id);
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(kb.id);
+  await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
   await page.getByRole("checkbox", { name: new RegExp(invoiceName.replaceAll(".", "\\.")) }).check();
-  await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
+  const chatConsent = page.getByRole("checkbox", { name: /I approve sending this request/ });
+  if (await chatConsent.isVisible()) await chatConsent.check();
   await page.getByLabel("Ask a question").fill("What are the invoice total and payment terms?");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText("MOCK TEST OUTPUT", { exact: true })).toBeVisible();
@@ -132,11 +126,16 @@ test("capture all ten real Aegis screens with synthetic source documents", async
   await capture(page, "03-ask-aegis.png");
 
   await navigate(page, "Extract");
+  await page.getByLabel("Extraction dataset", { exact: true }).selectOption(kb.id);
+  await page.getByRole("combobox", { name: "Extraction model", exact: true }).selectOption(models.careful.id);
+  await page.getByRole("checkbox", { name: new RegExp(invoiceName.replaceAll(".", "\\.")) }).check();
   await page.getByLabel("Extraction template").selectOption(template.id);
-  await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
+  const extractionConsent = page.getByRole("checkbox", { name: /I approve sending this request/ });
+  if (await extractionConsent.isVisible()) await extractionConsent.check();
   const created = page.waitForResponse(r => r.url().endsWith("/api/extractions") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Run extraction", exact: true }).click();
   const extraction = await checked(await created);
+  expect(extraction.model_selection).toMatchObject({ dataset_id: kb.id, model_id: models.careful.id });
   await expect.poll(async () => {
     const result = await checked(await page.request.get(`/api/extractions/${extraction.id}`));
     if (result.status === "failed") throw new Error("Synthetic extraction job failed");
@@ -168,10 +167,12 @@ test("capture all ten real Aegis screens with synthetic source documents", async
   await navigate(page, "Setup");
   await capture(page, "10-setup.png");
   await writeFile(path.join(output, "README.txt"), [
-    "Aegis: ten screenshots of the actual running application.",
+    "Aegis: ten application screens plus the dataset model-configuration state.",
     "Captured by Playwright Chromium against the disposable Docker Compose app in GitHub-hosted CI.",
     "Viewport: 1440 x 1000, full-page captures. No raster mockups or substituted API responses.",
     "All invoice/project content is synthetic. Model and embedding providers explicitly use development mock mode.",
+    "The dataset has a named mock connection profile, two mapped chat/extraction models, and a separate embedding model.",
+    "Ask and Extract show the multiple-model selector; both requests explicitly use the selected Careful review model.",
     "Chat repeats retrieved evidence; extraction produces MOCK TEST VALUE placeholders and zeros, not real AI output.",
     "Both chat and extraction display visible mock-output labels. No production provider credentials were used.",
     "Authentication used the disposable CI administrator. Credentials, tokens, traces, and storageState are not included.",

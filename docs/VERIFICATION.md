@@ -37,3 +37,11 @@ pip install -r backend/requirements-dev.txt
 ```
 
 The CI workflow adds real container services, default-image CPU inference and Playwright UI tests. See the linked completed run for evidence; local mock tests alone do not substitute for these checks.
+
+## Dataset-first revision (issue #1)
+
+The dataset/model routing update is tracked in [issue #1](https://github.com/Maniatramco/Aegis/issues/1). Its local backend suite passes 172 tests, including capability/mapping enforcement, dataset ownership and source scope, explicit legacy migration, pinned profile versions for queued extraction, embedding-generation reindex checks, external consent, and concurrent model/credential isolation. Transport-mocked OpenAI tests inspect the actual selected model and authorization header; they do not make live API calls.
+
+The isolated HTTP smoke also passes the new dataset-first workflow. The hosted CI workflow runs five browser workflow tests covering dataset onboarding, mapped defaults, no/one/multiple eligible models, actual chat/extraction request IDs and persisted provenance, dataset switching, and mobile layout. A separate browser capture test creates eleven actual-app screenshots using synthetic documents and explicitly identified mock models. See the exact pushed commit's [Actions checks](https://github.com/Maniatramco/Aegis/actions/workflows/ci.yml) and issue review record for the hosted run outcome; test discovery or a local build alone is not a browser-test pass.
+
+Existing live-provider and native-laptop limitations above remain. ARM and native Windows/macOS deployments have not been separately exercised; hosted container verification runs on Linux x86_64.

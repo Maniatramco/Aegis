@@ -39,7 +39,7 @@ def system(tmp_path, monkeypatch):
             fid = 'file-' + str(len(state.files)+1)
             state.files.append(fid)
             return httpx.Response(200, json={'id': fid})
-        if path.endswith('/vs-1/files'):
+        if path.endswith(('/vs-1/files','/vs-2/files','/vs-3/files')):
             return httpx.Response(200, json={'status': 'completed'})
         if path.endswith('/search'):
             return httpx.Response(200, json={'data': [{'file_id': fid, 'score': .9, 'content': [{'text': 'FORGED REMOTE EXCERPT'}]} for fid in state.files]})
@@ -72,10 +72,12 @@ def configure(state):
     assert 'oci-test-secret' not in r.text
     assert 'oci-test-secret' not in state.api.get('/api/settings/export').text
     assert b'oci-test-secret' not in core.store.get('secrets/oci-provider.enc')
+    state.dataset=state.api.post('/api/datasets',json={'name':'OCI invoices'}).json()['id']
+    result=state.api.post('/api/datasets/'+state.dataset+'/migrate-settings');assert result.status_code==200,result.text
 
 
 def upload(state, consent=True):
-    r = state.api.post('/api/documents/upload', files={'files': ('invoice.txt', b'Invoice total is 42 dollars. Canonical source evidence.', 'text/plain')}, data={'allow_external': str(consent).lower()})
+    r = state.api.post('/api/documents/upload', files={'files': ('invoice.txt', b'Invoice total is 42 dollars. Canonical source evidence.', 'text/plain')}, data={'dataset_id':state.dataset,'allow_external': str(consent).lower()})
     assert r.status_code == 200, r.text
     data = r.json()
     assert worker.run_once()
@@ -117,7 +119,7 @@ def test_settings_ingestion_search_chat_and_extraction(system):
 def test_oci_external_consent_enforced_before_transmission(system):
     configure(system)
     before = len(system.calls)
-    r = system.api.post('/api/documents/upload', files={'files': ('x.txt', b'text', 'text/plain')})
+    r = system.api.post('/api/documents/upload', files={'files': ('x.txt', b'text', 'text/plain')},data={'dataset_id':system.dataset})
     assert r.status_code == 409
     assert len(system.calls) == before
     did, _ = upload(system)
@@ -150,10 +152,34 @@ def test_provider_errors_and_schema_fail_closed(system):
 
 def test_oci_cancelled_job_does_not_transmit(system):
     configure(system)
-    r = system.api.post('/api/documents/upload', files={'files': ('x.txt', b'Cancel this processing.', 'text/plain')}, data={'allow_external': 'true'}).json()
+    r = system.api.post('/api/documents/upload', files={'files': ('x.txt', b'Cancel this processing.', 'text/plain')}, data={'dataset_id':system.dataset,'allow_external': 'true'}).json()
     before = len(system.calls)
     job = r['jobs'][0]['id']
     assert system.api.post('/api/jobs/'+job+'/cancel').status_code == 200
     assert worker.run_once() is False
     assert len(system.calls) == before
     assert system.api.get('/api/documents/'+r['documents'][0]['id']).json()['status'] == 'cancelled'
+
+
+def test_index_cleanup_keeps_original_destination_after_global_and_mapping_changes(system):
+    configure(system);did,_=upload(system)
+    # New dataset indexes retain private cleanup snapshots, so a new named OCI
+    # connection can be configured without changing where old files are deleted.
+    changed=system.api.patch('/api/settings',json={'oci_vector_store_id':'vs-2'});assert changed.status_code==200,changed.text
+    profile=system.api.post('/api/settings/profiles',json={'name':'Second managed store'}).json()
+    model=system.api.post('/api/models',json={'name':'Second embeddings','connection_profile_id':profile['id'],'provider_model':'managed-embedding','capabilities':['embedding']}).json()
+    mapping=system.api.get('/api/datasets/'+system.dataset+'/models').json()
+    body={key:mapping[key] for key in ('mappings','default_chat_model_id','default_extraction_model_id','embedding_model_id')}
+    body['mappings'].append({'model_id':model['id'],'enabled':True});body['embedding_model_id']=model['id']
+    assert system.api.put('/api/datasets/'+system.dataset+'/models',json=body).status_code==200
+    before=len(system.calls)
+    assert system.api.post('/api/documents/'+did+'/reindex',json={'allow_external':True}).status_code==200
+    assert worker.run_once();assert system.api.get('/api/documents/'+did).json()['status']=='ready'
+    calls=system.calls[before:]
+    assert any(r.method=='DELETE' and '/vector_stores/vs-1/files/' in r.url.path for r in calls)
+    assert any(r.method=='POST' and r.url.path.endswith('/vs-2/files') for r in calls)
+    # Deletion after another global switch uses this document's own vs-2 snapshot.
+    assert system.api.patch('/api/settings',json={'oci_vector_store_id':'vs-3'}).status_code==200
+    before=len(system.calls);assert system.api.delete('/api/documents/'+did).status_code==200
+    assert any(r.method=='DELETE' and '/vector_stores/vs-2/files/' in r.url.path for r in system.calls[before:])
+    assert not any('/vector_stores/vs-3/' in r.url.path for r in system.calls[before:])

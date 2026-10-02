@@ -2,6 +2,7 @@
 import os, json, uuid, hashlib, secrets, time
 from pathlib import Path
 from contextlib import contextmanager
+from contextvars import ContextVar
 from sqlalchemy import create_engine, String, Integer, Float, Text, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from cryptography.fernet import Fernet
@@ -99,7 +100,16 @@ def secret_cipher():
     if not key: raise ValueError('MASTER_KEY is required to save provider credentials (generate a Fernet key)')
     return Fernet(key.encode())
 DEFAULTS={'model_provider':os.getenv('MODEL_PROVIDER','openai'),'embedding_provider':os.getenv('EMBEDDING_PROVIDER','sentence_transformers'),'model':os.getenv('OPENAI_MODEL','gpt-4.1-mini'),'embedding_model':os.getenv('EMBEDDING_MODEL','text-embedding-3-small'),'chunk_size':1200,'chunk_overlap':180,'top_k':5,'timeout':60,'max_upload_mb':25,'search_provider':os.getenv('SEARCH_PROVIDER','qdrant'),'storage_provider':os.getenv('STORAGE_PROVIDER','local'),'oci_region':os.getenv('OCI_REGION',''),'oci_project_id':'','oci_auth_mode':'api_key','oci_profile':'DEFAULT','oci_model':'','oci_vector_store_id':'','oci_storage_namespace':os.getenv('OCI_NAMESPACE',''),'oci_storage_bucket':os.getenv('OCI_BUCKET',''),'oci_storage_prefix':os.getenv('OCI_OBJECT_PREFIX','aegis'),'oci_storage_region':os.getenv('OCI_REGION',''),'oci_storage_auth_mode':os.getenv('OCI_AUTH_MODE','config_file'),'oci_storage_profile':os.getenv('OCI_PROFILE','DEFAULT'),'queue_provider':os.getenv('QUEUE_PROVIDER','database')}
+_execution=ContextVar('aegis_execution',default=None)
+@contextmanager
+def execution_context(snapshot):
+    token=_execution.set(snapshot)
+    try:yield
+    finally:_execution.reset(token)
+
 def settings():
+    active=_execution.get()
+    if active is not None:return active['settings'].copy()
     try:return DEFAULTS|store.json('configuration/settings.json')
     except FileNotFoundError:return DEFAULTS.copy()
 def _provider_secret(key,environment):
@@ -109,13 +119,23 @@ def _provider_secret(key,environment):
     try:encrypted=store.get(key)
     except FileNotFoundError:return os.getenv(environment,'')
     return secret_cipher().decrypt(encrypted).decode()
-def api_key():return _provider_secret('secrets/provider.enc','OPENAI_API_KEY')
+def execution_secret(provider):
+    active=_execution.get()
+    if active is None:return None
+    ref=active.get('secret_refs',{}).get(provider)
+    if not ref:return ''
+    return secret_cipher().decrypt(local_store.get(ref)).decode()
+def api_key():
+    value=execution_secret('openai')
+    return value if value is not None else _provider_secret('secrets/provider.enc','OPENAI_API_KEY')
 def representation(r):
     return {'id':r.id,'name':r.name,'status':r.status,'kb_id':r.parent_id or None,'size':r.size,'version':r.version,'created_at':r.created_at,'updated_at':r.updated_at,'error':r.error or None}
 def job_repr(j):
     return {'id':j.id,'kind':j.kind,'status':j.status,'progress':j.progress,'attempts':j.attempts,'error':j.error or None,'document_id':j.target_id if j.kind=='index' else None,'target_id':j.target_id,'created_at':j.created_at}
 
-def oci_api_key():return _provider_secret('secrets/oci-provider.enc','OCI_GENAI_API_KEY')
+def oci_api_key():
+    value=execution_secret('oci')
+    return value if value is not None else _provider_secret('secrets/oci-provider.enc','OCI_GENAI_API_KEY')
 
 def oci_storage(cfg=None):
     from .oci_adapters import OCIStorageAdapter

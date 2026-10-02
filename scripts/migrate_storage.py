@@ -18,7 +18,7 @@ repository = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repository / 'backend' if (repository / 'backend').exists() else repository))
 from app.oci_adapters import OCIStorageAdapter, _key, _safe_call
 
-CONTENT_ROOTS = {'documents', 'knowledge_base', 'conversation', 'template', 'extraction', 'jobs', 'vectors'}
+CONTENT_ROOTS = {'documents', 'knowledge_base', 'conversation', 'template', 'extraction', 'jobs', 'vectors', 'model', 'executions'}
 LOCAL_ONLY_ROOTS = {'configuration', 'secrets', 'diagnostics'}
 
 

@@ -17,12 +17,15 @@ Open **http://localhost:3000**. Read `AEGIS_BOOTSTRAP_TOKEN` from your private `
 
 Only the web app is published, bound to `127.0.0.1`. PostgreSQL and Qdrant have no published ports. Do not expose this local-first application to the Internet without a TLS reverse proxy and an independent security review.
 
-### First document
+### First dataset
 
-1. Create a knowledge base and upload a text-based PDF, DOCX, or TXT file.
-2. Watch the indexing job. The local embedding model downloads on first use, so initial indexing needs Internet access and can take longer.
-3. Ask a question scoped to the selected knowledge base/documents. Sources link answers to stored chunks.
-4. Create a JSON-schema extraction template, choose documents, and run extraction. Review the structured output and export JSON/CSV.
+1. Configure provider connections and save a named connection profile. Register the chat, extraction, and embedding models you want to use.
+2. Onboard a dataset, map its eligible models, and choose the default chat/extraction models and indexing configuration.
+3. Upload text-based PDF, DOCX, or TXT documents to that dataset. Watch the indexing job; the local embedding model downloads on first use.
+4. In Ask Aegis, select the dataset and an eligible model. With multiple mapped models, the model dropdown lets you choose which one answers. Sources link answers to stored chunks.
+5. In Extract, select the dataset, mapped extraction model, documents, and JSON-schema template. Review the structured output and export JSON/CSV.
+
+See [dataset configuration and existing-workspace migration](docs/DATASETS.md). A dataset with no eligible mapped model gives configuration guidance instead of silently using a global model.
 
 Scanned/image-only PDFs require OCR first. Aegis does not silently invent OCR text. OpenAI chat/extraction sends the selected source content and your prompt to OpenAI after the UI's external-processing acknowledgment. OpenAI embeddings also send chunks when selected. API use is billed separately by the provider. Local embeddings keep document text local during indexing; downloading model weights still requires network access.
 

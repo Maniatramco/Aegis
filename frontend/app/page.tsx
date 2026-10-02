@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import {
   Activity,
   ArrowDownToLine,
@@ -44,7 +45,7 @@ import {
 type Entity = Record<string, any>;
 type View =
   | "Dashboard"
-  | "Knowledge library"
+  | "Datasets"
   | "Ask Aegis"
   | "Extract"
   | "Templates"
@@ -55,7 +56,7 @@ type View =
   | "Setup";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Dashboard", icon: LayoutDashboard, group: "WORKSPACE" },
-  { name: "Knowledge library", icon: BookOpen },
+  { name: "Datasets", icon: BookOpen },
   { name: "Ask Aegis", icon: MessageSquare },
   { name: "Extract", icon: FileSearch },
   { name: "Templates", icon: FileJson },
@@ -68,15 +69,15 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
 const descriptions: Record<View, string> = {
   Dashboard:
     "Your documents, processing activity, and connected services at a glance.",
-  "Knowledge library":
-    "Keep originals safe. Build searchable knowledge on your terms.",
+  "Datasets":
+    "Onboard your data, map its models, and put a trusted source to work.",
   "Ask Aegis": "Ask across your knowledge, with evidence you can inspect.",
   Extract: "Turn document content into structured, reviewable data.",
   Templates: "Define the fields and structure your extraction needs.",
   "Index inspector":
     "Inspect document chunks and the retrieval layer behind your answers.",
   "Jobs & activity": "Follow processing work and resolve what needs attention.",
-  Connections: "Configure providers, credentials, and processing defaults.",
+  Connections: "Manage shared model connections and deployment infrastructure.",
   "Services & migration":
     "A clear path from local deployment to your cloud environment.",
   Setup: "Get your workspace ready, one deliberate step at a time.",
@@ -207,7 +208,10 @@ export default function App() {
     body: string;
     action: () => Promise<void>;
   } | null>(null);
-  const [newKb, setNewKb] = useState("");
+  const [models, setModels] = useState<Entity[]>([]);
+  const [datasetModelsFocus, setDatasetModelsFocus] = useState(false);
+  const [chatModelId, setChatModelId] = useState("");
+  const [extractModelId, setExtractModelId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [externalUpload, setExternalUpload] = useState(false);
   const [conversations, setConversations] = useState<Entity[]>([]);
@@ -289,12 +293,6 @@ export default function App() {
     },
     [csrf],
   );
-  useEffect(() => {
-    if (user && view === "Connections")
-      api("/settings/profiles")
-        .then(setProfiles)
-        .catch((e) => setError(e.message));
-  }, [user, view, refresh, api]);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError("");
@@ -335,19 +333,21 @@ export default function App() {
     Promise.all([
       api("/overview"),
       api("/documents"),
-      api("/knowledge-bases"),
+      api("/datasets"),
       api("/jobs"),
       api("/capabilities"),
       api("/settings"),
       api("/templates"),
       api("/conversations"),
       api("/extractions"),
+      api("/models"),
+      api("/settings/profiles"),
     ])
-      .then(([o, d, k, j, c, s, t, co, e]) => {
+      .then(([o, d, k, j, c, s, t, co, e, m, p]) => {
         if (!active) return;
         setOverview(o);
         setDocs(Array.isArray(d) ? d : d.documents || []);
-        setKbs(Array.isArray(k) ? k : k.knowledge_bases || []);
+        setKbs(Array.isArray(k) ? k : k.datasets || []);
         setJobs(Array.isArray(j) ? j : j.jobs || []);
         setCaps(c);
         setSettings(s);
@@ -355,6 +355,8 @@ export default function App() {
         setTemplates(Array.isArray(t) ? t : t.templates || []);
         setConversations(Array.isArray(co) ? co : co.conversations || []);
         setExtractions(Array.isArray(e) ? e : e.extractions || []);
+        setModels(Array.isArray(m) ? m : m.models || []);
+        setProfiles(Array.isArray(p) ? p : p.profiles || []);
       })
       .catch((e) => active && setError(e.message))
       .finally(() => active && setLoading(false));
@@ -379,18 +381,58 @@ export default function App() {
   }, [user, api]);
   const navigate = (name: View) => {
     setView(name);
+    setDatasetModelsFocus(false);
     setError("");
     setMobile(false);
   };
+  const selectedDataset = kbs.find(d => d.id === kb);
+  const chatModels = eligibleModels(selectedDataset, "chat");
+  const extractionModels = eligibleModels(selectedDataset, "extraction");
+  const selectedChatModel = chatModels.find(m => m.id === chatModelId);
+  const selectedExtractModel = extractionModels.find(m => m.id === extractModelId);
+  const datasetEmbedding = (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
+  const datasetDocs = docs.filter(d => (d.dataset_id || d.kb_id) === kb);
+  const readyDatasetDocs = datasetDocs.filter(d => d.status === "ready" && !d.requires_reindex);
+  const changeDataset = (id: string) => {
+    if (id === kb) return;
+    if (answering) { setError("Stop the current answer before changing datasets."); return; }
+    setKb(id);
+    setDatasetModelsFocus(false);
+    setScope([]);
+    setChatModelId("");
+    setExtractModelId("");
+    setExternalChat(false);
+    setExternalExtract(false);
+    setExternalUpload(false);
+    setConversation(null);
+    setPrompt("");
+    setLastPrompt("");
+    setFiles([]);
+    setQuery("");
+  };
+  useEffect(() => {
+    const dataset = kbs.find(d => d.id === kb);
+    const pick = (current: string, capability: string, defaultKey: string) => {
+      const available = eligibleModels(dataset, capability);
+      if (available.some(m => m.id === current)) return current;
+      if (available.some(m => m.id === dataset?.[defaultKey])) return dataset![defaultKey];
+      return available.length === 1 ? available[0].id : "";
+    };
+    setChatModelId(current => pick(current, "chat", "default_chat_model_id"));
+    setExtractModelId(current => pick(current, "extraction", "default_extraction_model_id"));
+  }, [kb, kbs]);
+  useEffect(() => {
+    setScope(current => current.filter(id => docs.some(d => d.id === id && (d.dataset_id || d.kb_id) === kb && d.status === "ready" && !d.requires_reindex)));
+  }, [kb, docs]);
+  useEffect(() => { setExternalChat(false); }, [kb, chatModelId, selectedChatModel?.version, selectedChatModel?.connection_profile_version]);
+  useEffect(() => { setExternalExtract(false); }, [kb, extractModelId, selectedExtractModel?.version, selectedExtractModel?.connection_profile_version]);
+  useEffect(() => { setExternalUpload(false); }, [kb, selectedDataset?.embedding_selection?.model_id, selectedDataset?.embedding_selection?.model_version, selectedDataset?.embedding_selection?.connection_profile_version, settings.storage_provider]);
   const externalProvider =
-    settings.embedding_provider === "openai" ||
+    ["openai", "oci"].includes(selectedDataset?.embedding_selection?.embedding_provider || datasetEmbedding?.provider) ||
+    selectedDataset?.embedding_selection?.search_provider === "oci" ||
     settings.search_provider === "oci" ||
     settings.storage_provider === "oci";
-  const filtered = docs.filter(
-    (d) =>
-      (!kb || d.kb_id === kb) &&
-      d.name.toLowerCase().includes(query.toLowerCase()),
-  );
+  const filtered = datasetDocs.filter(d => d.name.toLowerCase().includes(query.toLowerCase()));
   const selectDoc = (id: string) =>
     setScope((s) => (s.includes(id) ? s.filter((v) => v !== id) : [...s, id]));
   const reload = () => setRefresh((v) => v + 1);
@@ -412,6 +454,7 @@ export default function App() {
     });
   const upload = () =>
     run(async () => {
+      if (!kb || !datasetEmbedding) throw new Error("Select a dataset and map an embedding model before uploading.");
       if (!files.length) throw new Error("Choose one or more documents first.");
       if (externalProvider && !externalUpload)
         throw new Error(
@@ -419,7 +462,7 @@ export default function App() {
         );
       const fd = new FormData();
       files.forEach((f) => fd.append("files", f));
-      if (kb) fd.append("kb_id", kb);
+      fd.append("dataset_id", kb);
       fd.append("allow_external", String(externalUpload));
       await api("/documents/upload", "POST", fd);
       setFiles([]);
@@ -457,10 +500,21 @@ export default function App() {
   };
   const openConversation = async (id: string) => {
     const d = await api(`/conversations/${id}`);
+    setKb(d.dataset_id || d.kb_id || "");
+    setScope(d.document_ids || []);
+    const historicalModel = [...(d.messages || [])].reverse().find((m: Entity) => m.model_selection)?.model_selection?.model_id;
+    const dataset = kbs.find(k => k.id === (d.dataset_id || d.kb_id));
+    const available = eligibleModels(dataset, "chat");
+    setChatModelId(available.some(m => m.id === historicalModel) ? historicalModel : available.some(m => m.id === dataset?.default_chat_model_id) ? dataset!.default_chat_model_id : available.length === 1 ? available[0].id : "");
+    setExternalChat(false);
     setConversation(d);
   };
   const sendMessage = async (text = prompt) => {
-    if (!text.trim()) return;
+    if (!text.trim() || answering) return;
+    if (!kb || !selectedChatModel || !readyDatasetDocs.length) {
+      setError("Choose a dataset with ready documents and an eligible chat model.");
+      return;
+    }
     if (!externalChat) {
       setError("Approve the provider notice before sending a question.");
       return;
@@ -474,7 +528,7 @@ export default function App() {
       if (!c) {
         c = await api("/conversations", "POST", {
           title: text.slice(0, 70),
-          kb_id: kb,
+          dataset_id: kb,
           document_ids: scope,
         });
         setConversation(c);
@@ -496,7 +550,8 @@ export default function App() {
           body: JSON.stringify({
             text,
             document_ids: scope,
-            kb_id: kb,
+            dataset_id: kb,
+            model_id: chatModelId,
             allow_external: true,
           }),
           signal: abort.current.signal,
@@ -547,7 +602,8 @@ export default function App() {
                   id: "streaming-answer",
                   role: "assistant",
                   text: answer,
-                  mock: settings.model_provider === "mock",
+                  mock: selectedChatModel?.provider === "mock",
+                  model_selection: { model_id: chatModelId, model_name: modelLabel(selectedChatModel), provider_model: selectedChatModel?.provider_model },
                 },
               ],
             });
@@ -608,11 +664,14 @@ export default function App() {
     });
   const extract = () =>
     run(async () => {
+      if (!kb || !selectedExtractModel) throw new Error("Choose a dataset and an eligible extraction model.");
       if (!scope.length || !templateId)
         throw new Error("Select at least one document and a template.");
       if (!externalExtract)
         throw new Error("Approve the external processing notice first.");
       const d = await api("/extractions", "POST", {
+        dataset_id: kb,
+        model_id: extractModelId,
         document_ids: scope,
         template_id: templateId,
         allow_external: true,
@@ -646,27 +705,31 @@ export default function App() {
   const readyCount = docs.filter((d) => d.status === "ready").length;
   const docSelection = (
     <div className="selection">
-      {docs.length ? (
-        docs.map((d) => (
+      {datasetDocs.length ? (
+        datasetDocs.map((d) => (
           <label key={d.id}>
             <input
               type="checkbox"
               checked={scope.includes(d.id)}
+              disabled={answering || d.status !== "ready" || !!d.requires_reindex}
               onChange={() => selectDoc(d.id)}
             />
             <span>
-              {d.name} <span className="muted">· {d.status}</span>
+              {d.name} <span className="muted">· {d.requires_reindex ? "reindex required" : d.status}</span>
             </span>
           </label>
         ))
       ) : (
         <p className="small muted">
-          Upload documents in the knowledge library first.
+          {kb ? "Add documents to this dataset first." : "Choose a dataset to see its documents."}
         </p>
       )}
     </div>
   );
-  const externalNotice = `I approve sending this request and relevant document content to the configured providers: model ${settings.model_provider || "not configured"}, embeddings ${settings.embedding_provider || "not configured"}, search ${settings.search_provider || "not configured"}. OpenAI API and OCI usage are billed separately by those providers; ChatGPT does not cover these charges.`;
+  const externalNotice = (model: Entity | undefined) => `I approve sending this request and relevant document content to ${modelLabel(model)} (${model?.provider || "model provider"}), with the dataset’s pinned embedding model ${selectedDataset?.embedding_selection?.provider_model || datasetEmbedding?.provider_model || "not configured"} and configured retrieval connection. External API usage is billed separately by those providers; ChatGPT does not cover these charges.`;
+  const datasetSelect = (label: string) => <select aria-label={label} value={kb} onChange={e => changeDataset(e.target.value)} disabled={answering}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>;
+  const configureDataset = () => { navigate("Datasets"); setDatasetModelsFocus(true); };
+
   if (!authChecked)
     return (
       <div className="auth-form" style={{ minHeight: "100vh" }}>
@@ -905,7 +968,7 @@ export default function App() {
               {view === "Dashboard" && (
                 <button
                   className="btn primary"
-                  onClick={() => navigate("Knowledge library")}
+                  onClick={() => navigate("Datasets")}
                 >
                   <Plus size={15} />
                   Add documents
@@ -950,7 +1013,7 @@ export default function App() {
                     sub: "Processed and indexed",
                   },
                   {
-                    label: "Knowledge bases",
+                    label: "Datasets",
                     value:
                       typeof overview.knowledge_bases === "number"
                         ? overview.knowledge_bases
@@ -988,9 +1051,9 @@ export default function App() {
                     </div>
                     <button
                       className="btn"
-                      onClick={() => navigate("Knowledge library")}
+                      onClick={() => navigate("Datasets")}
                     >
-                      View library
+                      View datasets
                       <ArrowRight size={13} />
                     </button>
                   </div>
@@ -1159,10 +1222,14 @@ export default function App() {
               </section>
             </>
           )}
-          {view === "Knowledge library" && (
+          {view === "Datasets" && (
             <>
-              <div className="grid2">
-                <section className="panel">
+            <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}
+              onSelect={changeDataset} onCreated={d => { setKbs(current => [...current, d]); changeDataset(d.id); }}
+              api={api} run={run} busy={busy || answering} reload={reload} notify={notify}
+              onConnections={() => navigate("Connections")} onUse={navigate}
+              uploadPanel={
+                <section className="dataset-upload">
                   <h2>Upload documents</h2>
                   <p className="muted small">
                     PDF, DOCX, and TXT. Originals are stored before processing
@@ -1185,6 +1252,8 @@ export default function App() {
                     </p>
                     <input
                       aria-label="Choose documents"
+                      key={kb}
+                      disabled={!datasetEmbedding}
                       type="file"
                       accept=".pdf,.docx,.txt"
                       multiple
@@ -1208,84 +1277,24 @@ export default function App() {
                     </label>
                   )}
                   <div className="row">
-                    <select
-                      aria-label="Upload knowledge base"
-                      value={kb}
-                      onChange={(e) => setKb(e.target.value)}
-                    >
-                      <option value="">All documents / no collection</option>
-                      {kbs.map((k) => (
-                        <option key={k.id} value={k.id}>
-                          {k.name}
-                        </option>
-                      ))}
-                    </select>
+                    <span className="small muted" style={{ flex: 1 }}>Destination: <strong>{selectedDataset?.name}</strong></span>
                     <button
                       className="btn primary"
                       onClick={upload}
-                      disabled={busy || !files.length}
+                      disabled={busy || !files.length || !datasetEmbedding}
                     >
                       <UploadCloud size={14} />
                       Upload {files.length || ""}
                     </button>
                   </div>
                 </section>
-                <section className="panel">
-                  <h2>Knowledge bases</h2>
-                  <p className="muted small">
-                    Organize documents into clear, reusable scopes.
-                  </p>
-                  <div className="row" style={{ marginTop: 22 }}>
-                    <input
-                      placeholder="New knowledge base name"
-                      aria-label="New knowledge base name"
-                      value={newKb}
-                      onChange={(e) => setNewKb(e.target.value)}
-                    />
-                    <button
-                      className="btn"
-                      disabled={busy || !newKb.trim()}
-                      onClick={() =>
-                        run(async () => {
-                          await api("/knowledge-bases", "POST", {
-                            name: newKb,
-                            description: "",
-                          });
-                          setNewKb("");
-                          notify("Knowledge base created.");
-                          reload();
-                        })
-                      }
-                    >
-                      <FolderPlus size={15} />
-                      Create
-                    </button>
-                  </div>
-                  {kbs.length ? (
-                    kbs.map((k) => (
-                      <div className="item row between" key={k.id}>
-                        <div className="row">
-                          <Database size={17} color="#6d88c4" />
-                          <span>{k.name}</span>
-                        </div>
-                        <span className="pill">
-                          {docs.filter((d) => d.kb_id === k.id).length} docs
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <Empty
-                      title="A home for every collection"
-                      detail="Create a knowledge base for a team, topic, or project."
-                      icon={Database}
-                    />
-                  )}
-                </section>
-              </div>
+
+              }
+              documentsPanel={
               <section className="panel flush">
                 <div className="panel-head" style={{ padding: "20px 20px 0" }}>
                   <div>
-                    <h2>Document library</h2>
+                    <h2>Dataset documents</h2>
                     <span className="muted small">
                       {filtered.length} documents · storage and index tracked
                       separately
@@ -1337,7 +1346,7 @@ export default function App() {
                               </div>
                             </td>
                             <td>
-                              <Status value={d.status} />
+                              <Status value={d.requires_reindex ? "reindex_required" : d.status} />
                             </td>
                             <td className="muted">{byteSize(d.size)}</td>
                             <td className="muted">{date(d.created_at)}</td>
@@ -1381,10 +1390,17 @@ export default function App() {
                 ) : (
                   <Empty
                     title="No documents here yet"
-                    detail="Upload a document above, or select another collection."
+                    detail="Upload a document above, or open another dataset."
                   />
                 )}
               </section>
+              }
+            />
+            {docs.some(d => !(d.dataset_id || d.kb_id)) && <section className="panel legacy-documents">
+              <div className="panel-head"><div><h2>Unassigned documents</h2><p className="muted small">These originals were uploaded before dataset onboarding. Assign them to a dataset to use its model configuration, then reindex.</p></div><span className="pill amber">{docs.filter(d => !(d.dataset_id || d.kb_id)).length} need a dataset</span></div>
+              <div className="selection">{docs.filter(d => !(d.dataset_id || d.kb_id)).map(d => <div className="item row between" key={d.id}><span className="small">{d.name}</span><div className="row"><button className="btn icon" title={`Preview unassigned ${d.name}`} onClick={() => openPreview(d)}><Search size={13} /></button><Download path={`/documents/${d.id}/download`}>Original</Download></div></div>)}</div>
+              <div className="row between wrap" style={{marginTop:17}}><span className="small muted">{selectedDataset ? `Destination: ${selectedDataset.name}` : "Open or onboard a dataset above to choose the destination."}</span><button className="btn primary" disabled={busy || !selectedDataset} onClick={() => setConfirm({title:"Assign unassigned documents?", body:`Assign all ${docs.filter(d => !(d.dataset_id || d.kb_id)).length} unassigned documents to “${selectedDataset?.name}”? Originals are preserved. You must reindex them with this dataset’s embedding model before asking questions or extracting. Existing dataset documents will not move.`, action:async () => {const ids = docs.filter(d => !(d.dataset_id || d.kb_id)).map(d => d.id); for (let start = 0; start < ids.length; start += 100) await api(`/datasets/${kb}/assign-documents`, "POST", {document_ids:ids.slice(start, start + 100)}); notify("Documents assigned. Reindex them to use this dataset’s embedding model."); reload();}})}>Assign to selected dataset</button></div>
+            </section>}
             </>
           )}
           {view === "Ask Aegis" && (
@@ -1394,6 +1410,7 @@ export default function App() {
                   <button
                     className="btn primary"
                     style={{ width: "100%", marginBottom: 20 }}
+                    disabled={answering}
                     onClick={() => {
                       setConversation(null);
                       setPrompt("");
@@ -1414,6 +1431,7 @@ export default function App() {
                           className={
                             conversation?.id === c.id ? "selected" : ""
                           }
+                          disabled={answering}
                           onClick={() => run(() => openConversation(c.id))}
                         >
                           {c.title || "Untitled conversation"}
@@ -1427,24 +1445,12 @@ export default function App() {
                   </div>
                 </section>
                 <section className="panel">
-                  <h3>Knowledge scope</h3>
-                  <p className="muted small">
-                    No selection searches all accessible documents in the
-                    selected base.
-                  </p>
-                  <select
-                    aria-label="Chat knowledge base"
-                    value={kb}
-                    onChange={(e) => setKb(e.target.value)}
-                    style={{ marginBottom: 14 }}
-                  >
-                    <option value="">All knowledge bases</option>
-                    {kbs.map((k) => (
-                      <option value={k.id} key={k.id}>
-                        {k.name}
-                      </option>
-                    ))}
-                  </select>
+                  <h3>Dataset & model</h3>
+                  <p className="muted small">Every answer uses this dataset’s documents and mapped models.</p>
+                  <div className="field"><label>Dataset</label>{datasetSelect("Chat dataset")}</div>
+                  <ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />
+                  <h3 style={{ marginTop: 20 }}>Document scope</h3>
+                  <p className="muted small">No selection searches all ready documents in this dataset.</p>
                   {docSelection}
                 </section>
               </aside>
@@ -1455,7 +1461,7 @@ export default function App() {
                     <span className="small muted">
                       {scope.length
                         ? `${scope.length} selected documents`
-                        : "All documents"}{" "}
+                        : selectedDataset?.name || "Choose a dataset"}{" "}
                       · source-grounded answers
                     </span>
                   </div>
@@ -1464,6 +1470,7 @@ export default function App() {
                       <button
                         className="btn icon"
                         title="Reload conversation"
+                        disabled={answering}
                         onClick={() =>
                           run(() => openConversation(conversation.id))
                         }
@@ -1490,6 +1497,7 @@ export default function App() {
                             <span className="pill amber">MOCK TEST OUTPUT</span>
                           )}{" "}
                           {m.role === "user" ? "You" : "Aegis"}
+                          {m.role !== "user" && recordedModel(m) && <span className="message-model"> · {recordedModel(m)}</span>}
                         </div>
                         <div style={{ whiteSpace: "pre-wrap" }}>
                           {m.text || m.content}
@@ -1570,7 +1578,7 @@ export default function App() {
                     <Empty
                       icon={MessageSquare}
                       title="Good questions start with good sources"
-                      detail="Select your knowledge scope and ask about a document, a decision, or a detail."
+                      detail="Choose a dataset and its mapped model, then ask about a document, a decision, or a detail."
                     />
                   )}
                   {answering && (
@@ -1587,7 +1595,7 @@ export default function App() {
                     onChange={(e) => setExternalChat(e.target.checked)}
                   />
                   <span className="muted" style={{ fontSize: 10 }}>
-                    {externalNotice}
+                    {externalNotice(selectedChatModel)}
                   </span>
                 </label>
                 <form
@@ -1618,6 +1626,7 @@ export default function App() {
                         <button
                           type="button"
                           className="btn"
+                          disabled={!externalChat || !selectedChatModel || !readyDatasetDocs.length}
                           onClick={() => sendMessage(lastPrompt)}
                         >
                           <RefreshCw size={13} />
@@ -1637,7 +1646,7 @@ export default function App() {
                         <button
                           type="submit"
                           className="btn primary"
-                          disabled={!prompt.trim() || !externalChat}
+                          disabled={!prompt.trim() || !externalChat || !selectedChatModel || !readyDatasetDocs.length}
                         >
                           <Send size={14} />
                           Send
@@ -1658,6 +1667,8 @@ export default function App() {
                     Select a schema and documents. Review extracted values and
                     their evidence.
                   </p>
+                  <Field label="Dataset">{datasetSelect("Extraction dataset")}</Field>
+                  <ModelPicker dataset={selectedDataset} capability="extraction" value={extractModelId} onChange={setExtractModelId} onConfigure={configureDataset} />
                   <Field label="Extraction template">
                     <select
                       aria-label="Extraction template"
@@ -1679,12 +1690,12 @@ export default function App() {
                       checked={externalExtract}
                       onChange={(e) => setExternalExtract(e.target.checked)}
                     />
-                    <span className="muted small">{externalNotice}</span>
+                    <span className="muted small">{externalNotice(selectedExtractModel)}</span>
                   </label>
                   <button
                     className="btn primary"
                     disabled={
-                      busy || !externalExtract || !templateId || !scope.length
+                      busy || !externalExtract || !templateId || !scope.length || !selectedExtractModel
                     }
                     onClick={extract}
                   >
@@ -1709,7 +1720,7 @@ export default function App() {
                               "Extraction"}
                           </h3>
                           <span className="muted small">
-                            {date(e.created_at)}
+                            {date(e.created_at)}{recordedModel(e) ? ` · ${recordedModel(e)}` : ""}
                           </span>
                         </div>
                         <div className="row">
@@ -1743,6 +1754,7 @@ export default function App() {
                   <div className="panel-head">
                     <div>
                       <h2>Review extraction</h2>
+                      {recordedModel(extraction) && <p className="small muted">Recorded model: {recordedModel(extraction)}</p>}
                       <p className="small muted">
                         Review all values against the source before exporting.
                         Edits are saved to this result.
@@ -2283,6 +2295,7 @@ export default function App() {
           )}
           {view === "Connections" && (
             <>
+              <ModelCatalog models={models} profiles={profiles} api={api} run={run} busy={busy} reload={reload} notify={notify} />
               <Notice tone="warn">
                 Provider keys are encrypted on the server and never saved in
                 browser storage. OpenAI usage is separate from a ChatGPT
@@ -2405,10 +2418,10 @@ export default function App() {
               <div className="grid2">
                 <section className="panel">
                   <div className="panel-head">
-                    <h2>Model & embedding providers</h2>
+                    <h2>Connection configuration</h2>
                     <span className="pill">Server-side configuration</span>
                   </div>
-                  <Field label="Answer and extraction provider">
+                  <Field label="Connection’s generation provider">
                     <select
                       value={settingsForm.model_provider || "openai"}
                       aria-label="Model provider"
@@ -2428,7 +2441,7 @@ export default function App() {
                       </option>
                     </select>
                   </Field>
-                  <Field label="Answer model">
+                  <Field label="Connection’s default generation model">
                     <input
                       aria-label="Answer model"
                       value={settingsForm.model || ""}
@@ -2984,10 +2997,10 @@ export default function App() {
                     to: "Connections" as View,
                   },
                   {
-                    title: "Build your knowledge library",
-                    text: "Upload PDF, DOCX, and TXT files. Verify the original and processing status separately.",
+                    title: "Onboard a dataset",
+                    text: "Name your dataset, map its chat, extraction, and embedding models, then upload PDF, DOCX, or TXT files.",
                     action: "Add documents",
-                    to: "Knowledge library" as View,
+                    to: "Datasets" as View,
                   },
                   {
                     title: "Verify your first answer",

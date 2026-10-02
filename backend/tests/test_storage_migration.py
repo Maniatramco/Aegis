@@ -139,3 +139,19 @@ def test_unknown_database_reference_root_fails_closed():
         m.content_references(['new_document_type/x/content.json'])
     with pytest.raises(ValueError,match='Invalid storage key'):
         m.content_references(['configuration/../documents/original'])
+
+
+def test_dataset_catalog_and_execution_snapshots_are_migrated(tmp_path):
+    raw={'model/m/v1.json':b'{"capabilities":["chat"]}',
+         'executions/request.json':b'{"secret_refs":{"openai":"secrets/profiles/p/v1/openai.enc"}}',
+         'documents/d/index-execution.json':b'{"index_generation":2}'}
+    for key,data in raw.items():
+        p=tmp_path/key;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
+    secret=tmp_path/'secrets/profiles/p/v1/openai.enc';secret.parent.mkdir(parents=True,exist_ok=True);secret.write_bytes(b'ENCRYPTED-LOCAL-ONLY')
+    refs=m.content_references(['model/m/v1.json'])
+    source=MemoryStorage(raw)
+    plan=m.create_plan(source,{'provider':'local'},{'provider':'oci'},tmp_path,{'storage_provider':'local'},refs)
+    assert {entry['key'] for entry in plan['objects']}==set(raw)
+    assert not any(entry['key'].startswith('secrets/') for entry in plan['objects'])
+    target=MemoryStorage();m.copy_and_verify(plan,source,target)
+    assert target.values==raw

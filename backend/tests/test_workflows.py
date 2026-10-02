@@ -37,6 +37,7 @@ def test_complete_storage_first_workflow():
         res=c.post('/api/auth/login',json={'username':'admin','password':'secure-test-pass'});assert res.status_code==200,res.text
         csrf=res.json()['csrf_token'];c.headers['X-CSRF-Token']=csrf
         kb=c.post('/api/knowledge-bases',json={'name':'Test corpus'}).json()
+        migrated=c.post('/api/datasets/'+kb['id']+'/migrate-settings');assert migrated.status_code==200,migrated.text
         res=c.post('/api/documents/upload',files=[('files',('manual.txt',b'Aegis stores original files privately. The project owner is Alice.','text/plain'))],data={'kb_id':kb['id']});assert res.status_code==200,res.text
         doc=res.json()['documents'][0];assert run_once()
         assert c.get('/api/documents/'+doc['id']).json()['status']=='ready'
@@ -105,9 +106,11 @@ def test_worker_cancelled_index_cannot_publish(monkeypatch):
     from app.worker import process
     did='cancel-safety';jid='cancel-safety-job'
     store.put('documents/'+did+'/original',b'Cancellation must never publish searchable vectors.')
-    store.put_json('jobs/'+jid+'.json',{'allow_external':False})
+    dataset=main.new_record('knowledge_base','alice','Cancellation test',data={'index_generation':1})
+    snapshot={'settings':core.settings()|{'_index_namespace':dataset.id+':1'},'secret_refs':{},'dataset_id':dataset.id,'index_generation':1}
+    store.put_json('jobs/'+jid+'.json',{'allow_external':False,'execution':snapshot})
     with Session.begin() as s:
-        s.add(Record(id=did,kind='document',owner='alice',name='safe.txt',ref='documents/'+did+'/original',status='queued'))
+        s.add(Record(parent_id=dataset.id,id=did,kind='document',owner='alice',name='safe.txt',ref='documents/'+did+'/original',status='queued'))
         s.add(Job(id=jid,owner='alice',kind='index',target_id=did,status='running',lease_token='lease',lease_until=time.time()+900))
     def interrupted(*args):
         with Session.begin() as s:s.get(Job,jid).status='cancelled'

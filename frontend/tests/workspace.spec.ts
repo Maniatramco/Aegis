@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { checked, seedMockCatalog, seedDataset, seedTemplate, sessionHeaders, uploadReady } from "./fixtures";
 const username = process.env.AEGIS_SMOKE_USERNAME || "smoke";
 const password = process.env.AEGIS_SMOKE_PASSWORD;
 test.beforeEach(async ({ page }) => {
@@ -18,7 +19,7 @@ test("navigates all ten screens and preserves an authenticated refresh", async (
   page,
 }) => {
   for (const name of [
-    "Knowledge library",
+    "Datasets",
     "Ask Aegis",
     "Extract",
     "Templates",
@@ -47,22 +48,46 @@ test("navigates all ten screens and preserves an authenticated refresh", async (
     page.getByRole("heading", { name: "Workspace overview", exact: true }),
   ).toBeVisible();
 });
-test("creates a knowledge base, uploads a document, previews and indexes it", async ({
+test("onboards a dataset, maps models, uploads a document, previews and indexes it", async ({
   page,
 }) => {
   const suffix = Date.now().toString();
-  const kb = `Browser QA ${suffix}`;
+  const datasetName = `Browser QA ${suffix}`;
   const filename = `browser-${suffix}.txt`;
+  const headers = await sessionHeaders(page.request);
+  const models = await seedMockCatalog(page.request, headers, datasetName);
+  await page.reload();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "Knowledge library", exact: true })
+    .getByRole("button", { name: "Datasets", exact: true })
     .click();
-  await page.getByLabel("New knowledge base name").fill(kb);
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await page.getByLabel("Dataset name", { exact: true }).fill("Cancelled draft dataset");
+  await page.getByRole("button", { name: "Cancel dataset onboarding", exact: true }).click();
+  await expect(page.getByLabel("Dataset name", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await expect(page.getByLabel("Dataset name", { exact: true })).toHaveValue("");
+  await page.getByLabel("Dataset name", { exact: true }).fill(datasetName);
+  await page.getByLabel("Dataset description", { exact: true }).fill("Synthetic onboarding evidence for browser QA.");
+  const created = page.waitForResponse(r => r.url().endsWith("/api/datasets") && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Create dataset", exact: true }).click();
+  const dataset = await checked(await created);
   await expect(
-    page.getByText("Knowledge base created.", { exact: true }),
+    page.getByText("Dataset created. Map its models before adding documents.", { exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Upload knowledge base").selectOption({ label: kb });
+  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await page.getByLabel(`Mapped model ${models.fast.name}`, { exact: true }).check();
+  await page.getByLabel(`Mapped model ${models.careful.name}`, { exact: true }).check();
+  await page.getByLabel(`Mapped model ${models.embedding.name}`, { exact: true }).check();
+  await page.getByLabel("Default chat model", { exact: true }).selectOption(models.fast.id);
+  await page.getByLabel("Default extraction model", { exact: true }).selectOption(models.careful.id);
+  await page.getByLabel("Embedding model", { exact: true }).selectOption(models.embedding.id);
+  await page.getByRole("button", { name: "Save model mappings", exact: true }).click();
+  await expect.poll(async () => {
+    const saved = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
+    return saved.default_extraction_model_id;
+  }).toBe(models.careful.id);
+  await page.getByRole("button", { name: "Documents", exact: true }).click();
   await page
     .getByLabel("Choose documents")
     .setInputFiles({
@@ -94,6 +119,130 @@ test("creates a knowledge base, uploads a document, previews and indexes it", as
   await expect(
     page.getByText("INV-2026-BROWSER", { exact: false }).first(),
   ).toBeVisible();
+});
+
+async function navigate(page: Page, name: string) {
+  await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
+  await expect(page.getByRole("heading", { name, exact: true }).first()).toBeVisible();
+}
+
+function documentCheckbox(page: Page, filename: string) {
+  return page.getByRole("checkbox", { name: new RegExp(filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) });
+}
+
+async function askAndCheckRouting(page: Page, question: string, datasetId: string, modelId: string) {
+  const consent = page.getByRole("checkbox", { name: /I approve sending this request/ });
+  if (await consent.isVisible()) await consent.check();
+  await page.getByLabel("Ask a question").fill(question);
+  const pending = page.waitForResponse(r => /\/api\/conversations\/[^/]+\/messages\/stream$/.test(r.url()) && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const response = await pending;
+  expect(response.ok()).toBeTruthy();
+  expect(response.request().postDataJSON()).toMatchObject({ dataset_id: datasetId, model_id: modelId });
+  const stream = await response.text();
+  const done = stream.split("\n\n").find(event => event.startsWith("event: done\n"));
+  expect(done, "The real answer stream must finish with persisted routing evidence").toBeTruthy();
+  const result = JSON.parse(done!.split("\n").find(line => line.startsWith("data: "))!.slice(6));
+  expect(result.message.model_selection).toMatchObject({ dataset_id: datasetId, model_id: modelId });
+  expect(result.message.mock).toBe(true);
+  await expect(page.getByTitle("Copy answer").last()).toBeVisible();
+  return result.message;
+}
+
+test("switches zero, one and multiple mapped models and routes chat and extraction to the selection", async ({ page }) => {
+  test.setTimeout(300000);
+  const prefix = `Routing QA ${Date.now()}`;
+  const headers = await sessionHeaders(page.request);
+  const models = await seedMockCatalog(page.request, headers, prefix);
+  const multiple = await seedDataset(page.request, headers, `${prefix} · multiple models`, [models.fast, models.careful], models.embedding);
+  const single = await seedDataset(page.request, headers, `${prefix} · one model`, [models.separate], models.embedding);
+  const unavailable = await seedDataset(page.request, headers, `${prefix} · no generation model`, [], models.embedding);
+  const documentA = await uploadReady(page.request, headers, multiple, `${prefix}-cobalt.txt`, "Synthetic dataset A evidence: the launch code is COBALT and the reference is INV-COBALT.");
+  const documentB = await uploadReady(page.request, headers, single, `${prefix}-magenta.txt`, "Synthetic dataset B evidence: the launch code is MAGENTA and the reference is INV-MAGENTA.");
+  const documentC = await uploadReady(page.request, headers, unavailable, `${prefix}-unconfigured.txt`, "Synthetic document ready for future model configuration.");
+  const template = await seedTemplate(page.request, headers, `${prefix} · extraction schema`);
+  await page.reload();
+
+  await navigate(page, "Ask Aegis");
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(unavailable.id);
+  await page.getByLabel("Ask a question").fill("This must not be sent without a mapped model.");
+  await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
+  await expect(page.getByText("No eligible chat models", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Configure dataset models", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await navigate(page, "Ask Aegis");
+
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(multiple.id);
+  const chatModel = page.getByRole("combobox", { name: "Chat model", exact: true });
+  await expect(chatModel).toHaveValue(models.fast.id);
+  expect((await chatModel.locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value).filter(Boolean))).sort()).toEqual([models.fast.id, models.careful.id].sort());
+  await documentCheckbox(page, documentA.name).check();
+  await expect(documentCheckbox(page, documentB.name)).toHaveCount(0);
+  await chatModel.selectOption(models.careful.id);
+  const carefulAnswer = await askAndCheckRouting(page, "What is the launch code?", multiple.id, models.careful.id);
+  expect(carefulAnswer.text).toContain("COBALT");
+  expect(carefulAnswer.text).not.toContain("MAGENTA");
+  expect(carefulAnswer.citations.every((citation: { document_id: string }) => citation.document_id === documentA.id)).toBe(true);
+  await chatModel.selectOption(models.fast.id);
+  await askAndCheckRouting(page, "Repeat the launch evidence.", multiple.id, models.fast.id);
+
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(single.id);
+  await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Chat model", { exact: true })).toContainText(models.separate.name);
+  await expect(documentCheckbox(page, documentA.name)).toHaveCount(0);
+  await expect(documentCheckbox(page, documentB.name)).not.toBeChecked();
+  await documentCheckbox(page, documentB.name).check();
+  const singleAnswer = await askAndCheckRouting(page, "What is the launch code?", single.id, models.separate.id);
+  expect(singleAnswer.text).toContain("MAGENTA");
+  expect(singleAnswer.text).not.toContain("COBALT");
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(multiple.id);
+  await expect(chatModel).toHaveValue(models.fast.id);
+  await expect(documentCheckbox(page, documentA.name)).not.toBeChecked();
+
+  await navigate(page, "Extract");
+  await page.getByLabel("Extraction dataset", { exact: true }).selectOption(unavailable.id);
+  await page.getByLabel("Extraction template", { exact: true }).selectOption(template.id);
+  await documentCheckbox(page, documentC.name).check();
+  await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
+  await expect(page.getByText("No eligible extraction models", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run extraction", exact: true })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Extraction model", exact: true })).toHaveCount(0);
+
+  for (const [dataset, document, model, hasChoice] of [
+    [multiple, documentA, models.careful, true],
+    [single, documentB, models.separate, false],
+  ] as const) {
+    await page.getByLabel("Extraction dataset", { exact: true }).selectOption(dataset.id);
+    const extractModel = page.getByRole("combobox", { name: "Extraction model", exact: true });
+    if (hasChoice) {
+      await expect(extractModel).toHaveValue(models.fast.id);
+      await extractModel.selectOption(model.id);
+    } else {
+      await expect(extractModel).toHaveCount(0);
+      await expect(page.getByLabel("Extraction model", { exact: true })).toContainText(model.name);
+    }
+    await expect(documentCheckbox(page, document.name)).not.toBeChecked();
+    await documentCheckbox(page, document.name).check();
+    const consent = page.getByRole("checkbox", { name: /I approve sending this request/ });
+    if (await consent.isVisible()) await consent.check();
+    const pending = page.waitForResponse(r => r.url().endsWith("/api/extractions") && r.request().method() === "POST");
+    await page.getByRole("button", { name: "Run extraction", exact: true }).click();
+    const response = await pending;
+    expect(response.request().postDataJSON()).toMatchObject({ dataset_id: dataset.id, model_id: model.id, document_ids: [document.id] });
+    const extraction = await checked(response);
+    await expect.poll(async () => {
+      const result = await checked(await page.request.get(`/api/extractions/${extraction.id}`));
+      expect(result.model_selection).toMatchObject({ dataset_id: dataset.id, model_id: model.id, provider_model: hasChoice ? "mock-careful" : "mock-separate" });
+      if (result.status === "failed") throw new Error("Selected-model extraction failed");
+      return result.status;
+    }, { timeout: 90000 }).toBe("ready");
+    await page.getByTitle("Reload extraction").click();
+    await expect(page.getByLabel("Extraction result JSON")).toHaveValue(/MOCK TEST VALUE/);
+  }
+  await expect(page.getByRole("button", { name: "Dismiss error" })).toHaveCount(0);
 });
 test("saves a strict template and verifies connections without exposing a key", async ({
   page,
@@ -135,10 +284,29 @@ test("saves a strict template and verifies connections without exposing a key", 
     page.getByText('"database": true', { exact: false }),
   ).toBeVisible();
 });
-test("mobile navigation remains accessible and sign out removes the session", async ({
+test("mobile dataset and model selection fit the screen and sign out removes the session", async ({
   page,
 }) => {
+  const datasets = await checked(await page.request.get("/api/datasets"));
+  const dataset = datasets.find((item: { models: { enabled: boolean; mapping_enabled: boolean; capabilities: string[] }[] }) =>
+    item.models?.filter(model => model.enabled !== false && model.mapping_enabled !== false && model.capabilities.includes("chat")).length > 1,
+  );
+  expect(dataset, "The smoke fixture must include a dataset with multiple mapped models").toBeTruthy();
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await navigate(page, "Datasets");
+  await page.getByRole("button", { name: `Open dataset ${dataset.name}`, exact: true }).first().click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Map models", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await navigate(page, "Ask Aegis");
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
+  const models = dataset.models.filter((model: { enabled: boolean; mapping_enabled: boolean; capabilities: string[] }) => model.enabled !== false && model.mapping_enabled !== false && model.capabilities.includes("chat"));
+  await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models[1].id);
+  await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveValue(models[1].id);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page
     .getByRole("navigation")

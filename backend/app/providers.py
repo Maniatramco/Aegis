@@ -2,7 +2,7 @@
 import hashlib, math, json, re, os, uuid
 from functools import lru_cache
 import httpx
-from .core import settings, api_key, store, oci_api_key
+from .core import settings, api_key, store, oci_api_key, execution_context
 
 class ProviderError(RuntimeError):pass
 @lru_cache(maxsize=2)
@@ -11,9 +11,9 @@ def local_model(name):
     return SentenceTransformer(name)
 def fingerprint(cfg=None):
     c=cfg or settings()
-    if c['search_provider']=='oci':return hashlib.sha256(('oci:'+c.get('oci_region','')+':'+c.get('oci_project_id','')+':'+c.get('oci_vector_store_id','')).encode()).hexdigest()[:16]
+    if c['search_provider']=='oci':return hashlib.sha256(('oci:'+c.get('oci_region','')+':'+c.get('oci_project_id','')+':'+c.get('oci_vector_store_id','')+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
     name=c['embedding_model'] if c['embedding_provider']=='openai' else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
-    return hashlib.sha256((c['embedding_provider']+':'+name).encode()).hexdigest()[:16]
+    return hashlib.sha256((c['embedding_provider']+':'+name+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
 def openai_request(path,payload):
     key=api_key()
     if not key:raise ProviderError('Configure an OpenAI API key in Settings before using this provider')
@@ -78,7 +78,12 @@ def delete_vectors(document_id):
     store.delete('vectors/'+document_id+'.json')
     try:store.get('documents/'+document_id+'/oci-index.json')
     except FileNotFoundError:pass
-    else:oci_vector().delete(document_id,store)
+    else:
+        try:previous_execution=store.json('documents/'+document_id+'/index-execution.json')
+        except FileNotFoundError:previous_execution=None
+        if previous_execution:
+            with execution_context(previous_execution):oci_vector().delete(document_id,store)
+        else:oci_vector().delete(document_id,store)
     if settings()['search_provider']!='qdrant' and previous!='qdrant':return
     from qdrant_client.models import Filter,FieldCondition,MatchValue,FilterSelector
     q=client()
@@ -92,7 +97,8 @@ def search(query,owner,documents,top_k):
         for d in documents:
             try:data=store.json('vectors/'+d.id+'.json')
             except FileNotFoundError:continue
-            if data['owner']!=owner or data['fingerprint']!=fingerprint():continue
+            if data['owner']!=owner:continue
+            if data['fingerprint']!=fingerprint():raise ProviderError('Embedding index mismatch; reindex the selected dataset.')
             for id,vec in zip(data['ids'],data['vectors']):found.append((sum(a*b for a,b in zip(v,vec)),d.id,id))
         found=sorted(found,reverse=True)[:top_k]
     else:

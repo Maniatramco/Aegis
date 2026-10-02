@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from jsonschema import Draft202012Validator, validate, ValidationError
 from .core import *
-from . import providers
+from . import providers, dataset_models as routing
 
 @asynccontextmanager
 async def lifespan(app):
@@ -43,16 +43,16 @@ def new_record(kind,owner,name='',parent='',data=None,status='ready'):
     with Session.begin() as s:s.add(r)
     return r
 
-def enqueue(owner,kind,target,allow_external=False):
+def enqueue(owner,kind,target,allow_external=False,snapshot=None):
     j=Job(id=uid(),owner=owner,kind=kind,target_id=target,status='queued',created_at=time.time(),updated_at=time.time())
-    store.put_json('jobs/'+j.id+'.json',{'allow_external':allow_external})
+    store.put_json('jobs/'+j.id+'.json',{'allow_external':allow_external,**({'execution':snapshot} if snapshot else {})})
     with Session.begin() as s:s.add(j)
     from .queue_transport import get_transport
     get_transport(settings()['queue_provider']).notify(j.id)
     return j
 
-def external_check(consent,embedding=False):
-    cfg=settings();external=(cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci') or cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci'
+def external_check(consent,embedding=False,cfg=None):
+    cfg=cfg or settings();external=(cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci') or cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci'
     if external and not consent:raise HTTPException(409,'This action sends document text or your query to the configured external provider. Confirm external data transmission first.')
     if (cfg['model_provider']=='mock' or cfg['embedding_provider']=='mock') and os.getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true and are for tests only')
 
@@ -118,16 +118,22 @@ def overview(owner=Depends(auth)):
     return {'documents':len(docs),'ready':sum(d.status=='ready' for d in docs),'jobs':sum(j.status in ('queued','running') for j in jobs),'knowledge_bases':len(records(owner,'knowledge_base')),'failed':sum(d.status=='failed' for d in docs)}
 class KBInput(BaseModel):name:str=Field(min_length=1,max_length=200);description:str=''
 @app.get('/api/knowledge-bases')
-def kbs(owner=Depends(auth)):return [representation(r)|store.json(r.ref) for r in records(owner,'knowledge_base')]
+def kbs(owner=Depends(auth)):return [routing.dataset_public(r) for r in records(owner,'knowledge_base')]
 @app.post('/api/knowledge-bases')
-def create_kb(body:KBInput,owner=Depends(auth)):return representation(new_record('knowledge_base',owner,body.name,data=body.model_dump()))|body.model_dump()
+def create_kb(body:KBInput,owner=Depends(auth)):return routing.dataset_public(new_record('knowledge_base',owner,body.name,data=body.model_dump()|routing.ROUTING_DEFAULTS|{'routing_version':1}))
 @app.get('/api/documents')
-def documents(kb_id:str|None=None,owner=Depends(auth)):return [representation(d) for d in records(owner,'document') if not kb_id or d.parent_id==kb_id]
+def documents(kb_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
+    scope=dataset_id or kb_id
+    if scope:get_record(scope,owner,'knowledge_base')
+    return [routing.document_public(d) for d in records(owner,'document') if not scope or d.parent_id==scope]
 @app.post('/api/documents/upload')
-async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),allow_external:bool=Form(False),owner=Depends(auth)):
-    if kb_id:get_record(kb_id,owner,'knowledge_base')
+async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:str=Form(''),allow_external:bool=Form(False),owner=Depends(auth)):
+    if kb_id and dataset_id and kb_id!=dataset_id:raise HTTPException(400,'Conflicting dataset identifiers')
+    kb_id=dataset_id or kb_id
+    if not kb_id:raise HTTPException(409,'Create or choose a dataset and map its embedding model before uploading.')
+    dataset=get_record(kb_id,owner,'knowledge_base');snapshot=routing.execution_snapshot(dataset,'embedding')
     if len(files)>20:raise HTTPException(400,'Upload at most 20 files at once')
-    external_check(allow_external,True);result=[];jobs=[]
+    external_check(allow_external,True,snapshot['settings']);result=[];jobs=[]
     for file in files:
         name=(file.filename or 'document').replace('\\','/').split('/')[-1][:200]
         if name.rsplit('.',1)[-1].lower() not in ('txt','pdf','docx'):raise HTTPException(400,'Only PDF, DOCX and UTF-8 TXT files are supported')
@@ -137,10 +143,10 @@ async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),allow_exter
         id=uid();ref='documents/'+id+'/original';store.put(ref,raw)
         r=Record(id=id,kind='document',owner=owner,name=name,ref=ref,parent_id=kb_id,status='queued',size=len(raw),created_at=time.time(),updated_at=time.time())
         with Session.begin() as s:s.add(r)
-        j=enqueue(owner,'index',id,allow_external);result.append(representation(r));jobs.append(job_repr(j))
+        j=enqueue(owner,'index',id,allow_external,snapshot);result.append(routing.document_public(r));jobs.append(job_repr(j))
     return {'documents':result,'jobs':jobs}
 @app.get('/api/documents/{id}')
-def document(id:str,owner=Depends(auth)):return representation(get_record(id,owner,'document'))
+def document(id:str,owner=Depends(auth)):return routing.document_public(get_record(id,owner,'document'))
 @app.get('/api/documents/{id}/preview')
 def preview(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'document')
@@ -153,11 +159,11 @@ def download(id:str,owner=Depends(auth)):
 class Consent(BaseModel):allow_external:bool=False
 @app.post('/api/documents/{id}/reindex')
 def reindex(id:str,body:Consent,owner=Depends(auth)):
-    get_record(id,owner,'document');external_check(body.allow_external,True)
+    doc=get_record(id,owner,'document');dataset,_=routing.documents_scope(owner,doc.parent_id,[id]);snapshot=routing.execution_snapshot(dataset,'embedding');external_check(body.allow_external,True,snapshot['settings'])
     with Session.begin() as s:
         if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'An indexing job is already active')
         r=s.get(Record,id);r.status='queued';r.error=''
-    return job_repr(enqueue(owner,'index',id,body.allow_external))
+    return job_repr(enqueue(owner,'index',id,body.allow_external,snapshot))
 @app.delete('/api/documents/{id}')
 def delete_document(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'document')
@@ -167,42 +173,56 @@ def delete_document(id:str,owner=Depends(auth)):
     with document_lock(id):
         try:providers.delete_vectors(id)
         except Exception:raise HTTPException(503,'Vector cleanup failed; document is unavailable for retrieval. Retry deletion when vector storage recovers.')
-        for suffix in ['original','parsed.json','chunks.json','index.json']:store.delete('documents/'+id+'/'+suffix)
+        for suffix in ['original','parsed.json','chunks.json','index.json','index-execution.json']:store.delete('documents/'+id+'/'+suffix)
         with Session.begin() as s:s.delete(s.get(Record,id))
     return {'ok':True}
-class ConversationInput(BaseModel):title:str='New conversation';kb_id:str='';document_ids:list[str]=Field(default_factory=list)
+class ConversationInput(BaseModel):title:str='New conversation';kb_id:str='';dataset_id:str='';document_ids:list[str]=Field(default_factory=list)
 @app.get('/api/conversations')
 def conversations(owner=Depends(auth)):return [representation(r)|{'title':r.name} for r in records(owner,'conversation')]
 @app.post('/api/conversations')
 def create_conversation(body:ConversationInput,owner=Depends(auth)):
-    if body.kb_id:get_record(body.kb_id,owner,'knowledge_base')
-    for id in body.document_ids:get_record(id,owner,'document')
-    r=new_record('conversation',owner,body.title[:200],data=body.model_dump()|{'messages':[]});return representation(r)|store.json(r.ref)
+    dataset_id=body.dataset_id or body.kb_id
+    if body.dataset_id and body.kb_id and body.dataset_id!=body.kb_id:raise HTTPException(400,'Conflicting dataset identifiers')
+    if dataset_id or body.document_ids:dataset,_=routing.documents_scope(owner,dataset_id,body.document_ids);dataset_id=dataset.id
+    r=new_record('conversation',owner,body.title[:200],parent=dataset_id,data=body.model_dump()|{'dataset_id':dataset_id,'kb_id':dataset_id,'messages':[]});return representation(r)|store.json(r.ref)
 @app.get('/api/conversations/{id}')
 def conversation(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');return representation(r)|store.json(r.ref)
-class MessageInput(BaseModel):text:str=Field(min_length=1,max_length=12000);document_ids:list[str]|None=None;kb_id:str|None=None;allow_external:bool=False
+class MessageInput(BaseModel):text:str=Field(min_length=1,max_length=12000);document_ids:list[str]|None=None;kb_id:str|None=None;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
 _locks={}
+def message_execution(body,owner,data):
+    if body.dataset_id and body.kb_id and body.dataset_id!=body.kb_id:raise HTTPException(400,'Conflicting dataset identifiers')
+    ids=body.document_ids if body.document_ids is not None else data.get('document_ids',[])
+    dataset_id=body.dataset_id if body.dataset_id is not None else body.kb_id if body.kb_id is not None else data.get('dataset_id') or data.get('kb_id','')
+    pinned=data.get('dataset_id') or data.get('kb_id')
+    if not pinned and data.get('document_ids'):
+        try:previous,_=routing.documents_scope(owner,'',data['document_ids']);pinned=previous.id
+        except HTTPException:raise HTTPException(409,'Start a new conversation scoped to one dataset.')
+    if data.get('messages') and not pinned:raise HTTPException(409,'Start a new conversation scoped to one dataset.')
+    dataset,docs=routing.documents_scope(owner,dataset_id,ids)
+    if pinned and dataset.id!=pinned:raise HTTPException(409,'A conversation stays within its original dataset. Start a new conversation for another dataset.')
+    snapshot=routing.execution_snapshot(dataset,'chat',body.model_id);routing.require_indexes(docs,snapshot)
+    data['dataset_id']=dataset.id;data['kb_id']=dataset.id
+    external_check(body.allow_external,cfg=snapshot['settings']);external_check(body.allow_external,True,snapshot['embedding_execution']['settings'])
+    return [d for d in docs if d.status=='ready'],snapshot
+
 @app.post('/api/conversations/{id}/messages')
 def message(id:str,body:MessageInput,owner=Depends(auth)):
-    external_check(body.allow_external);r=get_record(id,owner,'conversation')
-    lock=_locks.setdefault(id,threading.Lock())
+    r=get_record(id,owner,'conversation');lock=_locks.setdefault(id,threading.Lock())
     if not lock.acquire(blocking=False):raise HTTPException(409,'This conversation already has a response in progress')
     try:
-        data=store.json(r.ref);ids=body.document_ids if body.document_ids is not None else data.get('document_ids',[]);kb=body.kb_id if body.kb_id is not None else data.get('kb_id','')
-        if ids:
-            docs=[get_record(did,owner,'document') for did in ids]
-        else:docs=[d for d in records(owner,'document') if not kb or d.parent_id==kb]
-        docs=[d for d in docs if d.status=='ready']
-        data['messages'].append({'id':uid(),'role':'user','text':body.text,'created_at':time.time()});store.put_json(r.ref,data)
+        data=store.json(r.ref);docs,snapshot=message_execution(body,owner,data);selection=routing.public_selection(snapshot)
+        request_id=uid();store.put_json('executions/'+request_id+'.json',snapshot)
+        data['messages'].append({'id':request_id,'role':'user','text':body.text,'created_at':time.time(),'model_selection':selection});store.put_json(r.ref,data)
         try:
-            sources=providers.search(body.text,owner,docs,settings()['top_k']);text_answer=providers.answer(body.text,sources,data['messages'][:-1])
+            with execution_context(snapshot['embedding_execution']):sources=providers.search(body.text,owner,docs,settings()['top_k'])
+            with execution_context(snapshot):text_answer=providers.answer(body.text,sources,data['messages'][:-1])
         except providers.ProviderError as e:raise HTTPException(502,str(e))
         except Exception:raise HTTPException(502,'Retrieval or generation failed; check configured provider connectivity')
         import re
         used={int(x) for x in re.findall(r'\[(\d+)\]',text_answer)}
         citations=[{'index':i+1,**source,'url':'/api/documents/'+source['document_id']+'/preview'} for i,source in enumerate(sources) if i+1 in used]
-        msg={'id':uid(),'role':'assistant','text':text_answer,'citations':citations,'created_at':time.time(),'mock':settings()['model_provider']=='mock'}
+        msg={'id':uid(),'role':'assistant','text':text_answer,'citations':citations,'created_at':time.time(),'mock':snapshot['settings']['model_provider']=='mock','model_selection':selection}
         data['messages'].append(msg);store.put_json(r.ref,data)
         return {'message':msg,'conversation_id':id}
     finally:lock.release()
@@ -257,17 +277,17 @@ def update_template(id:str,body:TemplateInput,owner=Depends(auth)):
 @app.get('/api/templates/{id}/versions')
 def template_versions(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'template');return [store.json(f'template/{id}/v{n}.json') for n in range(1,r.version+1)]
-class ExtractInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=20);template_id:str;allow_external:bool=False
+class ExtractInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=20);template_id:str;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
 @app.get('/api/extractions')
 def extractions(owner=Depends(auth)):return [representation(r) for r in records(owner,'extraction')]
 @app.post('/api/extractions')
 def create_extraction(body:ExtractInput,owner=Depends(auth)):
-    external_check(body.allow_external);t=get_record(body.template_id,owner,'template')
-    for id in body.document_ids:
-        d=get_record(id,owner,'document')
-        if d.status!='ready':raise HTTPException(409,'Documents must be ready before extraction')
-    data=body.model_dump()|{'schema':store.json(t.ref)['schema'],'template_version':t.version,'result':None,'sources':[]}
-    r=new_record('extraction',owner,t.name,data=data,status='queued');j=enqueue(owner,'extract',r.id,body.allow_external)
+    t=get_record(body.template_id,owner,'template');dataset,docs=routing.documents_scope(owner,body.dataset_id,body.document_ids)
+    snapshot=routing.execution_snapshot(dataset,'extraction',body.model_id);routing.require_indexes(docs,snapshot)
+    external_check(body.allow_external,cfg=snapshot['settings'])
+    if any(d.status!='ready' for d in docs):raise HTTPException(409,'Documents must be ready before extraction')
+    data=body.model_dump()|{'dataset_id':dataset.id,'model_selection':routing.public_selection(snapshot),'schema':store.json(t.ref)['schema'],'template_version':t.version,'result':None,'sources':[]}
+    r=new_record('extraction',owner,t.name,parent=dataset.id,data=data,status='queued');j=enqueue(owner,'extract',r.id,body.allow_external,snapshot)
     return representation(r)|data|{'job':job_repr(j)}
 @app.get('/api/extractions/{id}')
 def extraction(id:str,owner=Depends(auth)):
@@ -318,12 +338,14 @@ def cancel_job(id:str,owner=Depends(auth)):
         if r:r.status='cancelled'
     return job_repr(j)
 @app.get('/api/index')
-def inspect_index(document_id:str|None=None,owner=Depends(auth)):
-    docs=[get_record(document_id,owner,'document')] if document_id else records(owner,'document');items=[]
+def inspect_index(document_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
+    docs=[get_record(document_id,owner,'document')] if document_id else [d for d in records(owner,'document') if not dataset_id or d.parent_id==dataset_id];items=[]
     for d in docs:
-        try:idx=store.json('documents/'+d.id+'/index.json');chunks=store.json('documents/'+d.id+'/chunks.json');items.append(representation(d)|idx|{'chunks':chunks['chunks'],'chunk_size':chunks['chunk_size'],'chunk_overlap':chunks['chunk_overlap'],'requires_reindex':idx['fingerprint']!=providers.fingerprint()})
-        except FileNotFoundError:items.append(representation(d)|{'chunks':[],'chunk_count':0,'requires_reindex':True})
-    return {'documents':items,'embedding_fingerprint':providers.fingerprint(),'settings':{k:settings()[k] for k in ['embedding_provider','embedding_model','chunk_size','chunk_overlap']}}
+        try:
+            idx=store.json('documents/'+d.id+'/index.json');chunks=store.json('documents/'+d.id+'/chunks.json')
+            items.append(idx|routing.document_public(d)|{'chunks':chunks['chunks'],'chunk_size':chunks['chunk_size'],'chunk_overlap':chunks['chunk_overlap']})
+        except FileNotFoundError:items.append(routing.document_public(d)|{'chunks':[],'chunk_count':0,'requires_reindex':True})
+    return {'documents':items,'embedding_fingerprint':None,'settings':{k:settings()[k] for k in ['embedding_provider','embedding_model','chunk_size','chunk_overlap']}}
 @app.get('/api/settings')
 def get_settings(owner=Depends(auth)):
     try:has_key=bool(api_key())
@@ -333,6 +355,9 @@ def get_settings(owner=Depends(auth)):
     return settings()|{'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
 @app.patch('/api/settings')
 def save_settings(body:dict,owner=Depends(auth)):
+    with document_lock('settings-config'):return _save_settings(body,owner)
+
+def _save_settings(body,owner):
     if any(lock.locked() for lock in _locks.values()):raise HTTPException(409,'Wait for active chat responses before changing settings')
     permitted=set(DEFAULTS)|{'api_key','oci_api_key'}
     if set(body)-permitted:raise HTTPException(400,'Unknown setting or unsupported endpoint; provider endpoints are fixed for credential safety')
@@ -345,7 +370,10 @@ def save_settings(body:dict,owner=Depends(auth)):
         for doc in known_docs:
             try:store.get('documents/'+doc.id+'/oci-index.json')
             except FileNotFoundError:continue
-            raise HTTPException(409,'Existing OCI indexes require cleanup under the original project/region/vector store before changing that destination. Delete or migrate indexed documents first.')
+            # Dataset-managed indexes retain their own immutable cleanup destination.
+            # Legacy indexes have no such guarantee and must keep their original global destination.
+            try:store.get('documents/'+doc.id+'/index-execution.json')
+            except FileNotFoundError:raise HTTPException(409,'Legacy OCI indexes require cleanup under the original project/region/vector store before changing that destination. Delete or migrate indexed documents first.')
     if cfg['queue_provider'] not in ('database','oci'):raise HTTPException(400,'Unsupported queue provider')
     if cfg['queue_provider']=='oci' and cfg['queue_provider']!=settings()['queue_provider']:
         from .queue_transport import get_transport
@@ -410,25 +438,25 @@ def capabilities(owner=Depends(auth)):
 @app.post('/api/conversations/{id}/messages/stream')
 async def stream_message(id:str,body:MessageInput,request:Request,owner=Depends(auth)):
     import asyncio,re
-    external_check(body.allow_external);r=get_record(id,owner,'conversation')
-    lock=_locks.setdefault(id,threading.Lock())
+    r=get_record(id,owner,'conversation');lock=_locks.setdefault(id,threading.Lock())
     if not lock.acquire(blocking=False):raise HTTPException(409,'A response is already in progress')
-    data=store.json(r.ref);ids=body.document_ids if body.document_ids is not None else data.get('document_ids',[]);kb=body.kb_id if body.kb_id is not None else data.get('kb_id','')
     try:
-        docs=[get_record(did,owner,'document') for did in ids] if ids else [d for d in records(owner,'document') if not kb or d.parent_id==kb]
-        docs=[d for d in docs if d.status=='ready']
-        sources=await asyncio.to_thread(providers.search,body.text,owner,docs,settings()['top_k'])
-    except Exception:
-        lock.release();raise HTTPException(502,'Retrieval failed; check provider connectivity and indexed documents')
-    data['messages'].append({'id':uid(),'role':'user','text':body.text,'created_at':time.time()});store.put_json(r.ref,data)
+        data=store.json(r.ref);docs,snapshot=message_execution(body,owner,data);selection=routing.public_selection(snapshot)
+        with execution_context(snapshot['embedding_execution']):sources=await asyncio.to_thread(providers.search,body.text,owner,docs,settings()['top_k'])
+        request_id=uid();store.put_json('executions/'+request_id+'.json',snapshot)
+        data['messages'].append({'id':request_id,'role':'user','text':body.text,'created_at':time.time(),'model_selection':selection});store.put_json(r.ref,data)
+    except HTTPException:lock.release();raise
+    except Exception:lock.release();raise HTTPException(502,'Retrieval failed; check provider connectivity and indexed documents')
     async def events():
-        msg={'id':uid(),'role':'assistant','text':'','citations':[],'created_at':time.time(),'status':'streaming','mock':settings()['model_provider']=='mock'}
-        iterator=providers.answer_stream_async(body.text,sources,data['messages'][:-1])
+        msg={'id':uid(),'role':'assistant','text':'','citations':[],'created_at':time.time(),'status':'streaming','mock':snapshot['settings']['model_provider']=='mock','model_selection':selection}
+        iterator=None
         try:
-            async for piece in iterator:
-                if await request.is_disconnected():msg['status']='aborted';break
-                msg['text']+=piece
-                yield 'event: delta\ndata: '+json.dumps({'text':piece})+'\n\n'
+            with execution_context(snapshot):
+                iterator=providers.answer_stream_async(body.text,sources,data['messages'][:-1])
+                async for piece in iterator:
+                    if await request.is_disconnected():msg['status']='aborted';break
+                    msg['text']+=piece
+                    yield 'event: delta\ndata: '+json.dumps({'text':piece})+'\n\n'
             if msg['status']=='streaming':msg['status']='completed'
             used={int(x) for x in re.findall(r'\[(\d+)\]',msg['text'])}
             msg['citations']=[{'index':i+1,**source,'url':'/api/documents/'+source['document_id']+'/preview'} for i,source in enumerate(sources) if i+1 in used]
@@ -437,19 +465,22 @@ async def stream_message(id:str,body:MessageInput,request:Request,owner=Depends(
         except Exception:
             msg['status']='failed';yield 'event: error\ndata: '+json.dumps({'detail':'Response interrupted or provider unavailable; partial text was saved'})+'\n\n'
         finally:
-            try:await iterator.aclose()
-            except ValueError:pass
-            data['messages'].append(msg);store.put_json(r.ref,data);lock.release()
+            try:
+                if iterator is not None:
+                    with execution_context(snapshot):await iterator.aclose()
+                data['messages'].append(msg);store.put_json(r.ref,data)
+            finally:lock.release()
     return StreamingResponse(events(),media_type='text/event-stream',headers={'X-Accel-Buffering':'no'})
 
 @app.post('/api/index/search')
 def diagnose_retrieval(body:MessageInput,owner=Depends(auth)):
-    external_check(body.allow_external,True)
-    docs=[get_record(id,owner,'document') for id in body.document_ids] if body.document_ids else [d for d in records(owner,'document') if not body.kb_id or d.parent_id==body.kb_id]
+    dataset,docs=routing.documents_scope(owner,body.dataset_id or body.kb_id,body.document_ids)
+    snapshot=routing.execution_snapshot(dataset,'embedding');routing.require_indexes(docs,snapshot);external_check(body.allow_external,True,snapshot['settings'])
     ready=[d for d in docs if d.status=='ready'];started=time.monotonic()
-    try:hits=providers.search(body.text,owner,ready,settings()['top_k'])
+    try:
+        with execution_context(snapshot):hits=providers.search(body.text,owner,ready,settings()['top_k'])
     except Exception:raise HTTPException(502,'Retrieval failed; verify the selected provider and matching index configuration')
-    return {'matches':hits,'count':len(hits),'duration_ms':round((time.monotonic()-started)*1000),'scoped_documents':len(docs),'ready_documents':len(ready),'embedding_fingerprint':providers.fingerprint(),'top_k':settings()['top_k'],'provider':settings()['search_provider'],'note':'Scores are provider-specific similarity values, not probabilities. Only permitted ready documents and canonical stored excerpts are returned.'}
+    return {'matches':hits,'count':len(hits),'duration_ms':round((time.monotonic()-started)*1000),'scoped_documents':len(docs),'ready_documents':len(ready),'embedding_fingerprint':providers.fingerprint(snapshot['settings']),'top_k':snapshot['settings']['top_k'],'provider':snapshot['settings']['search_provider'],'note':'Scores are provider-specific similarity values, not probabilities. Only permitted ready documents and canonical stored excerpts are returned.'}
 
 class ProfileInput(BaseModel):
     name:str=Field(min_length=1,max_length=120)
@@ -459,6 +490,10 @@ def profile_public(record):
     return representation(record)|{'api_key_configured':data.get('api_key_configured',False),'oci_api_key_configured':data.get('oci_api_key_configured',False)}
 
 def write_profile(owner,name,id=None):
+    with document_lock('settings-config'):
+        with document_lock('profile-'+(id or 'new')):return _write_profile(owner,name,id)
+
+def _write_profile(owner,name,id=None):
     existing=get_record(id,owner,'config_profile') if id else None
     id=id or uid();version=(existing.version+1) if existing else 1;ref=f'configuration/profiles/{id}/v{version}.json'
     data={'settings':settings(),'api_key_configured':False,'oci_api_key_configured':False,'saved_at':time.time()}
@@ -495,3 +530,6 @@ def activate_profile(id:str,owner=Depends(auth)):
 def export_profile(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'config_profile');data=local_store.json(r.ref)
     return Response(json.dumps({'name':r.name,'version':r.version,'settings':data['settings']},indent=2),media_type='application/json',headers={'Content-Disposition':'attachment; filename="aegis-profile.json"'})
+
+
+routing.install_routes(app,auth,write_profile)
