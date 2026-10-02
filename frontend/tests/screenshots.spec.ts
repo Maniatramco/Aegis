@@ -52,10 +52,18 @@ ready document; each answer can be checked against a selected source; failed job
 an actionable status; provider secrets never appear in screenshots or exported settings.`;
 
 async function navigate(page: Page, name: string) {
-  await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
+  const open = page.getByRole("button", { name: "Open navigation", exact: true });
+  if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
+  const nav = page.getByRole("navigation");
+  const target = nav.getByRole("button", { name, exact: true });
+  if (!await target.isVisible()) await nav.getByRole("button", { name: "Manage workspace", exact: true }).click();
+  await target.click();
   await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
 }
 async function capture(page: Page, filename: string) {
+  const manage = page.getByRole("button", { name: "Manage workspace", exact: true });
+  const primary = await page.locator("main h1").textContent();
+  if (["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(primary || "") && await manage.getAttribute("aria-expanded") === "true") await manage.click();
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   const dismiss = page.getByRole("button", { name: "Dismiss notification" });
   if (await dismiss.isVisible()) await dismiss.click();
@@ -124,6 +132,11 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await navigate(page, "Ask Aegis");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(kb.id);
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
+  await capture(page, "12-ask-start.png");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await capture(page, "12-ask-mobile.png");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator("summary").filter({ hasText: /^Document scope/ }).click();
   await page.getByRole("checkbox", { name: new RegExp(invoiceName.replaceAll(".", "\\.")) }).check();
   const chatConsent = page.getByRole("checkbox", { name: /I approve sending this request/ });
   if (await chatConsent.isVisible()) await chatConsent.check();
@@ -132,6 +145,7 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await expect(page.getByText("MOCK TEST OUTPUT", { exact: true })).toBeVisible();
   await expect(page.getByTitle("Copy answer")).toBeVisible();
   await expect(page.locator(".citation").first()).toBeVisible();
+  await page.locator("summary").filter({ hasText: /^Document scope/ }).click();
   await capture(page, "03-ask-aegis.png");
 
   await navigate(page, "Extract");
@@ -141,6 +155,10 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await page.getByLabel("Extraction template").selectOption(template.id);
   const extractionConsent = page.getByRole("checkbox", { name: /I approve sending this request/ });
   if (await extractionConsent.isVisible()) await extractionConsent.check();
+  await capture(page, "13-extract-start.png");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await capture(page, "13-extract-mobile.png");
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const created = page.waitForResponse(r => r.url().endsWith("/api/extractions") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Run extraction", exact: true }).click();
   const extraction = await checked(await created);
@@ -154,8 +172,11 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await expect(page.getByLabel("Extraction result JSON")).toHaveValue(/MOCK TEST VALUE/);
   await expect(page.getByText(/MOCK TEST OUTPUT · Synthetic development data/)).toBeVisible();
   await page.getByLabel("Refresh workspace").click();
-  await expect(page.getByRole("heading", { name: templateName, exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review extraction", exact: true })).toBeVisible();
   await capture(page, "04-extract.png");
+  await page.getByRole("button", { name: "Extraction history", exact: true }).click();
+  await expect(page.getByRole("heading", { name: templateName, exact: true }).first()).toBeVisible();
+  await capture(page, "14-extract-history.png");
 
   await navigate(page, "Templates");
   await expect(page.getByLabel("Template name", { exact: true })).toHaveValue(templateName);
@@ -169,19 +190,24 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await expect(page.getByText("completed", { exact: true }).first()).toBeVisible();
   await capture(page, "07-jobs-activity.png");
   await navigate(page, "Connections");
-  await expect(page.getByLabel("Model provider", { exact: true })).toHaveValue("mock");
+  await expect(page.getByLabel("Model provider", { exact: true })).not.toBeVisible();
   await capture(page, "08-connections.png");
+  for (const [tab, filename] of [["Profiles", "15-connection-profiles.png"], ["Providers", "16-connection-providers.png"], ["Storage", "17-connection-storage.png"], ["OCI", "18-connection-oci.png"], ["Diagnostics", "19-connection-diagnostics.png"]]) {
+    await page.getByRole("button", { name: tab, exact: true }).click();
+    if (tab === "Providers") await expect(page.getByLabel("Model provider", { exact: true })).toHaveValue("mock");
+    await capture(page, filename);
+  }
   await navigate(page, "Services & migration");
   await capture(page, "09-services-migration.png");
   await navigate(page, "Setup");
   await capture(page, "10-setup.png");
   await writeFile(path.join(output, "README.txt"), [
-    "Aegis: Home on desktop/mobile, ten workspace screens, and dataset model configuration.",
+    "Aegis: focused Home, Ask and Extract desktop/mobile views, workspace screens, dataset models, and connection tabs.",
     "Captured by Playwright Chromium against the disposable Docker Compose app in GitHub-hosted CI.",
     "Viewport: 1440 x 1000, full-page captures. No raster mockups or substituted API responses.",
     "All invoice/project content is synthetic. Model and embedding providers explicitly use development mock mode.",
     "The dataset has a named mock connection profile, two mapped chat/extraction models, and a separate embedding model.",
-    "Ask and Extract show the multiple-model selector; both requests explicitly use the selected Careful review model.",
+    "Ask start and extraction creation show the multiple-model selector; both requests explicitly use the selected Careful review model.",
     "Chat repeats retrieved evidence; extraction produces MOCK TEST VALUE placeholders and zeros, not real AI output.",
     "Both chat and extraction display visible mock-output labels. No production provider credentials were used.",
     "Authentication used the disposable CI administrator. Credentials, tokens, traces, and storageState are not included.",

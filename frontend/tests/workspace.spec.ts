@@ -31,10 +31,7 @@ test("navigates all workspace screens and preserves an authenticated refresh", a
     "Dashboard",
     "Home",
   ]) {
-    await page
-      .getByRole("navigation")
-      .getByRole("button", { name, exact: true })
-      .click();
+    await navigate(page, name);
     await expect(
       page
         .getByRole("heading", {
@@ -58,10 +55,7 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   const headers = await sessionHeaders(page.request);
   const models = await seedMockCatalog(page.request, headers, datasetName);
   await page.reload();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Datasets", exact: true })
-    .click();
+  await navigate(page, "Datasets");
   await page.locator(".dataset-intro").getByRole("button", { name: "Onboard dataset", exact: true }).click();
   await page.getByLabel("Dataset name", { exact: true }).fill("Cancelled draft dataset");
   await page.getByRole("button", { name: "Cancel dataset onboarding", exact: true }).click();
@@ -107,6 +101,8 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   expect(saved).toMatchObject({ default_chat_model_id: models.fast.id, default_extraction_model_id: models.careful.id, embedding_model_id: models.embedding.id });
   expect(saved.mappings.map((mapping: { model_id: string }) => mapping.model_id).sort()).toEqual([models.fast.id, models.careful.id, models.embedding.id].sort());
   await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await expect(page.getByLabel("Choose documents")).not.toBeVisible();
+  await page.getByRole("button", { name: "Add documents", exact: true }).click();
   await page
     .getByLabel("Choose documents")
     .setInputFiles({
@@ -125,10 +121,7 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   await row.getByTitle("Preview document").click();
   await expect(page.getByRole("dialog")).toContainText("INV-2026-BROWSER");
   await page.getByRole("button", { name: "Close preview" }).click();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Index inspector", exact: true })
-    .click();
+  await navigate(page, "Index inspector");
   await page
     .getByLabel("Document to inspect")
     .selectOption({ label: filename });
@@ -141,8 +134,18 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
 });
 
 async function navigate(page: Page, name: string) {
-  await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
-  await expect(page.getByRole("heading", { name, exact: true }).first()).toBeVisible();
+  const open = page.getByRole("button", { name: "Open navigation", exact: true });
+  if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
+  const nav = page.getByRole("navigation");
+  const target = nav.getByRole("button", { name, exact: true });
+  if (!await target.isVisible()) await nav.getByRole("button", { name: "Manage workspace", exact: true }).click();
+  await target.click();
+  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
+}
+
+async function openDocumentScope(page: Page) {
+  const details = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Document scope/ }) });
+  if (!await details.evaluate(el => el.hasAttribute("open"))) await details.locator("summary").click();
 }
 
 function documentCheckbox(page: Page, filename: string) {
@@ -203,6 +206,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   await page.getByRole("button", { name: "Configure dataset models", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "All datasets", exact: true }).click();
   await expect(page.getByRole("button", { name: `Open dataset ${unavailable.name}`, exact: true })).toContainText("Models needed");
   await navigate(page, "Ask Aegis");
 
@@ -210,6 +214,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   const chatModel = page.getByRole("combobox", { name: "Chat model", exact: true });
   await expect(chatModel).toHaveValue(models.fast.id);
   expect((await chatModel.locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value).filter(Boolean))).sort()).toEqual([models.fast.id, models.careful.id].sort());
+  await openDocumentScope(page);
   await documentCheckbox(page, documentA.name).check();
   await expect(documentCheckbox(page, documentB.name)).toHaveCount(0);
   await chatModel.selectOption(models.careful.id);
@@ -246,6 +251,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
     [multiple, documentA, models.careful, true],
     [single, documentB, models.separate, false],
   ] as const) {
+    await page.getByRole("button", { name: "New extraction", exact: true }).click();
     await page.getByLabel("Extraction dataset", { exact: true }).selectOption(dataset.id);
     const extractModel = page.getByRole("combobox", { name: "Extraction model", exact: true });
     if (hasChoice) {
@@ -279,10 +285,7 @@ test("saves a strict template and verifies connections without exposing a key", 
   page,
 }) => {
   const name = `Browser schema ${Date.now()}`;
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Templates", exact: true })
-    .click();
+  await navigate(page, "Templates");
   await page.getByLabel("Template name", { exact: true }).fill(name);
   await page
     .getByLabel("Template JSON schema")
@@ -298,10 +301,8 @@ test("saves a strict template and verifies connections without exposing a key", 
     .getByRole("button", { name: "Save template", exact: true })
     .click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Connections", exact: true })
-    .click();
+  await navigate(page, "Connections");
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
   await expect(page.getByLabel("OpenAI API key", { exact: true })).toHaveValue(
     "",
   );
@@ -339,10 +340,7 @@ test("mobile dataset and model selection fit the screen and sign out removes the
   await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveValue(models[1].id);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Jobs & activity", exact: true })
-    .click();
+  await navigate(page, "Jobs & activity");
   await expect(
     page.getByRole("heading", { name: "Jobs & activity", exact: true }),
   ).toBeVisible();
@@ -372,20 +370,23 @@ test("Home cards use saved activity, open the right dataset, and retain status a
   await activeCard.click();
   await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`#dataset/${active.id}$`));
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Deactivate dataset", exact: true }).click();
   await expect(page.getByRole("button", { name: "Activate dataset", exact: true })).toBeVisible();
   await page.reload();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.locator(".dataset-detail").getByText("Dataset status: Inactive", { exact: true })).toBeVisible();
   await page.goBack();
   await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   await expect(activeCard.getByText("Inactive", { exact: true })).toBeVisible();
   await page.goForward();
   await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Activate dataset", exact: true }).click();
   await expect(page.getByRole("button", { name: "Deactivate dataset", exact: true })).toBeVisible();
   expect((await checked(await page.request.get(`/api/datasets/${active.id}`))).active).toBe(true);
   expect((await checked(await page.request.get(`/api/datasets/${inactive.id}`))).active).toBe(false);
-  await page.getByRole("navigation").getByRole("button", { name: "Home", exact: true }).click();
+  await navigate(page, "Home");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(activeCard).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -426,4 +427,66 @@ test("Home dataset links still work when an unrelated dashboard service fails", 
   await page.reload();
   await page.getByRole("link", { name: `Open dataset ${name}`, exact: true }).click();
   await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
+});
+
+test("focused screens reveal secondary controls only when requested", async ({ page }) => {
+  const nav = page.getByRole("navigation");
+  const manage = nav.getByRole("button", { name: "Manage workspace", exact: true });
+  await expect(manage).toHaveAttribute("aria-expanded", "false");
+  await expect(nav.getByRole("button", { name: "Connections", exact: true })).not.toBeVisible();
+  await manage.click();
+  await expect(nav.getByRole("button", { name: "Connections", exact: true })).toBeVisible();
+  await manage.click();
+  await expect(manage).toHaveAttribute("aria-expanded", "false");
+
+  await navigate(page, "Datasets");
+  const cards = page.getByRole("button", { name: /^Open dataset / });
+  await expect(cards.first()).toBeVisible();
+  await expect(page.locator(".dataset-detail")).not.toBeVisible();
+  await page.getByLabel("Search datasets", { exact: true }).fill("no-dataset-matches-this-qa-query");
+  await expect(page.getByRole("heading", { name: "No matching datasets", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Clear search", exact: true }).click();
+  await cards.first().click();
+  await expect(cards).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Documents", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Choose documents")).not.toBeVisible();
+  await expect(page.getByRole("button", { name: /^(Activate|Deactivate) dataset$/ })).not.toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^(Activate|Deactivate) dataset$/ })).toBeVisible();
+  await page.getByRole("button", { name: "All datasets", exact: true }).click();
+  await expect(cards.first()).toBeVisible();
+
+  await navigate(page, "Ask Aegis");
+  const scope = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Document scope/ }) });
+  const history = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Saved conversations$/ }) });
+  await expect(scope).not.toHaveAttribute("open", "");
+  await expect(history).not.toHaveAttribute("open", "");
+  await page.getByLabel("Ask a question").fill("Draft survives opening and closing optional controls.");
+  await scope.locator("summary").click();
+  await scope.locator("summary").click();
+  await history.locator("summary").click();
+  await history.locator("summary").click();
+  await expect(page.getByLabel("Ask a question")).toHaveValue("Draft survives opening and closing optional controls.");
+
+  await navigate(page, "Extract");
+  await expect(page.getByRole("heading", { name: "Create an extraction", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Extraction history", exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "Extraction history", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Create an extraction", exact: true })).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: "Extraction history", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "New extraction", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Create an extraction", exact: true })).toBeVisible();
+
+  await navigate(page, "Connections");
+  await expect(page.getByRole("button", { name: "Models", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Model provider", { exact: true })).not.toBeVisible();
+  for (const [tab, visible] of [["Providers", "Model provider"], ["Storage", "Storage provider"], ["Providers", "Model provider"]]) {
+    await page.getByRole("button", { name: tab, exact: true }).click();
+    await expect(page.getByLabel(visible, { exact: true })).toBeVisible();
+  }
+  await page.getByRole("button", { name: "Profiles", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Connection profiles", exact: true })).toBeVisible();
+  await expect(page.getByLabel("OpenAI API key", { exact: true })).not.toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

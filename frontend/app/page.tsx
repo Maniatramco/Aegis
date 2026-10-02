@@ -194,6 +194,9 @@ export default function App() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [mobile, setMobile] = useState(false);
+  const [adminNavigation, setAdminNavigation] = useState(false);
+  const [connectionTab, setConnectionTab] = useState("Models");
+  const [extractionTab, setExtractionTab] = useState("Create");
   const [refresh, setRefresh] = useState(0);
   const [overview, setOverview] = useState<Entity>({});
   const [docs, setDocs] = useState<Entity[]>([]);
@@ -386,6 +389,7 @@ export default function App() {
   const navigate = (name: View) => {
     window.location.hash = encodeURIComponent(name);
     setView(name);
+    if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(name)) setAdminNavigation(true);
     setDatasetModelsFocus(false);
     setError("");
     setMobile(false);
@@ -425,6 +429,7 @@ export default function App() {
     } else {
       const next = sections.find(s => s.name.toLowerCase() === route.toLowerCase())?.name || "Home";
       setView(next);
+      if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(next)) setAdminNavigation(true);
     }
     setMobile(false);
     setError("");
@@ -703,6 +708,7 @@ export default function App() {
         allow_external: true,
       });
       setExtraction(d);
+      setExtractionTab("Review");
       setResultText(json(d.result || {}));
       notify(
         "Extraction submitted. Review the job status before using the result.",
@@ -768,12 +774,12 @@ export default function App() {
         <section className="auth-brand">
           <div className="brand">
             <span className="brandmark">
-              <Shield size={23} />
+              <img src="/aegis-logo.png" alt="" width={40} height={40} />
             </span>
             Aegis
           </div>
           <div className="auth-art">
-            <div className="eyebrow" style={{ color: "#90aaff" }}>
+            <div className="eyebrow" style={{ color: "#2563eb" }}>
               DOCUMENT INTELLIGENCE, GROUNDED.
             </div>
             <h1>
@@ -787,7 +793,7 @@ export default function App() {
               and structured extraction. Originals stay safely stored,
               independent of your search index.
             </p>
-            <div className="row" style={{ marginTop: 34, color: "#bac8e3" }}>
+            <div className="row" style={{ marginTop: 34, color: "#4a6387" }}>
               <Shield size={18} />
               <span className="small">
                 Local-first · Your providers · Your control
@@ -902,25 +908,19 @@ export default function App() {
         </button>
         <div className="brand">
           <span className="brandmark">
-            <Shield size={23} />
+            <img src="/aegis-logo.png" alt="" width={40} height={40} />
           </span>
           Aegis
         </div>
         <div className="brand-sub">Document intelligence</div>
         <nav>
-          {sections.map((s) => (
-            <div key={s.name}>
-              {s.group && <div className="nav-label">{s.group}</div>}
-              <button
-                className={`nav-item ${view === s.name ? "selected" : ""}`}
-                aria-current={view === s.name ? "page" : undefined}
-                onClick={() => navigate(s.name)}
-              >
-                <s.icon size={17} />
-                {s.name}
-              </button>
-            </div>
+          {sections.filter(s => ["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => (
+            <button key={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} />{s.name}</button>
           ))}
+          <button className="nav-item nav-more" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} />Manage workspace<ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
+          {adminNavigation && <div id="admin-navigation" className="admin-navigation">
+            {sections.filter(s => !["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => <button key={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} />{s.name}</button>)}
+          </div>}
         </nav>
         <div className="nav-footer">
           <div className="row" style={{ marginBottom: 9 }}>
@@ -940,7 +940,7 @@ export default function App() {
             >
               <Menu size={17} />
             </button>
-            <span className="crumb-workspace">Workspace</span>
+            <img className="header-logo" src="/aegis-logo.png" alt="Aegis" width={28} height={28} /><span className="crumb-workspace">Workspace</span>
             <ChevronRight size={13} />
             <span style={{ color: "#2a3b57" }}>{view}</span>
           </div>
@@ -1433,24 +1433,15 @@ export default function App() {
           )}
           {view === "Ask Aegis" && (
             <div className="chat-layout">
-              <aside>
-                <section className="panel">
-                  <button
-                    className="btn primary"
-                    style={{ width: "100%", marginBottom: 20 }}
-                    disabled={answering}
-                    onClick={() => {
-                      setConversation(null);
-                      setPrompt("");
-                      setError("");
-                    }}
-                  >
-                    <Plus size={15} />
-                    New conversation
-                  </button>
-                  <div className="eyebrow" style={{ fontSize: 9 }}>
-                    SAVED CONVERSATIONS
-                  </div>
+              <section className="panel ask-context">
+                <div className="task-context">
+                  <div className="field"><label>Dataset</label>{datasetSelect("Chat dataset")}</div>
+                  <ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />
+                  <button className="btn" disabled={answering} onClick={() => { setConversation(null); setPrompt(""); setError(""); }}><Plus size={15} />New conversation</button>
+                </div>
+                <div className="ask-options">
+                  <details className="disclosure"><summary>Document scope · {scope.length ? `${scope.length} selected` : "All ready documents"}</summary><p className="muted small">No selection searches all ready documents in this dataset.</p>{docSelection}</details>
+                  <details className="disclosure"><summary>Saved conversations</summary>
                   <div className="chat-list">
                     {conversations.length ? (
                       conversations.map((c) => (
@@ -1471,17 +1462,9 @@ export default function App() {
                       </p>
                     )}
                   </div>
-                </section>
-                <section className="panel">
-                  <h3>Dataset & model</h3>
-                  <p className="muted small">Every answer uses this dataset’s documents and mapped models.</p>
-                  <div className="field"><label>Dataset</label>{datasetSelect("Chat dataset")}</div>
-                  <ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />
-                  <h3 style={{ marginTop: 20 }}>Document scope</h3>
-                  <p className="muted small">No selection searches all ready documents in this dataset.</p>
-                  {docSelection}
-                </section>
-              </aside>
+                  </details>
+                </div>
+              </section>
               <section className="panel chat-window">
                 <div className="panel-head">
                   <div>
@@ -1688,8 +1671,11 @@ export default function App() {
           )}
           {view === "Extract" && (
             <>
-              <div className="grid2">
-                <section className="panel">
+              <div className="section-tabs" aria-label="Extraction sections">
+                {["Create", "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => setExtractionTab(tab)}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
+              </div>
+              <div className="extraction-focus">
+                <section className="panel" hidden={extractionTab !== "Create"}>
                   <h2>Create an extraction</h2>
                   <p className="muted small">
                     Select a schema and documents. Review extracted values and
@@ -1731,7 +1717,7 @@ export default function App() {
                     Run extraction
                   </button>
                 </section>
-                <section className="panel">
+                <section className="panel" hidden={extractionTab !== "History"}>
                   <div className="panel-head">
                     <h2>Extraction history</h2>
                     <span className="pill">{extractions.length} runs</span>
@@ -1759,6 +1745,7 @@ export default function App() {
                               run(async () => {
                                 const d = await api(`/extractions/${e.id}`);
                                 setExtraction(d);
+                                setExtractionTab("Review");
                                 setResultText(json(d.result || {}));
                               })
                             }
@@ -1778,10 +1765,11 @@ export default function App() {
                 </section>
               </div>
               {extraction && (
-                <section className="panel">
+                <section className="panel" hidden={extractionTab !== "Review"}>
                   <div className="panel-head">
                     <div>
                       <h2>Review extraction</h2>
+                      <p className="small muted">Dataset: {kbs.find(d => d.id === (extraction.model_selection?.dataset_id || extraction.dataset_id || extraction.kb_id))?.name || "Recorded extraction dataset"}</p>
                       {recordedModel(extraction) && <p className="small muted">Recorded model: {recordedModel(extraction)}</p>}
                       <p className="small muted">
                         Review all values against the source before exporting.
@@ -1799,6 +1787,7 @@ export default function App() {
                               `/extractions/${extraction.id}`,
                             );
                             setExtraction(d);
+                                setExtractionTab("Review");
                             setResultText(json(d.result || {}));
                           })
                         }
@@ -1860,6 +1849,7 @@ export default function App() {
                           { result },
                         );
                         setExtraction(d);
+                                setExtractionTab("Review");
                         notify("Reviewed result saved.");
                         reload();
                       })
@@ -2323,14 +2313,15 @@ export default function App() {
           )}
           {view === "Connections" && (
             <>
-              <ModelCatalog models={models} profiles={profiles} api={api} run={run} busy={busy} reload={reload} notify={notify} />
-              <Notice tone="warn">
+              <div className="section-tabs" aria-label="Connection sections">{["Models", "Profiles", "Providers", "Storage", "OCI", "Diagnostics"].map(tab => <button key={tab} className={`btn ${connectionTab === tab ? "primary" : ""}`} aria-pressed={connectionTab === tab} onClick={() => setConnectionTab(tab)}>{tab}</button>)}</div>
+              <div hidden={connectionTab !== "Models"}><ModelCatalog models={models} profiles={profiles} api={api} run={run} busy={busy} reload={reload} notify={notify} /></div>
+              <div hidden={!["Providers", "Storage", "OCI"].includes(connectionTab)}><Notice tone="warn">
                 Provider keys are encrypted on the server and never saved in
                 browser storage. OpenAI usage is separate from a ChatGPT
                 subscription. Changing an embedding model requires reindexing
                 existing documents.
-              </Notice>
-              <section className="panel">
+              </Notice></div>
+              <section className="panel" hidden={connectionTab !== "Profiles"}>
                 <div className="panel-head">
                   <div>
                     <h2>Connection profiles</h2>
@@ -2443,8 +2434,8 @@ export default function App() {
                   <p className="muted small">No saved profiles yet.</p>
                 )}
               </section>
-              <div className="grid2">
-                <section className="panel">
+              <div className="settings-focus">
+                <section className="panel" hidden={connectionTab !== "Providers"}>
                   <div className="panel-head">
                     <h2>Connection configuration</h2>
                     <span className="pill">Server-side configuration</span>
@@ -2546,7 +2537,7 @@ export default function App() {
                     </Notice>
                   )}
                 </section>
-                <section className="panel">
+                <section className="panel" hidden={connectionTab !== "Storage"}>
                   <h2>Storage & retrieval</h2>
                   <Field label="Original document storage">
                     <select
@@ -2645,79 +2636,10 @@ export default function App() {
                       </Field>
                     ))}
                   </div>
-                  <div className="row wrap">
-                    <button
-                      className="btn primary"
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          const allowed = [
-                            "storage_provider",
-                            "search_provider",
-                            "queue_provider",
-                            "model_provider",
-                            "embedding_provider",
-                            "model",
-                            "embedding_model",
-                            "chunk_size",
-                            "chunk_overlap",
-                            "top_k",
-                            "timeout",
-                            "max_upload_mb",
-                            "oci_region",
-                            "oci_project_id",
-                            "oci_auth_mode",
-                            "oci_model",
-                            "oci_vector_store_id",
-                            "oci_profile",
-                            "oci_storage_namespace",
-                            "oci_storage_bucket",
-                            "oci_storage_prefix",
-                            "oci_storage_region",
-                            "oci_storage_auth_mode",
-                            "oci_storage_profile",
-                          ];
-                          const payload: Entity = Object.fromEntries(
-                            allowed
-                              .filter((k) => k in settingsForm)
-                              .map((k) => [k, settingsForm[k]]),
-                          );
-                          if (apiKey) payload.api_key = apiKey;
-                          if (ociApiKey) payload.oci_api_key = ociApiKey;
-                          const s = await api("/settings", "PATCH", payload);
-                          setSettings(s);
-                          setSettingsForm(s);
-                          setApiKey("");
-                          setOciApiKey("");
-                          notify(
-                            "Settings saved securely. Reindex documents if embedding settings changed.",
-                          );
-                          reload();
-                        })
-                      }
-                    >
-                      <Check size={14} />
-                      Save settings
-                    </button>
-                    <button
-                      className="btn"
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          setTestResult(await api("/settings/test", "POST"));
-                        })
-                      }
-                    >
-                      <Activity size={14} />
-                      Test saved connections
-                    </button>
-                    <Download path="/settings/export">
-                      Export safe config
-                    </Download>
-                  </div>
+
                 </section>
               </div>
-              <section className="panel">
+              <section className="panel" hidden={connectionTab !== "OCI"}>
                 <h2>OCI migration profile</h2>
                 <p className="muted small">
                   OCI adapters are implemented and tested with mocked SDK
@@ -2832,24 +2754,95 @@ export default function App() {
                   </>
                 )}
                 <p className="muted small">
-                  Use Save settings above to save this profile. Do not paste
+                  Use Save settings below to save this profile. Do not paste
                   private keys, tokens, or signing credentials into these
                   fields.
                 </p>
               </section>
+              <div className="settings-actions" hidden={!["Providers", "Storage", "OCI", "Diagnostics"].includes(connectionTab)}>                  <div className="row wrap">
+                    <button
+                      className="btn primary"
+                      disabled={busy}
+                      onClick={() =>
+                        run(async () => {
+                          const allowed = [
+                            "storage_provider",
+                            "search_provider",
+                            "queue_provider",
+                            "model_provider",
+                            "embedding_provider",
+                            "model",
+                            "embedding_model",
+                            "chunk_size",
+                            "chunk_overlap",
+                            "top_k",
+                            "timeout",
+                            "max_upload_mb",
+                            "oci_region",
+                            "oci_project_id",
+                            "oci_auth_mode",
+                            "oci_model",
+                            "oci_vector_store_id",
+                            "oci_profile",
+                            "oci_storage_namespace",
+                            "oci_storage_bucket",
+                            "oci_storage_prefix",
+                            "oci_storage_region",
+                            "oci_storage_auth_mode",
+                            "oci_storage_profile",
+                          ];
+                          const payload: Entity = Object.fromEntries(
+                            allowed
+                              .filter((k) => k in settingsForm)
+                              .map((k) => [k, settingsForm[k]]),
+                          );
+                          if (apiKey) payload.api_key = apiKey;
+                          if (ociApiKey) payload.oci_api_key = ociApiKey;
+                          const s = await api("/settings", "PATCH", payload);
+                          setSettings(s);
+                          setSettingsForm(s);
+                          setApiKey("");
+                          setOciApiKey("");
+                          notify(
+                            "Settings saved securely. Reindex documents if embedding settings changed.",
+                          );
+                          reload();
+                        })
+                      }
+                    >
+                      <Check size={14} />
+                      Save settings
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() =>
+                        run(async () => {
+                          setTestResult(await api("/settings/test", "POST"));
+                          setConnectionTab("Diagnostics");
+                        })
+                      }
+                    >
+                      <Activity size={14} />
+                      Test saved connections
+                    </button>
+                    <Download path="/settings/export">
+                      Export safe config
+                    </Download>
+                  </div></div>
               {testResult && (
-                <section className="panel">
+                <section className="panel" hidden={connectionTab !== "Diagnostics"}>
                   <h2>Connection test result</h2>
                   <pre className="code mono">{json(testResult)}</pre>
                 </section>
               )}
-              <section className="panel">
+              <section className="panel" hidden={connectionTab !== "Diagnostics"}>
                 <h2>Provider capabilities</h2>
                 <p className="muted small">
                   Readiness is reported by the server; an unavailable adapter
                   cannot process your data.
                 </p>
-                <pre className="code mono">{json(caps)}</pre>
+                <details className="disclosure"><summary>View technical capabilities</summary><pre className="code mono">{json(caps)}</pre></details>
               </section>
             </>
           )}
