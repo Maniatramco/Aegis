@@ -82,11 +82,29 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   await page.getByLabel("Default chat model", { exact: true }).selectOption(models.fast.id);
   await page.getByLabel("Default extraction model", { exact: true }).selectOption(models.careful.id);
   await page.getByLabel("Embedding model", { exact: true }).selectOption(models.embedding.id);
+  // A workspace refresh returns new dataset objects. Unsaved mapping choices
+  // and defaults must survive that real refresh, including the onboarding load.
+  const refreshed = page.waitForResponse(r => r.url().endsWith("/api/datasets") && r.request().method() === "GET");
+  await page.getByLabel("Refresh workspace", { exact: true }).click();
+  await checked(await refreshed);
+  await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
+  for (const model of [models.fast, models.careful, models.embedding]) {
+    await expect(page.getByLabel(`Mapped model ${model.name}`, { exact: true })).toBeChecked();
+  }
+  await expect(page.getByLabel(`Mapped model ${models.separate.name}`, { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel("Default chat model", { exact: true })).toHaveValue(models.fast.id);
+  await expect(page.getByLabel("Default extraction model", { exact: true })).toHaveValue(models.careful.id);
+  await expect(page.getByLabel("Embedding model", { exact: true })).toHaveValue(models.embedding.id);
+  const beforeSave = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
+  expect(beforeSave.mappings).toEqual([]);
   await page.getByRole("button", { name: "Save model mappings", exact: true }).click();
   await expect.poll(async () => {
     const saved = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
     return saved.default_extraction_model_id;
   }).toBe(models.careful.id);
+  const saved = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
+  expect(saved).toMatchObject({ default_chat_model_id: models.fast.id, default_extraction_model_id: models.careful.id, embedding_model_id: models.embedding.id });
+  expect(saved.mappings.map((mapping: { model_id: string }) => mapping.model_id).sort()).toEqual([models.fast.id, models.careful.id, models.embedding.id].sort());
   await page.getByRole("button", { name: "Documents", exact: true }).click();
   await page
     .getByLabel("Choose documents")

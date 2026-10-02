@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, Database, FileSearch, FileText, Layers, MessageSquare, Plus, Settings2, Shield, UploadCloud, X } from "lucide-react";
 
 type Entity = Record<string, any>;
@@ -89,32 +89,69 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
 }
 
 function DatasetMappings({ dataset, models, api, run, busy, reload, notify, onConnections }: { dataset: Entity; models: Entity[]; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void }) {
-  const [mappings, setMappings] = useState<Entity[]>([]);
-  const [chatDefault, setChatDefault] = useState("");
-  const [extractDefault, setExtractDefault] = useState("");
-  const [embedding, setEmbedding] = useState("");
+  type MappingDraft = { mappings: Entity[]; chatDefault: string; extractDefault: string; embedding: string };
+  const savedDraft = (source: Entity): MappingDraft => ({
+    mappings: (source.mappings || (source.models || []).map((m: Entity) => ({ model_id: m.id, enabled: m.mapping_enabled !== false }))).map((m: Entity) => ({ ...m })),
+    chatDefault: source.default_chat_model_id || "",
+    extractDefault: source.default_extraction_model_id || "",
+    embedding: source.embedding_model_id || "",
+  });
+  const [draft, setDraft] = useState<MappingDraft>(() => savedDraft(dataset));
+  const { mappings, chatDefault, extractDefault, embedding } = draft;
   const [ackReindex, setAckReindex] = useState(false);
+  const [remoteChanged, setRemoteChanged] = useState(false);
+  const dirty = useRef(false);
+  const savedRevision = useRef({ id: dataset.id, version: dataset.version });
+  const loadSavedDraft = () => {
+    setDraft(savedDraft(dataset));
+    savedRevision.current = { id: dataset.id, version: dataset.version };
+    dirty.current = false;
+    setRemoteChanged(false);
+    setAckReindex(false);
+  };
   useEffect(() => {
-    setMappings(dataset.mappings || (dataset.models || []).map((m: Entity) => ({ model_id: m.id, enabled: m.mapping_enabled !== false })));
-    setChatDefault(dataset.default_chat_model_id || ""); setExtractDefault(dataset.default_extraction_model_id || ""); setEmbedding(dataset.embedding_model_id || ""); setAckReindex(false);
-  }, [dataset]);
+    // A workspace refresh returns new objects, even when nothing was saved.
+    // Only a new persisted revision may reconcile the editor's local draft.
+    if (savedRevision.current.id === dataset.id && savedRevision.current.version === dataset.version) return;
+    if (dirty.current && savedRevision.current.id === dataset.id) {
+      setRemoteChanged(true);
+      return;
+    }
+    loadSavedDraft();
+  }, [dataset.id, dataset.version]);
   const mapped = (id: string) => mappings.some(m => m.model_id === id && m.enabled !== false);
   const candidates = (capability: string) => models.filter(m => mapped(m.id) && m.enabled !== false && m.capabilities?.includes(capability));
+  const changeDefault = (key: "chatDefault" | "extractDefault" | "embedding", value: string) => {
+    dirty.current = true;
+    setDraft(current => ({ ...current, [key]: value }));
+    if (key === "embedding") setAckReindex(false);
+  };
   const toggle = (id: string) => {
-    if (mapped(id)) { setMappings(mappings.filter(m => m.model_id !== id)); if (chatDefault === id) setChatDefault(""); if (extractDefault === id) setExtractDefault(""); if (embedding === id) setEmbedding(""); }
-    else setMappings([...mappings.filter(m => m.model_id !== id), { model_id: id, enabled: true }]);
+    dirty.current = true;
+    setDraft(current => {
+      const removing = current.mappings.some(m => m.model_id === id && m.enabled !== false);
+      const remaining = current.mappings.filter(m => m.model_id !== id);
+      return {
+        mappings: removing ? remaining : [...remaining, { model_id: id, enabled: true }],
+        chatDefault: removing && current.chatDefault === id ? "" : current.chatDefault,
+        extractDefault: removing && current.extractDefault === id ? "" : current.extractDefault,
+        embedding: removing && current.embedding === id ? "" : current.embedding,
+      };
+    });
+    setAckReindex(false);
   };
   const selectedEmbedding = models.find(m => m.id === embedding);
   const pinnedEmbedding = dataset.embedding_selection;
   const embeddingChanged = !!dataset.embedding_model_id && (embedding !== dataset.embedding_model_id || !!pinnedEmbedding && !!selectedEmbedding && (pinnedEmbedding.model_version !== selectedEmbedding.version || pinnedEmbedding.connection_profile_version !== selectedEmbedding.connection_profile_version));
   return <div>
+    {remoteChanged && <div className="notice warn"><Settings2 size={16} /><div><strong>Saved mappings changed while you were editing.</strong><p>Your unsaved selections are preserved. Load the latest saved mappings before making further changes.</p><button className="btn" onClick={loadSavedDraft}>Discard draft and load saved mappings</button></div></div>}
     <div className="panel-head"><div><h3>Models approved for this dataset</h3><p className="muted small">Map shared catalog models, then choose defaults for each task. Only enabled, capable models appear in Ask and Extract.</p></div><button className="btn" onClick={onConnections}><Plus size={14} />Manage model catalog</button></div>
     {models.length ? <div className="mapping-grid">{models.map(m => <label key={m.id} className={`mapping-card ${mapped(m.id) ? "selected" : ""} ${m.enabled === false ? "disabled" : ""}`}><input type="checkbox" aria-label={`Mapped model ${m.name}`} checked={mapped(m.id)} onChange={() => toggle(m.id)} disabled={busy || m.enabled === false && !mapped(m.id)} /><div><div className="row wrap"><strong>{modelLabel(m)}</strong>{m.enabled === false && <span className="pill amber">Disabled</span>}</div><small>{m.provider_model} · {m.provider || m.connection_profile_name || "Saved connection"}</small><div className="model-chips">{(m.capabilities || []).map((c: string) => <span className="model-chip" key={c}>{c}</span>)}</div></div></label>)}</div> : <div className="notice"><Layers size={17} /><div>Create a saved connection profile and add a model to the shared catalog first. <button className="text-button" onClick={onConnections}>Open Connections <ArrowRight size={12} /></button></div></div>}
     <div className="grid3 mapping-defaults">
-      {[{label:"Default chat model", cap:"chat", value:chatDefault, set:setChatDefault}, {label:"Default extraction model", cap:"extraction", value:extractDefault, set:setExtractDefault}, {label:"Embedding model", cap:"embedding", value:embedding, set:setEmbedding}].map(f => <div className="field" key={f.cap}><label>{f.label}</label><select aria-label={f.label} value={f.value} onChange={e => f.set(e.target.value)} disabled={busy}><option value="">{f.cap === "embedding" ? "Select an embedding model" : "No default · choose at runtime"}</option>{candidates(f.cap).map(m => <option key={m.id} value={m.id}>{modelLabel(m)}</option>)}</select><small>{f.cap === "embedding" ? "A fixed embedding model keeps this dataset’s index consistent." : "One eligible model is automatic. Multiple models offer a dropdown."}</small></div>)}
+      {[{label:"Default chat model", cap:"chat", value:chatDefault, key:"chatDefault" as const}, {label:"Default extraction model", cap:"extraction", value:extractDefault, key:"extractDefault" as const}, {label:"Embedding model", cap:"embedding", value:embedding, key:"embedding" as const}].map(f => <div className="field" key={f.cap}><label>{f.label}</label><select aria-label={f.label} value={f.value} onChange={e => changeDefault(f.key, e.target.value)} disabled={busy}><option value="">{f.cap === "embedding" ? "Select an embedding model" : "No default · choose at runtime"}</option>{candidates(f.cap).map(m => <option key={m.id} value={m.id}>{modelLabel(m)}</option>)}</select><small>{f.cap === "embedding" ? "A fixed embedding model keeps this dataset’s index consistent." : "One eligible model is automatic. Multiple models offer a dropdown."}</small></div>)}
     </div>
     {embeddingChanged && <div className="notice warn"><Settings2 size={17} /><div><strong>Changing the embedding model requires reindexing.</strong><p>Existing documents must be reindexed before they can be used again. Changing chat or extraction models does not change this embedding space.</p><label className="check"><input type="checkbox" checked={ackReindex} onChange={e => setAckReindex(e.target.checked)} />I understand existing documents will need reindexing.</label></div></div>}
-    <div className="row between wrap"><span className="muted small">Index generation {dataset.index_generation || 1} · Credentials inherited from saved connections</span><button className="btn primary" disabled={busy || embeddingChanged && !ackReindex} onClick={() => run(async () => { await api(`/datasets/${dataset.id}/models`, "PUT", { mappings, default_chat_model_id: chatDefault || null, default_extraction_model_id: extractDefault || null, embedding_model_id: embedding || null }); notify(embeddingChanged ? "Mappings saved. Reindex existing documents with the new embedding model." : "Dataset model mappings saved."); reload(); })}><Check size={14} />Save model mappings</button></div>
+    <div className="row between wrap"><span className="muted small">Index generation {dataset.index_generation || 1} · Credentials inherited from saved connections</span><button className="btn primary" disabled={busy || remoteChanged || embeddingChanged && !ackReindex} onClick={() => run(async () => { const saved = await api(`/datasets/${dataset.id}/models`, "PUT", { mappings, default_chat_model_id: chatDefault || null, default_extraction_model_id: extractDefault || null, embedding_model_id: embedding || null }); setDraft(savedDraft(saved)); dirty.current = false; notify(embeddingChanged ? "Mappings saved. Reindex existing documents with the new embedding model." : "Dataset model mappings saved."); reload(); })}><Check size={14} />Save model mappings</button></div>
   </div>;
 }
 
