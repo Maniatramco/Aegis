@@ -65,7 +65,7 @@ async function capture(page: Page, filename: string) {
   await expect.poll(() => page.locator('img[src="/aegis-logo.png"]').evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   const manage = page.getByRole("button", { name: "Manage workspace", exact: true });
   const primary = await page.locator("main h1").textContent();
-  if (["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(primary || "") && await manage.getAttribute("aria-expanded") === "true") await manage.click();
+  if (["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(primary || "") && await manage.isVisible() && await manage.getAttribute("aria-expanded") === "true") await manage.click();
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   const dismiss = page.getByRole("button", { name: "Dismiss notification" });
   if (await dismiss.isVisible()) await dismiss.click();

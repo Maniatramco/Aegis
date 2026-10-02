@@ -194,6 +194,43 @@ export default function App() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [mobile, setMobile] = useState(false);
+  const [compactNavigation, setCompactNavigation] = useState(false);
+  const navigationRef = useRef<HTMLElement>(null);
+  const navigationTrigger = useRef<HTMLButtonElement>(null);
+  const drawerOpen = mobile && compactNavigation;
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 960px)");
+    const sync = () => {
+      setCompactNavigation(media.matches);
+      if (!media.matches) setMobile(false);
+    };
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  useEffect(() => {
+    if (!drawerOpen || !user) return;
+    const drawer = navigationRef.current;
+    if (!drawer) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusable = () => Array.from(drawer.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], [tabindex='0']")).filter(el => el.getClientRects().length);
+    focusable()[0]?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setMobile(false); }
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    drawer.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      drawer.removeEventListener("keydown", onKey);
+      if (window.matchMedia("(max-width: 960px)").matches) navigationTrigger.current?.focus();
+    };
+  }, [drawerOpen, user]);
   const [adminNavigation, setAdminNavigation] = useState(false);
   const [connectionTab, setConnectionTab] = useState("Models");
   const [extractionTab, setExtractionTab] = useState("Create");
@@ -898,7 +935,8 @@ export default function App() {
     );
   return (
     <>
-      <aside className={`sidebar ${mobile ? "open" : ""}`}>
+      {drawerOpen && <div className="navigation-backdrop" aria-hidden="true" onClick={() => setMobile(false)} />}
+      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={compactNavigation && !drawerOpen}>
         <button
           className="btn icon mobile-close"
           onClick={() => setMobile(false)}
@@ -930,13 +968,16 @@ export default function App() {
           Originals protected. Insights grounded.
         </div>
       </aside>
-      <div className="shell">
+      <div className="shell" inert={drawerOpen}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
               className="btn icon menu-toggle"
               onClick={() => setMobile(true)}
               aria-label="Open navigation"
+              ref={navigationTrigger}
+              aria-expanded={drawerOpen}
+              aria-controls="workspace-navigation"
             >
               <Menu size={17} />
             </button>
@@ -1085,7 +1126,7 @@ export default function App() {
                     </button>
                   </div>
                   {docs.length ? (
-                    <div className="table-scroll">
+                    <div className="table-scroll" role="region" aria-label="Scrollable data table" tabIndex={0}>
                       <table>
                         <thead>
                           <tr>
@@ -1338,7 +1379,7 @@ export default function App() {
                   </div>
                 </div>
                 {filtered.length ? (
-                  <div className="table-scroll">
+                  <div className="table-scroll" role="region" aria-label="Scrollable data table" tabIndex={0}>
                     <table>
                       <thead>
                         <tr>
@@ -2197,7 +2238,7 @@ export default function App() {
                 <span className="pill">{jobs.length} jobs</span>
               </div>
               {jobs.length ? (
-                <div className="table-scroll">
+                <div className="table-scroll" role="region" aria-label="Scrollable data table" tabIndex={0}>
                   <table>
                     <thead>
                       <tr>
