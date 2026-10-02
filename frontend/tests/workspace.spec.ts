@@ -12,10 +12,10 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Workspace overview", exact: true }),
+    page.getByRole("heading", { name: "Home", exact: true }),
   ).toBeVisible();
 });
-test("navigates all ten screens and preserves an authenticated refresh", async ({
+test("navigates all workspace screens and preserves an authenticated refresh", async ({
   page,
 }) => {
   for (const name of [
@@ -29,6 +29,7 @@ test("navigates all ten screens and preserves an authenticated refresh", async (
     "Services & migration",
     "Setup",
     "Dashboard",
+    "Home",
   ]) {
     await page
       .getByRole("navigation")
@@ -45,7 +46,7 @@ test("navigates all ten screens and preserves an authenticated refresh", async (
   }
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Workspace overview", exact: true }),
+    page.getByRole("heading", { name: "Home", exact: true }),
   ).toBeVisible();
 });
 test("onboards a dataset, maps models, uploads a document, previews and indexes it", async ({
@@ -354,4 +355,64 @@ test("mobile dataset and model selection fit the screen and sign out removes the
   await expect(
     page.getByRole("button", { name: "Sign in", exact: true }),
   ).toBeVisible();
+});
+
+test("Home cards use saved activity, open the right dataset, and retain status after reload", async ({ page }) => {
+  const headers = await sessionHeaders(page.request);
+  const name = `Home activity ${Date.now()}`;
+  const active = await checked(await page.request.post("/api/datasets", { headers, data: { name, description: "Registered without models or documents." } }));
+  const inactive = await checked(await page.request.post("/api/datasets", { headers, data: { name: `${name} paused`, active: false } }));
+  await page.reload();
+  const activeCard = page.getByRole("link", { name: `Open dataset ${name}`, exact: true });
+  const inactiveCard = page.getByRole("link", { name: `Open dataset ${name} paused`, exact: true });
+  await expect(activeCard.getByText("Active", { exact: true })).toBeVisible();
+  await expect(inactiveCard.getByText("Inactive", { exact: true })).toBeVisible();
+  // Active is a saved setting, not an inference from an index, document count, or model readiness.
+  expect(active.embedding_model_id).toBeNull();
+  await activeCard.click();
+  await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`#dataset/${active.id}$`));
+  await page.getByRole("button", { name: "Deactivate dataset", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Activate dataset", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".dataset-detail").getByText("Dataset status: Inactive", { exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+  await expect(activeCard.getByText("Inactive", { exact: true })).toBeVisible();
+  await page.goForward();
+  await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Activate dataset", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Deactivate dataset", exact: true })).toBeVisible();
+  expect((await checked(await page.request.get(`/api/datasets/${active.id}`))).active).toBe(true);
+  expect((await checked(await page.request.get(`/api/datasets/${inactive.id}`))).active).toBe(false);
+  await page.getByRole("navigation").getByRole("button", { name: "Home", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(activeCard).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await inactiveCard.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".dataset-detail").getByRole("heading", { name: `${name} paused`, exact: true })).toBeVisible();
+});
+
+test("Home has accessible loading, error/retry, and empty states", async ({ page }) => {
+  // UI state tests deliberately intercept only the dataset response, not provider output.
+  let release: () => void = () => {};
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  let mode = "loading";
+  await page.route("**/api/datasets", async route => {
+    if (mode === "loading") await blocked;
+    if (mode === "error") await route.fulfill({ status: 503, json: { detail: "Temporary dataset service outage" } });
+    else await route.fulfill({ json: [] });
+  });
+  await page.reload();
+  await expect(page.getByRole("status").filter({ hasText: "Loading datasets" })).toBeVisible();
+  mode = "error";
+  release();
+  await expect(page.getByRole("alert").filter({ hasText: "Couldn’t load datasets" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Open dataset/ })).toHaveCount(0);
+  mode = "empty";
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No registered datasets yet", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Get started", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
 });

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DatasetHome } from "./dataset-home";
 import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import {
   Activity,
@@ -44,6 +45,7 @@ import {
 
 type Entity = Record<string, any>;
 type View =
+  | "Home"
   | "Dashboard"
   | "Datasets"
   | "Ask Aegis"
@@ -55,7 +57,8 @@ type View =
   | "Services & migration"
   | "Setup";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
-  { name: "Dashboard", icon: LayoutDashboard, group: "WORKSPACE" },
+  { name: "Home", icon: Database, group: "WORKSPACE" },
+  { name: "Dashboard", icon: LayoutDashboard },
   { name: "Datasets", icon: BookOpen },
   { name: "Ask Aegis", icon: MessageSquare },
   { name: "Extract", icon: FileSearch },
@@ -67,6 +70,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Setup", icon: Cog },
 ];
 const descriptions: Record<View, string> = {
+  Home: "Your registered datasets. Open one to view its documents and settings.",
   Dashboard:
     "Your documents, processing activity, and connected services at a glance.",
   "Datasets":
@@ -177,7 +181,7 @@ function Download({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("Dashboard");
+  const [view, setView] = useState<View>("Home");
   const [user, setUser] = useState<Entity | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [csrf, setCsrf] = useState("");
@@ -380,6 +384,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [user, api]);
   const navigate = (name: View) => {
+    window.location.hash = encodeURIComponent(name);
     setView(name);
     setDatasetModelsFocus(false);
     setError("");
@@ -390,7 +395,7 @@ export default function App() {
   const extractionModels = eligibleModels(selectedDataset, "extraction");
   const selectedChatModel = chatModels.find(m => m.id === chatModelId);
   const selectedExtractModel = extractionModels.find(m => m.id === extractModelId);
-  const datasetEmbedding = (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
+  const datasetEmbedding = selectedDataset?.active === false ? undefined : (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
   const datasetDocs = docs.filter(d => (d.dataset_id || d.kb_id) === kb);
   const readyDatasetDocs = datasetDocs.filter(d => d.status === "ready" && !d.requires_reindex);
   const changeDataset = (id: string) => {
@@ -410,6 +415,26 @@ export default function App() {
     setFiles([]);
     setQuery("");
   };
+  const routeHandler = useRef<(hash: string) => void>(() => {});
+  routeHandler.current = (hash: string) => {
+    let route: string;
+    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Home"; }
+    if (route.startsWith("dataset/")) {
+      changeDataset(route.slice(8));
+      setView("Datasets");
+    } else {
+      const next = sections.find(s => s.name.toLowerCase() === route.toLowerCase())?.name || "Home";
+      setView(next);
+    }
+    setMobile(false);
+    setError("");
+  };
+  useEffect(() => {
+    const followHash = () => routeHandler.current(window.location.hash);
+    followHash();
+    window.addEventListener("hashchange", followHash);
+    return () => window.removeEventListener("hashchange", followHash);
+  }, []);
   useEffect(() => {
     const dataset = kbs.find(d => d.id === kb);
     const pick = (current: string, capability: string, defaultKey: string) => {
@@ -448,6 +473,7 @@ export default function App() {
         setBootstrap(false);
       }
       const d = await api("/auth/login", "POST", { username, password });
+      navigate("Home");
       setUser(d.user);
       setCsrf(d.csrf_token || "");
       setPassword("");
@@ -887,6 +913,7 @@ export default function App() {
               {s.group && <div className="nav-label">{s.group}</div>}
               <button
                 className={`nav-item ${view === s.name ? "selected" : ""}`}
+                aria-current={view === s.name ? "page" : undefined}
                 onClick={() => navigate(s.name)}
               >
                 <s.icon size={17} />
@@ -976,7 +1003,7 @@ export default function App() {
               )}
             </div>
           </div>
-          {error && (
+          {error && view !== "Home" && (
             <Notice tone="error">
               {error}
               <button
@@ -1222,6 +1249,7 @@ export default function App() {
               </section>
             </>
           )}
+          {view === "Home" && <DatasetHome api={api} refresh={refresh} onBrowse={() => navigate("Datasets")} />}
           {view === "Datasets" && (
             <>
             <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}

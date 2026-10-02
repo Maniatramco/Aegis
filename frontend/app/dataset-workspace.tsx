@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, Database, Fil
 type Entity = Record<string, any>;
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
 export const eligibleModels = (dataset: Entity | undefined, capability: string): Entity[] =>
-  (dataset?.models || []).filter((m: Entity) => m.enabled !== false && m.mapping_enabled !== false && m.capabilities?.includes(capability));
+  (dataset?.active === false ? [] : dataset?.models || []).filter((m: Entity) => m.enabled !== false && m.mapping_enabled !== false && m.capabilities?.includes(capability));
 export const modelLabel = (model: Entity | undefined) => model?.name || model?.provider_model || "Model not selected";
 export const recordedModel = (record: Entity | null | undefined) => {
   const snapshot = record?.model_selection || record?.model_snapshot || record?.model_config;
@@ -20,7 +20,7 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
   const defaultId = dataset?.[capability === "chat" ? "default_chat_model_id" : "default_extraction_model_id"];
   return <div className="model-picker">
     <label className="control-label">{label}</label>
-    {!dataset ? <div className="model-readonly muted"><Layers size={15} />Choose a dataset first</div> : models.length === 0 ?
+    {!dataset ? <div className="model-readonly muted"><Layers size={15} />Choose a dataset first</div> : dataset.active === false ? <div className="model-unavailable"><strong>This dataset is inactive</strong><p>Activate it in its dataset settings before starting new work.</p><button type="button" className="text-button" onClick={onConfigure}>Open dataset settings <ArrowRight size={13} /></button></div> : models.length === 0 ?
       <div className="model-unavailable"><strong>No eligible {capability} models</strong><p>Map an enabled model with {capability} capability to this dataset.</p><button type="button" className="text-button" onClick={onConfigure}>Configure dataset models <ArrowRight size={13} /></button></div> : models.length === 1 ?
       <div className="model-readonly" aria-label={label}><Layers size={16} /><span>{modelLabel(models[0])}<small>{models[0].provider_model} · Only eligible model</small></span><CheckCircle2 size={15} /></div> :
       <select aria-label={label} value={value} onChange={e => onChange(e.target.value)} disabled={disabled}><option value="" disabled>Select a mapped model</option>{models.map(m => <option key={m.id} value={m.id}>{modelLabel(m)}{m.id === defaultId ? " · Dataset default" : ""}</option>)}</select>}
@@ -74,6 +74,10 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
     {dataset ? <>
       <section className="panel dataset-detail">
         <div className="panel-head"><div><div className="eyebrow">DATASET WORKSPACE</div><h2>{dataset.name}</h2><p className="muted small">{dataset.description || "Manage documents and model routing for this dataset."}</p></div><div className="row wrap"><button className="btn" onClick={() => onUse("Ask Aegis")} disabled={!chat.length || !ready}><MessageSquare size={14} />Ask this dataset</button><button className="btn primary" onClick={() => onUse("Extract")} disabled={!extraction.length || !ready}><FileSearch size={14} />Extract from dataset</button></div></div>
+        <div className="dataset-status-setting">
+          <div><strong>Dataset status: {dataset.active !== false ? "Active" : "Inactive"}</strong><p className="muted small">Inactive datasets remain available to review. New processing, questions, and extractions are paused; work already queued may finish.</p></div>
+          <button className="btn" disabled={busy} onClick={() => run(async () => { const active = dataset.active === false; await api(`/datasets/${dataset.id}/status`, "PATCH", { active }); notify(`Dataset ${active ? "activated" : "deactivated"}.`); reload(); })}>{dataset.active !== false ? "Deactivate dataset" : "Activate dataset"}</button>
+        </div>
         <div className="dataset-steps">
           {[{ n: 1, title: "Dataset created", detail: "Name & document scope", complete: true, action: () => {} }, { n: 2, title: "Map models", detail: `${mapped.length} enabled · ${embedding ? "Embedding set" : "Embedding needed"}`, complete: !!embedding && (!!chat.length || !!extraction.length), action: () => setTab("models") }, { n: 3, title: "Add documents", detail: `${ready} ready of ${datasetDocs.length} stored`, complete: ready > 0, action: () => setTab("documents") }].map(step => <button key={step.n} className={`dataset-step ${step.complete ? "complete" : ""}`} aria-label={`Step ${step.n}: ${step.title}`} onClick={step.action}><span>{step.complete ? <Check size={14} /> : step.n}</span><div><strong>{step.title}</strong><small>{step.detail}</small></div></button>)}
         </div>

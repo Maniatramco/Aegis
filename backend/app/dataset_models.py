@@ -57,7 +57,10 @@ def routing_public(r):
 
 def dataset_public(r):
     data=dataset_config(r)
-    return core.representation(r)|{'name':r.name,'description':data.get('description','')}|routing_public(r)
+    return core.representation(r)|{'name':r.name,'description':data.get('description',''),'active':data.get('active',True)}|routing_public(r)
+
+def require_active(r):
+    if not dataset_config(r).get('active',True):raise HTTPException(409,'Dataset is inactive. Activate it before starting new uploads, indexing, chat, or extraction.')
 
 def resolve_model(r,capability,model_id=None):
     cfg=dataset_config(r);mappings=cfg.get('mappings',[])
@@ -95,6 +98,8 @@ def embedding_snapshot(r):
     return snap
 
 def execution_snapshot(r,capability,model_id=None):
+    # Activity gates new work only; inspecting existing indexes must remain possible.
+    require_active(r)
     embedding=embedding_snapshot(r)
     if capability=='embedding':return embedding
     model=resolve_model(r,capability,model_id)
@@ -151,7 +156,11 @@ class MappingInput(BaseModel):
     default_chat_model_id:str|None=None
     default_extraction_model_id:str|None=None
     embedding_model_id:str|None=None
-class DatasetInput(BaseModel):name:str=Field(min_length=1,max_length=200);description:str=Field(default='',max_length=10000)
+class DatasetInput(BaseModel):
+    name:str=Field(min_length=1,max_length=200)
+    description:str=Field(default='',max_length=10000)
+    active:bool=Field(default=True,strict=True)
+class DatasetStatusInput(BaseModel):active:bool=Field(strict=True)
 class AssignInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=100)
 
 def validate_model(body,owner):
@@ -209,6 +218,11 @@ def install_routes(app,auth,write_profile):
         return dataset_public(create('knowledge_base',owner,body.name,body.model_dump()|copy.deepcopy(ROUTING_DEFAULTS)|{'routing_version':1}))
     @app.get('/api/datasets/{id}')
     def dataset(id:str,owner=Depends(auth)):return dataset_public(owned(id,owner,'knowledge_base'))
+    @app.patch('/api/datasets/{id}/status')
+    def dataset_status(id:str,body:DatasetStatusInput,owner=Depends(auth)):
+        with core.document_lock('dataset-'+id):
+            r=owned(id,owner,'knowledge_base')
+            return dataset_public(write_version(r,dataset_config(r)|{'active':body.active}))
     @app.get('/api/datasets/{id}/models')
     def mappings(id:str,owner=Depends(auth)):return routing_public(owned(id,owner,'knowledge_base'))
     @app.put('/api/datasets/{id}/models')

@@ -116,7 +116,7 @@ def overview(owner=Depends(auth)):
     docs=records(owner,'document')
     with Session() as s:jobs=list(s.scalars(select(Job).where(Job.owner==owner)))
     return {'documents':len(docs),'ready':sum(d.status=='ready' for d in docs),'jobs':sum(j.status in ('queued','running') for j in jobs),'knowledge_bases':len(records(owner,'knowledge_base')),'failed':sum(d.status=='failed' for d in docs)}
-class KBInput(BaseModel):name:str=Field(min_length=1,max_length=200);description:str=''
+class KBInput(BaseModel):name:str=Field(min_length=1,max_length=200);description:str='';active:bool=Field(default=True,strict=True)
 @app.get('/api/knowledge-bases')
 def kbs(owner=Depends(auth)):return [routing.dataset_public(r) for r in records(owner,'knowledge_base')]
 @app.post('/api/knowledge-bases')
@@ -323,8 +323,10 @@ def retry_job(id:str,owner=Depends(auth)):
         j=s.get(Job,id)
         if not j or j.owner!=owner:raise HTTPException(404,'Not found')
         if j.status not in ('failed','cancelled'):raise HTTPException(409,'Only failed or cancelled jobs can be retried')
-        if not s.get(Record,j.target_id):raise HTTPException(404,'Target deleted')
-        j.status='queued';j.progress=0;j.attempts=0;j.error='';j.lease_until=0;s.get(Record,j.target_id).status='queued'
+        target=s.get(Record,j.target_id)
+        if not target or target.owner!=owner:raise HTTPException(404,'Target deleted')
+        if target.parent_id:routing.require_active(routing.owned(target.parent_id,owner,'knowledge_base'))
+        j.status='queued';j.progress=0;j.attempts=0;j.error='';j.lease_until=0;target.status='queued'
     from .queue_transport import get_transport
     get_transport(settings()['queue_provider']).notify(j.id)
     return job_repr(j)

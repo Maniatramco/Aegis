@@ -2,6 +2,14 @@
 
 A dataset is the boundary for document onboarding, retrieval, and model eligibility. Existing knowledge-base IDs remain stable; the API retains compatibility routes, while the interface uses the clearer dataset terminology.
 
+## Home and dataset activity
+
+Home is the default after sign-in. It shows only the signed-in owner's registered datasets as responsive cards, each with an explicit **Active** or **Inactive** label. Open a card to reach that dataset's documents and model settings; its URL and browser Back/Forward retain the selected dataset. Operational metrics remain in Dashboard.
+
+Dataset activity is a persisted configuration flag, independent of document indexing or model readiness. New and legacy datasets default to Active. Use **Deactivate dataset** or **Activate dataset** in the dataset details to change it. Inactive datasets remain visible, and their originals, model configuration, and historical results remain available. New processing, questions, extractions, and job retries are blocked; already accepted work may finish. Reactivation does not invalidate a compatible index.
+
+The API exposes `active` on `/api/datasets` and dataset detail responses; `PATCH /api/datasets/{id}/status` accepts `{ "active": false }` (or true). Status changes use the existing versioned storage configuration and preserve model mappings, index generation, and ownership. No new database configuration column is needed.
+
 ## The intended journey
 
 1. **Connect providers.** Configure a connection in Connections and save a named connection profile. Provider credentials stay encrypted on the server. A profile is a versioned configuration and credential reference, not a browser API key.

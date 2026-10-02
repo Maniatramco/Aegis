@@ -174,3 +174,192 @@ def test_conversation_history_never_crosses_dataset_boundaries(system):
     blank=post(s,'/api/conversations',{'title':'Fresh'})
     assert message(s,blank,dataset_id=first['id'],document_ids=[doc['id']]).status_code==200
     assert message(s,blank,dataset_id=second['id'],document_ids=[other['id']]).status_code==409
+
+
+def set_active(s,d,active):
+    response=s.api.patch('/api/datasets/'+d['id']+'/status',json={'active':active})
+    assert response.status_code==200,response.text
+    assert response.json()['active'] is active
+    return response.json()
+
+
+@pytest.mark.parametrize('path',['/api/datasets','/api/knowledge-bases'])
+def test_dataset_activity_defaults_and_create_persistence(system,path):
+    s=system
+    default=post(s,path,{'name':'Default active'})
+    inactive=post(s,path,{'name':'Created inactive','active':False})
+    assert default['active'] is True
+    assert inactive['active'] is False
+    for d in (default,inactive):
+        stored=routing.dataset_config(routing.owned(d['id'],s.owner,'knowledge_base'))
+        assert stored['active'] is d['active']
+        assert s.api.get('/api/datasets/'+d['id']).json()['active'] is d['active']
+    listed={d['id']:d['active'] for d in s.api.get(path).json()}
+    assert listed=={default['id']:True,inactive['id']:False}
+    assert s.api.post(path,json={'name':'Invalid','active':'false'}).status_code==422
+
+
+def test_legacy_dataset_defaults_active_without_rewriting_config(system):
+    s=system;original={'description':'Legacy dataset','future_metadata':{'retain':True}}
+    legacy=main.new_record('knowledge_base',s.owner,'Legacy',data=original)
+    response=s.api.get('/api/datasets/'+legacy.id)
+    assert response.status_code==200
+    assert response.json()['active'] is True
+    assert response.json()['migration_required'] is True
+    assert s.api.get('/api/datasets').json()[0]['active'] is True
+    assert s.api.get('/api/knowledge-bases').json()[0]['active'] is True
+    assert core.store.json(legacy.ref)==original
+    inactive=set_active(s,response.json(),False)
+    assert inactive['migration_required'] is True
+    record=routing.owned(legacy.id,s.owner,'knowledge_base')
+    assert routing.dataset_config(record)==original|{'active':False}
+    migrated=post(s,'/api/datasets/'+legacy.id+'/migrate-settings')
+    assert migrated['active'] is False
+    assert migrated['migration_required'] is False
+
+
+def test_dataset_status_preserves_configuration_and_index_validity(system):
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0]
+    record=routing.owned(d['id'],s.owner,'knowledge_base')
+    original=routing.dataset_config(record)|{'future_metadata':{'retain':['custom-value']}}
+    record=routing.write_version(record,original)
+    index=core.store.get('documents/'+doc['id']+'/index.json')
+    response=s.api.patch('/api/datasets/'+d['id']+'/status',json={'active':False,'name':'Must not rename','mappings':[],'index_generation':999})
+    assert response.status_code==200,response.text
+    inactive=response.json()
+    assert inactive['active'] is False
+    assert inactive['name']==d['name']
+    assert inactive['status']=='ready'
+    assert inactive['version']==record.version+1
+    # Fresh database reads resolve a new persisted config reference, not cached state.
+    persisted=routing.owned(d['id'],s.owner,'knowledge_base')
+    assert persisted.ref!=record.ref
+    assert core.store.json(persisted.ref)==original|{'active':False}
+    assert core.store.json(record.ref)==original
+    assert inactive['index_generation']==d['index_generation']
+    assert inactive['mappings']==d['mappings']
+    assert not s.api.get('/api/documents/'+doc['id']).json()['requires_reindex']
+    assert not s.api.get('/api/index',params={'dataset_id':d['id']}).json()['documents'][0]['requires_reindex']
+    # Mapping saves on an inactive dataset preserve its status and pinned index space.
+    updated=mapping(s,d)
+    assert updated['index_generation']==d['index_generation']
+    assert s.api.get('/api/datasets/'+d['id']).json()['active'] is False
+    restored=set_active(s,d,True)
+    assert restored['index_generation']==d['index_generation']
+    assert core.store.get('documents/'+doc['id']+'/index.json')==index
+    assert routing.dataset_config(routing.owned(d['id'],s.owner,'knowledge_base'))['future_metadata']==original['future_metadata']
+    assert message(s,conversation(s,d,[doc['id']])).status_code==200
+
+
+@pytest.mark.parametrize('body',[{}, {'active':None}, {'active':0}, {'active':1}, {'active':'true'}, {'active':'false'}, {'active':[]}, {'active':{}}])
+def test_dataset_status_requires_an_explicit_boolean(system,body):
+    s=system;d=dataset(s,mapped=False)
+    assert s.api.patch('/api/datasets/'+d['id']+'/status',json=body).status_code==422
+    unchanged=s.api.get('/api/datasets/'+d['id']).json()
+    assert unchanged['active'] is True
+    assert unchanged['version']==d['version']
+
+
+def test_dataset_status_respects_owner_isolation_and_record_kind(system):
+    s=system;d=dataset(s,mapped=False);c=conversation(s,d)
+    for owner in ('bob','administrator'):
+        s.owner=owner
+        assert s.api.get('/api/datasets').json()==[]
+        assert s.api.patch('/api/datasets/'+d['id']+'/status',json={'active':False}).status_code==404
+    s.owner='alice'
+    assert s.api.patch('/api/datasets/'+c['id']+'/status',json={'active':False}).status_code==404
+    assert s.api.patch('/api/datasets/missing/status',json={'active':False}).status_code==404
+    assert s.api.get('/api/datasets/'+d['id']).json()['active'] is True
+
+
+def test_dataset_status_requires_session_and_csrf(system):
+    s=system;s.owner='administrator';d=dataset(s,mapped=False)
+    with core.Session.begin() as db:
+        db.add(core.User(id='administrator',username='admin',password_hash=core.password_hash('secure-test-pass')))
+    main.app.dependency_overrides.clear()
+    path='/api/datasets/'+d['id']+'/status'
+    assert s.api.patch(path,json={'active':False}).status_code==401
+    signed_in=post(s,'/api/auth/login',{'username':'admin','password':'secure-test-pass'})
+    assert s.api.patch(path,json={'active':False}).status_code==403
+    assert s.api.patch(path,json={'active':False},headers={'X-CSRF-Token':'wrong'}).status_code==403
+    assert s.api.get('/api/datasets/'+d['id']).json()['active'] is True
+    response=s.api.patch(path,json={'active':False},headers={'X-CSRF-Token':signed_in['csrf_token']})
+    assert response.status_code==200,response.text
+    assert response.json()['active'] is False
+
+
+def test_inactive_dataset_blocks_new_execution_but_keeps_history_readable(system,monkeypatch):
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0];c=conversation(s,d,[doc['id']]);t=template(s)
+    assert message(s,c).status_code==200
+    extracted=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':t['id'],'allow_external':True})
+    assert worker.run_once()
+    set_active(s,d,False)
+    previous_jobs=s.api.get('/api/jobs').json()
+    previous_documents=s.api.get('/api/documents').json()
+    previous_history=s.api.get('/api/conversations/'+c['id']).json()
+    def unexpected_provider(*args,**kwargs):pytest.fail('Inactive dataset reached a provider')
+    monkeypatch.setattr(providers,'search',unexpected_provider)
+    monkeypatch.setattr(providers,'answer',unexpected_provider)
+    for field in ('dataset_id','kb_id'):
+        response=s.api.post('/api/documents/upload',files={'files':('blocked.txt',b'New content','text/plain')},data={field:d['id'],'allow_external':'true'})
+        assert response.status_code==409,response.text
+        assert 'inactive' in response.json()['detail']
+    for path,body in [
+        ('/api/documents/'+doc['id']+'/reindex',{'allow_external':True}),
+        ('/api/conversations/'+c['id']+'/messages',{'text':'New question','allow_external':True}),
+        ('/api/conversations/'+c['id']+'/messages/stream',{'text':'Stream question','allow_external':True}),
+        ('/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':t['id'],'allow_external':True}),
+        ('/api/index/search',{'dataset_id':d['id'],'text':'New query','allow_external':True}),
+    ]:
+        response=s.api.post(path,json=body)
+        assert response.status_code==409,response.text
+        assert 'inactive' in response.json()['detail']
+    assert s.api.get('/api/jobs').json()==previous_jobs
+    assert s.api.get('/api/documents').json()==previous_documents
+    assert s.api.get('/api/conversations/'+c['id']).json()==previous_history
+    assert s.api.get('/api/documents/'+doc['id']+'/download').content==b'Invoice total 42. Alice is the owner.'
+    assert s.api.get('/api/documents/'+doc['id']+'/preview').json()['chunks']
+    assert s.api.get('/api/datasets/'+d['id']+'/models').json()['mappings']==d['mappings']
+    assert s.api.get('/api/extractions/'+extracted['id']).json()['status']=='ready'
+    assert s.api.get('/api/extractions/'+extracted['id']+'/export').status_code==200
+    assert s.api.get('/api/conversations/'+c['id']+'/export').status_code==200
+
+
+def test_inactive_unmapped_dataset_reports_status_before_model_configuration(system):
+    s=system;d=post(s,'/api/datasets',{'name':'Inactive with no mappings','active':False})
+    response=message(s,conversation(s,d))
+    assert response.status_code==409
+    assert 'inactive' in response.json()['detail']
+
+
+def test_deactivation_preserves_already_accepted_jobs(system):
+    s=system;d=dataset(s);ready=upload(s,d)['documents'][0]
+    pending=upload(s,d,run=False)
+    extracted=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[ready['id']],'template_id':template(s)['id'],'allow_external':True})
+    set_active(s,d,False)
+    assert worker.run_once()
+    assert worker.run_once()
+    assert s.api.get('/api/documents/'+pending['documents'][0]['id']).json()['status']=='ready'
+    assert not s.api.get('/api/documents/'+pending['documents'][0]['id']).json()['requires_reindex']
+    assert s.api.get('/api/extractions/'+extracted['id']).json()['status']=='ready'
+
+
+def test_inactive_dataset_job_retries_are_rejected_until_reactivation(system):
+    s=system;d=dataset(s);ready=upload(s,d)['documents'][0]
+    pending=upload(s,d,run=False)
+    extracted=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[ready['id']],'template_id':template(s)['id'],'allow_external':True})
+    jobs=[pending['jobs'][0],extracted['job']]
+    for job in jobs:post(s,'/api/jobs/'+job['id']+'/cancel')
+    set_active(s,d,False)
+    before=s.api.get('/api/jobs').json()
+    for job in jobs:
+        response=s.api.post('/api/jobs/'+job['id']+'/retry')
+        assert response.status_code==409,response.text
+        assert 'inactive' in response.json()['detail']
+    assert s.api.get('/api/jobs').json()==before
+    set_active(s,d,True)
+    for job in jobs:assert post(s,'/api/jobs/'+job['id']+'/retry')['status']=='queued'
+    assert worker.run_once()
+    assert worker.run_once()
+    assert s.api.get('/api/documents/'+pending['documents'][0]['id']).json()['status']=='ready'
+    assert s.api.get('/api/extractions/'+extracted['id']).json()['status']=='ready'

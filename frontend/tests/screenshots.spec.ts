@@ -68,7 +68,7 @@ async function capture(page: Page, filename: string) {
   await page.screenshot({ path: path.join(output, filename), fullPage: true, animations: "disabled" });
 }
 
-test("capture all ten real Aegis screens and dataset model configuration with synthetic sources", async ({ page }) => {
+test("capture all real Aegis screens and dataset model configuration with synthetic sources", async ({ page }) => {
   test.setTimeout(240000);
   const password = process.env.AEGIS_SMOKE_PASSWORD;
   if (!password) throw new Error("AEGIS_SMOKE_PASSWORD is required; run scripts/smoke.py first.");
@@ -98,8 +98,16 @@ test("capture all ten real Aegis screens and dataset model configuration with sy
     } },
   }));
 
+  const inactive = await checked(await page.request.post("/api/datasets", { headers, data: { name: "Archived research · synthetic project", description: "Retained reference documents. Processing is paused.", active: false } }));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Workspace overview", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Open dataset ${collection}`, exact: true }).getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Open dataset ${inactive.name}`, exact: true }).getByText("Inactive", { exact: true })).toBeVisible();
+  await capture(page, "00-home.png");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await capture(page, "00-home-mobile.png");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await navigate(page, "Dashboard");
   await expect(page.getByRole("row").filter({ hasText: invoiceName })).toBeVisible();
   await capture(page, "01-dashboard.png");
   await navigate(page, "Datasets");
@@ -168,7 +176,7 @@ test("capture all ten real Aegis screens and dataset model configuration with sy
   await navigate(page, "Setup");
   await capture(page, "10-setup.png");
   await writeFile(path.join(output, "README.txt"), [
-    "Aegis: ten application screens plus the dataset model-configuration state.",
+    "Aegis: Home on desktop/mobile, ten workspace screens, and dataset model configuration.",
     "Captured by Playwright Chromium against the disposable Docker Compose app in GitHub-hosted CI.",
     "Viewport: 1440 x 1000, full-page captures. No raster mockups or substituted API responses.",
     "All invoice/project content is synthetic. Model and embedding providers explicitly use development mock mode.",
