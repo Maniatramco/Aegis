@@ -8,6 +8,7 @@ test.beforeEach(async ({ page }) => {
       "Set AEGIS_SMOKE_PASSWORD to the disposable administrator password seeded by scripts/smoke.py.",
     );
   await page.goto("/");
+  await expect.poll(() => page.locator('img[src="/aegis-logo.png"]').evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();

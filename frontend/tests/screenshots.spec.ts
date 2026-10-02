@@ -61,6 +61,7 @@ async function navigate(page: Page, name: string) {
   await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
 }
 async function capture(page: Page, filename: string) {
+  await expect.poll(() => page.locator('img[src="/aegis-logo.png"]').evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   const manage = page.getByRole("button", { name: "Manage workspace", exact: true });
   const primary = await page.locator("main h1").textContent();
   if (["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(primary || "") && await manage.getAttribute("aria-expanded") === "true") await manage.click();
