@@ -155,7 +155,7 @@ test("capture all ten real Aegis screens with synthetic source documents", async
   await navigate(page, "Index inspector");
   await page.getByLabel("Document to inspect").selectOption(documents[0].id);
   await page.getByRole("button", { name: "Inspect index", exact: true }).click();
-  await expect(page.getByText("INV-2026-1042", { exact: false }).first()).toBeVisible();
+  await expect(page.locator("pre.code").filter({ hasText: "INV-2026-1042" }).first()).toBeVisible();
   await capture(page, "06-index-inspector.png");
   await navigate(page, "Jobs & activity");
   await expect(page.getByText("completed", { exact: true }).first()).toBeVisible();
