@@ -81,6 +81,8 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   await writeFile(path.join(output, "layout-audit.json"), JSON.stringify(report, null, 2));
   await page.setViewportSize({ width: 320, height: 740 });
   await navigate(page, "Datasets");
+  const allDatasets = page.getByRole("button", { name: "All datasets", exact: true });
+  if (await allDatasets.isVisible()) await allDatasets.click();
   await page.getByRole("button", { name: `Open dataset ${dataset.name}`, exact: true }).click();
   for (const tab of ["Documents", "Map models", "Settings"]) {
     await page.getByRole("button", { name: tab, exact: true }).click();
