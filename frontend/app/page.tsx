@@ -1249,7 +1249,7 @@ export default function App() {
               </section>
             </>
           )}
-          {view === "Home" && <DatasetHome api={api} refresh={refresh} onBrowse={() => navigate("Datasets")} />}
+          {view === "Home" && <DatasetHome api={api} refresh={refresh} onLoaded={setKbs} onBrowse={() => navigate("Datasets")} />}
           {view === "Datasets" && (
             <>
             <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}

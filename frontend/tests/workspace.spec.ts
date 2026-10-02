@@ -416,3 +416,14 @@ test("Home has accessible loading, error/retry, and empty states", async ({ page
   await page.getByRole("button", { name: "Get started", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
 });
+
+
+test("Home dataset links still work when an unrelated dashboard service fails", async ({ page }) => {
+  const headers = await sessionHeaders(page.request);
+  const name = `Home independent load ${Date.now()}`;
+  await checked(await page.request.post("/api/datasets", { headers, data: { name } }));
+  await page.route("**/api/overview", route => route.fulfill({ status: 503, json: { detail: "Overview unavailable" } }));
+  await page.reload();
+  await page.getByRole("link", { name: `Open dataset ${name}`, exact: true }).click();
+  await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
+});

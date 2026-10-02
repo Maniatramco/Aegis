@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { AlertCircle, ArrowRight, Database, Loader2, Plus } from "lucide-react";
 
 type Entity = Record<string, any>;
-export function DatasetHome({ api, refresh, onBrowse }: {
-  api: (path: string) => Promise<any>; refresh: number; onBrowse: () => void;
+export function DatasetHome({ api, refresh, onBrowse, onLoaded }: {
+  api: (path: string) => Promise<any>; refresh: number; onBrowse: () => void; onLoaded: (datasets: Entity[]) => void;
 }) {
   const [datasets, setDatasets] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,12 +15,16 @@ export function DatasetHome({ api, refresh, onBrowse }: {
     setLoading(true);
     setError("");
     api("/datasets").then(data => {
-      if (current) setDatasets(Array.isArray(data) ? data : data.datasets || []);
+      if (current) {
+        const next = Array.isArray(data) ? data : data.datasets || [];
+        setDatasets(next);
+        onLoaded(next);
+      }
     }).catch(e => {
       if (current) setError(e instanceof Error ? e.message : "Datasets could not be loaded.");
     }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [api, refresh, retry]);
+  }, [api, refresh, retry, onLoaded]);
   return <section aria-label="Registered datasets" className="home-datasets">
     <div className="panel-head"><h2>Registered datasets</h2><button className="btn primary" onClick={onBrowse}><Plus size={15} />Onboard dataset</button></div>
     {loading ? <div className="panel home-state" role="status"><Loader2 size={22} className="animate-spin" /><p>Loading datasets…</p></div> : error ?
