@@ -37,6 +37,19 @@ export function FocusedChat(p: Props) {
     const el = textarea.current;
     if (el) { el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 160)}px`; }
   }, [p.prompt]);
+  useEffect(() => {
+    const el = textarea.current;
+    if (!el) return;
+    let width = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width === width) return;
+      width = entry.contentRect.width;
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => { atEnd.current = true; setAway(false); setSourcesOpen(false); }, [p.conversation?.id]);
   useEffect(() => {
     const el = thread.current;
@@ -80,7 +93,7 @@ export function FocusedChat(p: Props) {
         {messages.length ? messages.map((m, i) => <article key={m.id || i} className={`message ${m.role === "user" ? "user" : "assistant"}`} aria-label={m.role === "user" ? "Your message" : "Aegis answer"}>
           {m.role !== "user" && <img className="answer-logo" src="/aegis-logo.png" alt="" width={38} height={38} />}
           <div className="message-body"><div className="message-label">{m.mock && <span className="pill amber">MOCK TEST OUTPUT</span>}{m.role !== "user" && recordedModel(m) && <span className="message-model">{recordedModel(m)}</span>}<span className="sr-only">{m.role === "user" ? "You" : "Aegis"}</span></div><div className="message-text">{m.text || m.content}</div>
-          {!!m.citations?.length && <div className="answer-citations">{m.citations.map((c: Entity, n: number) => <button className="citation" key={n} onClick={() => showSource(c)}><FileText size={15} /><span>{n + 1} · {c.document_name || c.name || c.document_id || "Source document"}{c.page ? ` · page ${c.page}` : ""}</span></button>)}</div>}
+          {!!m.citations?.length && <div className="answer-citations">{m.citations.map((c: Entity, n: number) => <button className="citation" key={n} onClick={() => showSource(c)}><FileText size={15} /><span>{c.index || n + 1} · {c.document_name || c.name || c.document_id || "Source document"}{c.page ? ` · page ${c.page}` : ""}</span></button>)}</div>}
           {m.role !== "user" && <div className="message-actions"><button className="btn icon" title="Copy answer" aria-label="Copy answer" onClick={() => p.onCopy(m.text || m.content || "")}><Copy size={18} /></button><button className="btn icon" title="Helpful answer" aria-label="Helpful answer" disabled={m.id === "streaming-answer"} onClick={() => p.onFeedback(m.id, "up")}><ThumbsUp size={18} /></button><button className="btn icon" title="Unhelpful answer" aria-label="Unhelpful answer" disabled={m.id === "streaming-answer"} onClick={() => p.onFeedback(m.id, "down")}><ThumbsDown size={18} /></button></div>}</div>
         </article>) : <div className="chat-welcome"><img src="/aegis-logo.png" alt="" width={60} height={60} /><h2>What would you like to know?</h2><p>Choose your dataset and model below.<br />Ask a question, then explore the evidence.</p><div className="suggested-prompts">{["Summarize the key points", "What needs my attention?", "Find important dates and deadlines"].map(text => <button className="btn" key={text} onClick={() => { p.setPrompt(text); textarea.current?.focus(); }}>{text}</button>)}</div>{!p.readyCount && <p className="small muted">Add and index documents in your dataset to get started.</p>}</div>}
         <div className="answer-status" role="status">{p.answering && <><Loader2 size={16} className="animate-spin" />Retrieving evidence and generating an answer…</>}</div>

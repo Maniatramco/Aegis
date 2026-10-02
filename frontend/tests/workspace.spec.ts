@@ -135,6 +135,7 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
 });
 
 async function navigate(page: Page, name: string) {
+  await expect(page.locator("main h1")).toBeVisible();
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
   const nav = page.getByRole("navigation");
@@ -728,8 +729,10 @@ test("compact conversation dialog restores focus on Escape, Close and backdrop",
   await trigger.click();
   await expect(history).toBeVisible();
   await expect(page.getByRole("button", { name: "Close conversations", exact: true })).toBeFocused();
-  // Native modal semantics remove the workspace navigation from the accessibility tree.
-  await expect(page.getByRole("button", { name: "Open navigation", exact: true })).toHaveCount(0);
+  // Native modality makes background controls unfocusable; role selectors still find them.
+  expect(await history.evaluate(el => el.matches(":modal"))).toBe(true);
+  await page.locator('button[aria-label="Open navigation"]').evaluate(el => el.focus());
+  await expect(page.getByRole("button", { name: "Close conversations", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(history).not.toBeVisible();
   await expect(trigger).toBeFocused();
