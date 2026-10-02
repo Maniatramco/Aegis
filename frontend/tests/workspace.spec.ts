@@ -202,6 +202,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   await page.getByRole("button", { name: "Configure dataset models", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Open dataset ${unavailable.name}`, exact: true })).toContainText("Models needed");
   await navigate(page, "Ask Aegis");
 
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(multiple.id);

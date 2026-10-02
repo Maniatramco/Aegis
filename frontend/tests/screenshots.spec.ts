@@ -56,6 +56,7 @@ async function navigate(page: Page, name: string) {
   await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
 }
 async function capture(page: Page, filename: string) {
+  await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   const dismiss = page.getByRole("button", { name: "Dismiss notification" });
   if (await dismiss.isVisible()) await dismiss.click();
   await expect(page.getByRole("button", { name: "Dismiss error" })).toHaveCount(0);
