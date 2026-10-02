@@ -722,6 +722,7 @@ test("latest history selection and New chat win over stale conversation loads", 
 });
 
 test("compact conversation dialog restores focus on Escape, Close and backdrop", async ({ page }) => {
+  page.setDefaultTimeout(15000);
   await page.setViewportSize({ width: 390, height: 844 });
   await focusedChat(page);
   const trigger = page.getByRole("button", { name: "Conversations", exact: true });

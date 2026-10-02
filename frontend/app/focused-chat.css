@@ -166,6 +166,19 @@
   .composer-hint { font-size:10px; margin:4px 0 0; flex-basis:100%; }
   .sources-surface { padding:20px; }
 }
+@media(min-width:961px) and (max-height:650px) {
+  .chat-rail nav { margin-top:14px; }
+  .chat-rail .nav-item { min-height:44px; padding:8px; margin-top:0; margin-bottom:2px; }
+  .chat-rail .nav-more { margin-top:12px; }
+}
+@media(min-width:961px) and (max-height:500px) {
+  .chat-rail .brandmark,.chat-rail .brandmark img { width:32px; height:32px; }
+  .chat-rail nav { margin-top:8px; }
+  .chat-rail .nav-item { min-height:36px; padding:6px; }
+  .chat-rail .nav-more { margin-top:8px; }
+  .chat-shell .topbar { min-height:54px; padding:6px; }
+  .chat-shell .top-actions .avatar { display:none; }
+}
 @media(max-height:650px) {
   .chat-rail .admin-navigation { top:auto; bottom:100px; max-height:calc(100dvh - 120px); }
   .chat-shell .workspace { height:auto; min-height:calc(100dvh - 64px); }

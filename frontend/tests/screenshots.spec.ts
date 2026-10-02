@@ -174,7 +174,22 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await capture(page, "21-ask-focused-sources.png");
   await page.getByRole("button", { name: "Close sources", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await capture(page, "22-ask-mobile-populated.png");
+  // The last answer and its source/actions must be reachable above the composer.
+  for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 740 }]) {
+    await page.setViewportSize(viewport);
+    await page.locator(".chat-messages").evaluate(el => { el.scrollTop = el.scrollHeight; });
+    await expect.poll(() => page.getByLabel("Ask a question").evaluate(el => el.scrollHeight <= el.clientHeight + 2)).toBe(true);
+    const messageBox = (await page.locator(".chat-messages").boundingBox())!;
+    const lastAction = page.getByRole("button", { name: "Unhelpful answer", exact: true }).last();
+    const actionBox = (await lastAction.boundingBox())!;
+    const composerBox = (await page.locator(".chat-compose-area").boundingBox())!;
+    expect(actionBox.y).toBeGreaterThanOrEqual(messageBox.y);
+    expect(actionBox.y + actionBox.height).toBeLessThanOrEqual(composerBox.y);
+    await page.getByLabel("Ask a question").focus();
+    await expect(page.getByLabel("Ask a question")).toBeFocused();
+    await capture(page, viewport.width === 390 ? "22-ask-mobile-populated.png" : "24-ask-small-phone.png");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator(".citation").last().click();
   await expect(page.getByRole("dialog", { name: "Sources", exact: true })).toContainText(chatSourceName);
   await capture(page, "23-ask-mobile-sources.png");
