@@ -1777,6 +1777,12 @@ export default function App() {
                       </Download>
                     </div>
                   </div>
+                  {extraction.mock && (
+                    <Notice tone="warn">
+                      MOCK TEST OUTPUT · Synthetic development data, not model
+                      extraction. Review against the original source.
+                    </Notice>
+                  )}
                   {extraction.error && (
                     <Notice tone="error">{extraction.error}</Notice>
                   )}

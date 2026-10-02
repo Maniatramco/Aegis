@@ -1,0 +1,180 @@
+import { test, expect, type Page, type APIResponse, type Response } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+// Run only against the disposable, explicitly mock-enabled Compose deployment.
+// Never retain traces/storageState: those can contain authentication material.
+test.use({ viewport: { width: 1440, height: 1000 }, locale: "en-US", timezoneId: "UTC", trace: "off", screenshot: "off", video: "off" });
+const output = path.resolve("screenshots");
+const collection = "Aegis showcase · synthetic project";
+const invoiceName = "Northstar-invoice-INV-2026-1042.txt";
+const projectName = "Northstar-project-delivery-brief.txt";
+const templateName = "Invoice review · synthetic demo";
+const invoice = `SYNTHETIC DEMONSTRATION DOCUMENT — no real customer or payment details.
+
+INVOICE INV-2026-1042
+Supplier: Northstar Studio (fictional). Customer: Aegis Demonstration Workspace.
+Issue date: 1 October 2026. Currency: USD. Project: Document Intelligence Pilot.
+Discovery and information architecture: 20 hours at USD 150 = USD 3,000.
+Prototype implementation: 40 hours at USD 150 = USD 6,000.
+Accessibility and acceptance testing: 10 hours at USD 150 = USD 1,500.
+Subtotal USD 10,500. Tax USD 0. Total due USD 10,500.
+Payment terms: net 30 days. Due date: 31 October 2026. No bank details are included.
+
+The pilot deliverables are a searchable knowledge library, answers with inspectable
+source citations, and schema-based invoice extraction with a human review step.
+Acceptance requires retaining source originals, proving document-scoped retrieval,
+and clearly distinguishing development mock output from production model output.
+
+Approval workflow: the project lead checks deliverables, the reviewer compares each
+invoice field against the original document, and the workspace administrator verifies
+provider configuration. This sample is for interface and integration testing only.`;
+const project = `SYNTHETIC PROJECT BRIEF — Document Intelligence Pilot
+
+Objective: make project evidence easier to find without losing the original files.
+The first collection contains the Northstar invoice and this delivery brief. Users
+should be able to preview both originals, inspect indexed chunks, ask a scoped
+question, and review structured fields before exporting JSON or CSV.
+
+Milestone 1, 5 October 2026: upload and index the approved sample documents.
+Milestone 2, 12 October 2026: review source-grounded answers and citation previews.
+Milestone 3, 19 October 2026: validate extraction templates and export reviewed data.
+Acceptance review, 23 October 2026: confirm provenance, access control, and backup steps.
+
+Responsibilities: the fictional project lead owns the delivery checklist; the analyst
+reviews citations and extraction results; the administrator owns deployment settings.
+Risks include missing source text, stale indexes, and assuming mock output is real AI.
+Every development capture must identify mock responses and use synthetic documents.
+
+Success criteria: originals remain downloadable; all completed ingestion jobs have a
+ready document; each answer can be checked against a selected source; failed jobs show
+an actionable status; provider secrets never appear in screenshots or exported settings.`;
+
+async function checked(response: APIResponse | Response) {
+  expect(response.ok(), `API request returned ${response.status()}`).toBeTruthy();
+  return response.json();
+}
+async function navigate(page: Page, name: string) {
+  await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
+  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
+}
+async function capture(page: Page, filename: string) {
+  const dismiss = page.getByRole("button", { name: "Dismiss notification" });
+  if (await dismiss.isVisible()) await dismiss.click();
+  await expect(page.getByRole("button", { name: "Dismiss error" })).toHaveCount(0);
+  // Assert, rather than hide, any unexpectedly populated credential controls.
+  for (const input of await page.locator('input[type="password"]').all()) {
+    expect(await input.inputValue()).toBe("");
+  }
+  await page.evaluate(async () => { await document.fonts.ready; window.scrollTo(0, 0); });
+  await page.screenshot({ path: path.join(output, filename), fullPage: true, animations: "disabled" });
+}
+
+test("capture all ten real Aegis screens with synthetic source documents", async ({ page }) => {
+  test.setTimeout(240000);
+  const password = process.env.AEGIS_SMOKE_PASSWORD;
+  if (!password) throw new Error("AEGIS_SMOKE_PASSWORD is required; run scripts/smoke.py first.");
+  await mkdir(output, { recursive: true });
+  const session = await checked(await page.request.post("/api/auth/login", {
+    data: { username: process.env.AEGIS_SMOKE_USERNAME || "smoke", password },
+  }));
+  const headers = { "X-CSRF-Token": session.csrf_token };
+  const settings = await checked(await page.request.get("/api/settings"));
+  expect(settings.model_provider).toBe("mock");
+  expect(settings.embedding_provider).toBe("mock");
+  const bases = await checked(await page.request.get("/api/knowledge-bases"));
+  const kb = bases.find((item: { name: string }) => item.name === collection) || await checked(await page.request.post("/api/knowledge-bases", {
+    headers, data: { name: collection, description: "Synthetic invoice and delivery evidence for actual UI screenshots." },
+  }));
+  const existing = await checked(await page.request.get(`/api/documents?kb_id=${kb.id}`));
+  const documents = [];
+  for (const [name, content] of [[invoiceName, invoice], [projectName, project]]) {
+    let doc = existing.find((item: { name: string }) => item.name === name);
+    if (!doc) {
+      const upload = await checked(await page.request.post("/api/documents/upload", {
+        headers, multipart: { kb_id: kb.id, files: { name, mimeType: "text/plain", buffer: Buffer.from(content) } },
+      }));
+      doc = upload.documents[0];
+    }
+    await expect.poll(async () => {
+      const current = await checked(await page.request.get(`/api/documents/${doc.id}`));
+      if (current.status === "failed") throw new Error(`Synthetic document indexing failed: ${name}`);
+      return current.status;
+    }, { timeout: 120000 }).toBe("ready");
+    documents.push(doc);
+  }
+  const templates = await checked(await page.request.get("/api/templates"));
+  const template = templates.find((item: { name: string }) => item.name === templateName) || await checked(await page.request.post("/api/templates", {
+    headers, data: { name: templateName, schema: {
+      type: "object", properties: { invoice_number: { type: "string" }, supplier: { type: "string" }, currency: { type: "string" }, total_due: { type: "number" }, due_date: { type: ["string", "null"] } },
+      required: ["invoice_number", "supplier", "currency", "total_due", "due_date"], additionalProperties: false,
+    } },
+  }));
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Workspace overview", exact: true })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: invoiceName })).toBeVisible();
+  await capture(page, "01-dashboard.png");
+  await navigate(page, "Knowledge library");
+  await page.getByLabel("Upload knowledge base").selectOption(kb.id);
+  await expect(page.getByRole("row").filter({ hasText: invoiceName }).getByText("ready", { exact: true })).toBeVisible();
+  await capture(page, "02-knowledge-library.png");
+
+  await navigate(page, "Ask Aegis");
+  await page.getByLabel("Chat knowledge base").selectOption(kb.id);
+  await page.getByRole("checkbox", { name: new RegExp(invoiceName.replaceAll(".", "\\.")) }).check();
+  await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
+  await page.getByLabel("Ask a question").fill("What are the invoice total and payment terms?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("MOCK TEST OUTPUT", { exact: true })).toBeVisible();
+  await expect(page.getByTitle("Copy answer")).toBeVisible();
+  await expect(page.locator(".citation").first()).toBeVisible();
+  await capture(page, "03-ask-aegis.png");
+
+  await navigate(page, "Extract");
+  await page.getByLabel("Extraction template").selectOption(template.id);
+  await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
+  const created = page.waitForResponse(r => r.url().endsWith("/api/extractions") && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Run extraction", exact: true }).click();
+  const extraction = await checked(await created);
+  await expect.poll(async () => {
+    const result = await checked(await page.request.get(`/api/extractions/${extraction.id}`));
+    if (result.status === "failed") throw new Error("Synthetic extraction job failed");
+    return result.status;
+  }, { timeout: 90000 }).toBe("ready");
+  await page.getByTitle("Reload extraction").click();
+  await expect(page.getByLabel("Extraction result JSON")).toHaveValue(/MOCK TEST VALUE/);
+  await expect(page.getByText(/MOCK TEST OUTPUT · Synthetic development data/)).toBeVisible();
+  await page.getByLabel("Refresh workspace").click();
+  await expect(page.getByRole("heading", { name: templateName, exact: true }).first()).toBeVisible();
+  await capture(page, "04-extract.png");
+
+  await navigate(page, "Templates");
+  await expect(page.getByLabel("Template name", { exact: true })).toHaveValue(templateName);
+  await capture(page, "05-templates.png");
+  await navigate(page, "Index inspector");
+  await page.getByLabel("Document to inspect").selectOption(documents[0].id);
+  await page.getByRole("button", { name: "Inspect index", exact: true }).click();
+  await expect(page.getByText("INV-2026-1042", { exact: false }).first()).toBeVisible();
+  await capture(page, "06-index-inspector.png");
+  await navigate(page, "Jobs & activity");
+  await expect(page.getByText("completed", { exact: true }).first()).toBeVisible();
+  await capture(page, "07-jobs-activity.png");
+  await navigate(page, "Connections");
+  await expect(page.getByLabel("Model provider", { exact: true })).toHaveValue("mock");
+  await capture(page, "08-connections.png");
+  await navigate(page, "Services & migration");
+  await capture(page, "09-services-migration.png");
+  await navigate(page, "Setup");
+  await capture(page, "10-setup.png");
+  await writeFile(path.join(output, "README.txt"), [
+    "Aegis: ten screenshots of the actual running application.",
+    "Captured by Playwright Chromium against the disposable Docker Compose app in GitHub-hosted CI.",
+    "Viewport: 1440 x 1000, full-page captures. No raster mockups or substituted API responses.",
+    "All invoice/project content is synthetic. Model and embedding providers explicitly use development mock mode.",
+    "Chat repeats retrieved evidence; extraction produces MOCK TEST VALUE placeholders and zeros, not real AI output.",
+    "Both chat and extraction display visible mock-output labels. No production provider credentials were used.",
+    "Authentication used the disposable CI administrator. Credentials, tokens, traces, and storageState are not included.",
+    `Captured at: ${new Date().toISOString()}`,
+  ].join("\n") + "\n");
+});
