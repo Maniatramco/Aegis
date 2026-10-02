@@ -1,0 +1,54 @@
+name: Record Aegis walkthrough
+on:
+  push:
+    branches: [recording/issue-6-walkthrough]
+    paths:
+      - .github/workflows/walkthrough.yml
+      - frontend/recording/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      AEGIS_SMOKE_PASSWORD: Aegis-recording-only-disposable-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Create disposable mock-only deployment
+        run: |
+          ./scripts/setup.sh
+          cat >> .env <<'CONFIG'
+          MODEL_PROVIDER=mock
+          EMBEDDING_PROVIDER=mock
+          AEGIS_ALLOW_MOCK=true
+          INSTALL_LOCAL_EMBEDDINGS=false
+          CONFIG
+          docker compose config --quiet
+          docker compose up --build -d --wait --wait-timeout 180
+      - name: Install browser recording tools and type-check
+        working-directory: frontend
+        run: npm ci && npm run typecheck && npx playwright install --with-deps chromium
+      - name: Record actual browser interactions
+        working-directory: frontend
+        run: npx playwright test -c recording/playwright.config.ts
+      - name: Preserve recording and timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-walkthrough
+          path: frontend/recording-output/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Show diagnostics on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=100
+      - name: Shut down disposable deployment
+        if: always()
+        run: docker compose down -v

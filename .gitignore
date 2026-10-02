@@ -21,3 +21,4 @@ test-results/
 *.tsbuildinfo
 
 frontend/screenshots/
+frontend/recording-output/
