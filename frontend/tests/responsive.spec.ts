@@ -108,7 +108,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByTitle("Copy answer")).toBeVisible();
   expect.soft((await geometry(page)).overflow, "Long citation and answer").toEqual([]);
-  await page.locator("summary").filter({ hasText: "Saved conversations" }).click();
+  await page.getByRole("button", { name: "Conversations", exact: true }).click();
   await page.locator(".chat-list button").first().click();
   expect.soft((await geometry(page)).overflow, "Saved conversation").toEqual([]);
 

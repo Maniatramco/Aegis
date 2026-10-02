@@ -459,14 +459,13 @@ test("focused screens reveal secondary controls only when requested", async ({ p
 
   await navigate(page, "Ask Aegis");
   const scope = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Document scope/ }) });
-  const history = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Saved conversations$/ }) });
+  const history = page.getByRole("button", { name: "Conversations", exact: true });
   await expect(scope).not.toHaveAttribute("open", "");
-  await expect(history).not.toHaveAttribute("open", "");
   await page.getByLabel("Ask a question").fill("Draft survives opening and closing optional controls.");
   await scope.locator("summary").click();
   await scope.locator("summary").click();
-  await history.locator("summary").click();
-  await history.locator("summary").click();
+  await page.getByRole("button", { name: "Hide conversations", exact: true }).click();
+  await history.click();
   await expect(page.getByLabel("Ask a question")).toHaveValue("Draft survives opening and closing optional controls.");
 
   await navigate(page, "Extract");
@@ -490,4 +489,269 @@ test("focused screens reveal secondary controls only when requested", async ({ p
   await expect(page.getByLabel("OpenAI API key", { exact: true })).not.toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+// Focused-thread interaction checks use real synthetic datasets/model routing.
+// Only the explicit interruption/failure cases intercept an answer request.
+async function focusedChat(page: Page) {
+  const prefix = `Focused chat ${Date.now()}`;
+  const headers = await sessionHeaders(page.request);
+  const models = await seedMockCatalog(page.request, headers, prefix);
+  const dataset = await seedDataset(page.request, headers, prefix, [models.fast, models.careful], models.embedding);
+  const source = await uploadReady(page.request, headers, dataset, `${prefix}-evidence.txt`,
+    "SYNTHETIC QA SOURCE. The project reference is FOCUS-2042. The review owner is the fictional Northstar team. Delivery is 23 October 2026.");
+  await page.reload();
+  await navigate(page, "Ask Aegis");
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
+  await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
+  await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
+  return { dataset, models, source };
+}
+const isAnswerRequest = (url: string) => /\/api\/conversations\/[^/]+\/messages\/stream$/.test(url);
+
+async function showHistory(page: Page) {
+  const toggle = page.getByRole("button", { name: "Conversations", exact: true });
+  if (!await page.locator(".chat-list").isVisible()) await toggle.click();
+  await expect(page.locator(".chat-list")).toBeVisible();
+}
+
+test("focused composer preserves IME and Shift+Enter, routes Enter once, and opens cited sources", async ({ page }) => {
+  const { dataset, models, source } = await focusedChat(page);
+  const input = page.getByLabel("Ask a question");
+  let requests = 0;
+  page.on("request", request => { if (isAnswerRequest(request.url()) && request.method() === "POST") requests++; });
+  await input.fill("What is the project reference?");
+  await input.dispatchEvent("compositionstart");
+  await input.dispatchEvent("keydown", { key: "Enter", code: "Enter", keyCode: 229, isComposing: true, bubbles: true });
+  await input.dispatchEvent("compositionend");
+  await expect(input).toHaveValue("What is the project reference?");
+  expect(requests).toBe(0);
+  await input.press("End");
+  await input.press("Shift+Enter");
+  await input.press("X");
+  await expect(input).toHaveValue("What is the project reference?\nX");
+  expect(requests).toBe(0);
+  await input.fill("What is the project reference?");
+  const pending = page.waitForResponse(response => isAnswerRequest(response.url()) && response.request().method() === "POST");
+  await input.press("Enter");
+  const response = await pending;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).toMatchObject({ dataset_id: dataset.id, model_id: models.careful.id, text: "What is the project reference?" });
+  await expect(page.getByTitle("Copy answer")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+  await expect(page.locator(".citation").first()).toBeVisible();
+  expect(requests).toBe(1);
+  await expect(page.locator(".message.user")).toHaveCount(1);
+  await expect(page.locator(".message:not(.user)")).toHaveCount(1);
+  await page.locator(".citation").first().click();
+  const sources = page.getByRole("dialog", { name: "Sources", exact: true });
+  await expect(sources).toBeVisible();
+  await expect(sources).toContainText(source.name);
+  await expect(sources).toContainText("FOCUS-2042");
+  await page.getByRole("button", { name: "Close sources", exact: true }).click();
+  await expect(sources).not.toBeVisible();
+});
+
+test("focused chat blocks duplicate submissions, stops pending output, and retries successfully", async ({ page }) => {
+  await focusedChat(page);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let count = 0;
+  await page.route("**/api/conversations/*/messages/stream", async route => {
+    count++;
+    if (count === 1) {
+      await gate;
+      await route.abort("aborted").catch(() => {});
+    } else await route.continue();
+  });
+  try {
+    const input = page.getByLabel("Ask a question");
+    await input.fill("Which team owns the review?");
+    // Dispatch in the same event turn to catch races before React renders disabled controls.
+    await page.locator("form.composer").evaluate(form => {
+      for (let i = 0; i < 3; i++) form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await expect.poll(() => count).toBe(1);
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Chat dataset", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "New conversation", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    release();
+    await expect(page.getByText(/Stopped waiting for the answer/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.getByTitle("Copy answer")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+    await expect(page.locator(".citation").first()).toBeVisible();
+    await expect(page.locator(".message.user")).toHaveCount(1);
+    await expect(page.locator(".message:not(.user)")).toHaveCount(1);
+    expect(count).toBe(2);
+  } finally { release(); }
+});
+
+test("focused chat recovers a failed request and restores conversation model and document scope", async ({ page }) => {
+  const { dataset, models, source } = await focusedChat(page);
+  await openDocumentScope(page);
+  await documentCheckbox(page, source.name).check();
+  let fail = true;
+  await page.route("**/api/conversations/*/messages/stream", async route => {
+    if (fail) { fail = false; await route.fulfill({ status: 503, json: { detail: "Synthetic temporary answer outage" } }); }
+    else await route.continue();
+  });
+  const question = "What is the delivery date?";
+  await page.getByLabel("Ask a question").fill(question);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("Synthetic temporary answer outage", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.getByTitle("Copy answer")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+  await expect(page.locator(".citation").first()).toBeVisible();
+  await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  await expect(page.locator(".message")).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.fast.id);
+  await openDocumentScope(page);
+  await documentCheckbox(page, source.name).uncheck();
+  await askAndCheckRouting(page, "Which team is responsible?", dataset.id, models.fast.id);
+  await showHistory(page);
+  await page.locator(".chat-list").getByRole("button").filter({ has: page.getByText(question, { exact: true }) }).click();
+  await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveValue(models.careful.id);
+  await openDocumentScope(page);
+  await expect(documentCheckbox(page, source.name)).toBeChecked();
+  await expect(page.locator(".message.user")).toHaveCount(1);
+  await expect(page.locator(".message.user")).toContainText(question);
+  await expect(page.getByRole("checkbox", { name: /I approve sending this request/ })).not.toBeChecked();
+});
+
+test("mobile focused composer expands, stays reachable, and honors reduced motion", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const { dataset, models } = await focusedChat(page);
+  const input = page.getByLabel("Ask a question");
+  const shortHeight = (await input.boundingBox())!.height;
+  await input.fill(Array.from({ length: 12 }, (_, i) => `Question detail ${i + 1}`).join("\n"));
+  await expect.poll(async () => (await input.boundingBox())!.height).toBeGreaterThan(shortHeight);
+  expect((await input.boundingBox())!.height).toBeLessThan(400);
+  await askAndCheckRouting(page, "Give the full project evidence.", dataset.id, models.careful.id);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const bounds = (await input.boundingBox())!;
+  expect(bounds.y).toBeGreaterThanOrEqual(0);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(844);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const motion = await page.locator(".focused-chat").evaluate(root => {
+    return [root, ...root.querySelectorAll("*")].filter(el => el.getClientRects().length).filter(el => {
+      const style = getComputedStyle(el);
+      const seconds = (value: string) => value.split(",").some(part => parseFloat(part) > 0.001);
+      return seconds(style.animationDuration) || seconds(style.transitionDuration) || style.scrollBehavior === "smooth";
+    }).map(el => ({ tag: el.tagName, class: el.className }));
+  });
+  expect(motion).toEqual([]);
+});
+
+test("completed answers announce accessibly and preserve a follow-up drafted while waiting", async ({ page }) => {
+  await focusedChat(page);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let reached = false;
+  await page.route("**/api/conversations/*/messages/stream", async route => {
+    reached = true;
+    await gate;
+    await route.continue();
+  });
+  try {
+    const input = page.getByLabel("Ask a question");
+    await input.fill("Who owns the review?");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => reached).toBe(true);
+    await input.fill("Keep this follow-up draft while the first answer completes.");
+    release();
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+    await expect(page.locator('.sr-only[role="status"]')).toContainText("Aegis answer:");
+    await expect(page.locator('.sr-only[role="status"]')).toContainText("Northstar");
+    await expect(input).toHaveValue("Keep this follow-up draft while the first answer completes.");
+  } finally { release(); }
+});
+
+test("latest history selection and New chat win over stale conversation loads", async ({ page }) => {
+  const { dataset } = await focusedChat(page);
+  const headers = await sessionHeaders(page.request);
+  const suffix = Date.now();
+  const a = await checked(await page.request.post("/api/conversations", { headers, data: { title: `History A ${suffix}`, dataset_id: dataset.id, document_ids: [] } }));
+  const b = await checked(await page.request.post("/api/conversations", { headers, data: { title: `History B ${suffix}`, dataset_id: dataset.id, document_ids: [] } }));
+  await page.getByLabel("Refresh workspace", { exact: true }).click();
+  await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
+  const gates: Array<{ promise: Promise<void>; release: () => void }> = [];
+  for (let i = 0; i < 2; i++) {
+    let release!: () => void;
+    const promise = new Promise<void>(resolve => { release = resolve; });
+    gates.push({ promise, release });
+  }
+  let loads = 0;
+  await page.route(`**/api/conversations/${a.id}`, async route => {
+    const gate = gates[loads++];
+    await gate.promise;
+    await route.continue();
+  });
+  const choose = (title: string) => page.locator(".chat-list").getByRole("button").filter({ has: page.getByText(title, { exact: true }) });
+  try {
+    await showHistory(page);
+    await choose(a.title).click();
+    await expect.poll(() => loads).toBe(1);
+    await choose(b.title).click();
+    await expect(page.locator(".thread-title")).toHaveText(b.title);
+    const first = page.waitForResponse(response => response.url().endsWith(`/api/conversations/${a.id}`));
+    gates[0].release();
+    await first;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator(".thread-title")).toHaveText(b.title);
+    await choose(a.title).click();
+    await expect.poll(() => loads).toBe(2);
+    await page.getByRole("button", { name: "New conversation", exact: true }).click();
+    await page.getByLabel("Ask a question").fill("A fresh draft");
+    const second = page.waitForResponse(response => response.url().endsWith(`/api/conversations/${a.id}`));
+    gates[1].release();
+    await second;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.getByRole("heading", { name: "What would you like to know?", exact: true })).toBeVisible();
+    await expect(page.locator(".thread-title")).toHaveText("Your documents. A clearer answer.");
+    await expect(page.getByLabel("Ask a question")).toHaveValue("A fresh draft");
+  } finally { gates.forEach(gate => gate.release()); }
+});
+
+test("compact conversation dialog restores focus on Escape, Close and backdrop", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await focusedChat(page);
+  const trigger = page.getByRole("button", { name: "Conversations", exact: true });
+  const history = page.getByRole("dialog", { name: "Saved conversations", exact: true });
+  await trigger.click();
+  await expect(history).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close conversations", exact: true })).toBeFocused();
+  // Native modal semantics remove the workspace navigation from the accessibility tree.
+  await expect(page.getByRole("button", { name: "Open navigation", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(history).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.getByRole("button", { name: "Close conversations", exact: true }).click();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.mouse.click(385, 400);
+  await expect(history).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  await expect(history).not.toBeVisible();
+  await expect(page.getByLabel("Ask a question")).toBeFocused();
+  await page.setViewportSize({ width: 1440, height: 540 });
+  await expect(page.getByRole("heading", { name: "Conversations", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Manage workspace", exact: true }).click();
+  const setup = page.getByRole("navigation").getByRole("button", { name: "Setup", exact: true });
+  await setup.scrollIntoViewIfNeeded();
+  const box = (await setup.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(540);
+  await setup.click();
+  await expect(page.locator("main h1")).toHaveText("Setup");
 });

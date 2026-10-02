@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FocusedChat } from "./focused-chat";
 import { DatasetHome } from "./dataset-home";
 import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import {
@@ -266,6 +267,9 @@ export default function App() {
   const [answering, setAnswering] = useState(false);
   const [lastPrompt, setLastPrompt] = useState("");
   const abort = useRef<AbortController | null>(null);
+  const sending = useRef(false);
+  const conversationRequest = useRef(0);
+  const openingConversation = useRef(false);
   const [templates, setTemplates] = useState<Entity[]>([]);
   const [templateId, setTemplateId] = useState("");
   const [templateName, setTemplateName] = useState("");
@@ -442,6 +446,8 @@ export default function App() {
   const changeDataset = (id: string) => {
     if (id === kb) return;
     if (answering) { setError("Stop the current answer before changing datasets."); return; }
+    conversationRequest.current += 1;
+    openingConversation.current = false;
     setKb(id);
     setDatasetModelsFocus(false);
     setScope([]);
@@ -566,8 +572,13 @@ export default function App() {
       },
     });
   };
-  const openConversation = async (id: string) => {
+  const openConversation = async (id: string, preserveDraft = false) => {
+    const request = ++conversationRequest.current;
+    openingConversation.current = true;
+    if (!preserveDraft) setPrompt("");
+    try {
     const d = await api(`/conversations/${id}`);
+    if (request !== conversationRequest.current) return;
     setKb(d.dataset_id || d.kb_id || "");
     setScope(d.document_ids || []);
     const historicalModel = [...(d.messages || [])].reverse().find((m: Entity) => m.model_selection)?.model_selection?.model_id;
@@ -576,9 +587,12 @@ export default function App() {
     setChatModelId(available.some(m => m.id === historicalModel) ? historicalModel : available.some(m => m.id === dataset?.default_chat_model_id) ? dataset!.default_chat_model_id : available.length === 1 ? available[0].id : "");
     setExternalChat(false);
     setConversation(d);
+    setLastPrompt([...(d.messages || [])].reverse().find((m: Entity) => m.role === "user")?.text || "");
+    } catch (error) { if (request === conversationRequest.current) throw error; }
+    finally { if (request === conversationRequest.current) openingConversation.current = false; }
   };
   const sendMessage = async (text = prompt) => {
-    if (!text.trim() || answering) return;
+    if (!text.trim() || answering || sending.current || openingConversation.current) return;
     if (!kb || !selectedChatModel || !readyDatasetDocs.length) {
       setError("Choose a dataset with ready documents and an eligible chat model.");
       return;
@@ -588,11 +602,12 @@ export default function App() {
       return;
     }
     setError("");
+    sending.current = true;
     setAnswering(true);
     setLastPrompt(text);
     abort.current = new AbortController();
     try {
-      let c = conversation;
+      let c: Entity | null = conversation ? { ...conversation, messages: (conversation.messages || []).filter((m: Entity) => !["pending-user", "streaming-answer"].includes(m.id)) } : null;
       if (!c) {
         c = await api("/conversations", "POST", {
           title: text.slice(0, 70),
@@ -683,7 +698,7 @@ export default function App() {
             });
         }
       }
-      await openConversation(c!.id);
+      await openConversation(c!.id, true);
       const cs = await api("/conversations");
       setConversations(Array.isArray(cs) ? cs : cs.conversations || []);
     } catch (e) {
@@ -693,6 +708,7 @@ export default function App() {
         );
       } else setError(e instanceof Error ? e.message : "Question failed.");
     } finally {
+      sending.current = false;
       setAnswering(false);
     }
   };
@@ -936,7 +952,7 @@ export default function App() {
   return (
     <>
       {drawerOpen && <div className="navigation-backdrop" aria-hidden="true" onClick={() => setMobile(false)} />}
-      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={compactNavigation && !drawerOpen}>
+      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === "Ask Aegis" ? "chat-rail" : ""} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={compactNavigation && !drawerOpen}>
         <button
           className="btn icon mobile-close"
           onClick={() => setMobile(false)}
@@ -948,16 +964,16 @@ export default function App() {
           <span className="brandmark">
             <img src="/aegis-logo.png" alt="" width={40} height={40} />
           </span>
-          Aegis
+          <span className="brand-name">Aegis</span>
         </div>
         <div className="brand-sub">Document intelligence</div>
         <nav>
           {sections.filter(s => ["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => (
-            <button key={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} />{s.name}</button>
+            <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{s.name}</span></button>
           ))}
-          <button className="nav-item nav-more" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} />Manage workspace<ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
+          <button className="nav-item nav-more" aria-label="Manage workspace" title="Manage workspace" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} /><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
           {adminNavigation && <div id="admin-navigation" className="admin-navigation">
-            {sections.filter(s => !["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => <button key={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} />{s.name}</button>)}
+            {sections.filter(s => !["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
           </div>}
         </nav>
         <div className="nav-footer">
@@ -968,7 +984,7 @@ export default function App() {
           Originals protected. Insights grounded.
         </div>
       </aside>
-      <div className="shell" inert={drawerOpen}>
+      <div className={`shell ${view === "Ask Aegis" ? "chat-shell" : ""}`} inert={drawerOpen}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -1010,7 +1026,7 @@ export default function App() {
           </div>
         </header>
         <main className="workspace">
-          <div className="page-head">
+          {view !== "Ask Aegis" && <div className="page-head">
             <div>
               <div className="eyebrow">
                 {view === "Connections" || view === "Services & migration"
@@ -1043,7 +1059,7 @@ export default function App() {
                 </button>
               )}
             </div>
-          </div>
+          </div>}
           {error && view !== "Home" && (
             <Notice tone="error">
               {error}
@@ -1473,242 +1489,17 @@ export default function App() {
             </>
           )}
           {view === "Ask Aegis" && (
-            <div className="chat-layout">
-              <section className="panel ask-context">
-                <div className="task-context">
-                  <div className="field"><label>Dataset</label>{datasetSelect("Chat dataset")}</div>
-                  <ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />
-                  <button className="btn" disabled={answering} onClick={() => { setConversation(null); setPrompt(""); setError(""); }}><Plus size={15} />New conversation</button>
-                </div>
-                <div className="ask-options">
-                  <details className="disclosure"><summary>Document scope · {scope.length ? `${scope.length} selected` : "All ready documents"}</summary><p className="muted small">No selection searches all ready documents in this dataset.</p>{docSelection}</details>
-                  <details className="disclosure"><summary>Saved conversations</summary>
-                  <div className="chat-list">
-                    {conversations.length ? (
-                      conversations.map((c) => (
-                        <button
-                          key={c.id}
-                          className={
-                            conversation?.id === c.id ? "selected" : ""
-                          }
-                          disabled={answering}
-                          onClick={() => run(() => openConversation(c.id))}
-                        >
-                          {c.title || "Untitled conversation"}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="muted small">
-                        Your conversations will appear here.
-                      </p>
-                    )}
-                  </div>
-                  </details>
-                </div>
-              </section>
-              <section className="panel chat-window">
-                <div className="panel-head">
-                  <div>
-                    <h2>{conversation?.title || "Ask your knowledge"}</h2>
-                    <span className="small muted">
-                      {scope.length
-                        ? `${scope.length} selected documents`
-                        : selectedDataset?.name || "Choose a dataset"}{" "}
-                      · source-grounded answers
-                    </span>
-                  </div>
-                  {conversation?.id && (
-                    <div className="row">
-                      <button
-                        className="btn icon"
-                        title="Reload conversation"
-                        disabled={answering}
-                        onClick={() =>
-                          run(() => openConversation(conversation.id))
-                        }
-                      >
-                        <RefreshCw size={14} />
-                      </button>
-                      <Download
-                        path={`/conversations/${conversation.id}/export`}
-                      >
-                        Export
-                      </Download>
-                    </div>
-                  )}
-                </div>
-                <div className="chat-messages" aria-live="polite">
-                  {conversation?.messages?.length ? (
-                    conversation.messages.map((m: Entity, i: number) => (
-                      <article
-                        key={m.id || i}
-                        className={`message ${m.role === "user" ? "user" : ""}`}
-                      >
-                        <div className="message-label">
-                          {m.mock && (
-                            <span className="pill amber">MOCK TEST OUTPUT</span>
-                          )}{" "}
-                          {m.role === "user" ? "You" : "Aegis"}
-                          {m.role !== "user" && recordedModel(m) && <span className="message-model"> · {recordedModel(m)}</span>}
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>
-                          {m.text || m.content}
-                        </div>
-                        {m.citations?.map((c: Entity, n: number) => (
-                          <button
-                            className="citation"
-                            key={n}
-                            onClick={() =>
-                              setModal({
-                                title:
-                                  c.document_name ||
-                                  c.name ||
-                                  `Source ${n + 1}`,
-                                data: c,
-                              })
-                            }
-                          >
-                            <div className="row">
-                              <FileText size={13} />
-                              <strong>
-                                [{n + 1}]{" "}
-                                {c.document_name ||
-                                  c.name ||
-                                  c.document_id ||
-                                  "Source document"}
-                              </strong>
-                            </div>
-                            {c.excerpt || c.text || c.chunk_text}
-                          </button>
-                        ))}
-                        {m.role !== "user" && (
-                          <div className="row" style={{ marginTop: 14 }}>
-                            <button
-                              className="btn icon"
-                              title="Copy answer"
-                              onClick={() => copy(m.text || m.content || "")}
-                            >
-                              <Copy size={12} />
-                            </button>
-                            <button
-                              className="btn icon"
-                              title="Helpful answer"
-                              onClick={() =>
-                                run(async () => {
-                                  await api(
-                                    `/messages/${m.id}/feedback`,
-                                    "POST",
-                                    { rating: "up" },
-                                  );
-                                  notify("Feedback saved.");
-                                })
-                              }
-                            >
-                              <ThumbsUp size={12} />
-                            </button>
-                            <button
-                              className="btn icon"
-                              title="Unhelpful answer"
-                              onClick={() =>
-                                run(async () => {
-                                  await api(
-                                    `/messages/${m.id}/feedback`,
-                                    "POST",
-                                    { rating: "down" },
-                                  );
-                                  notify("Feedback saved.");
-                                })
-                              }
-                            >
-                              <ThumbsDown size={12} />
-                            </button>
-                          </div>
-                        )}
-                      </article>
-                    ))
-                  ) : (
-                    <Empty
-                      icon={MessageSquare}
-                      title="Good questions start with good sources"
-                      detail="Choose a dataset and its mapped model, then ask about a document, a decision, or a detail."
-                    />
-                  )}
-                  {answering && (
-                    <div className="row muted small">
-                      <Loader2 size={15} className="animate-spin" />
-                      Retrieving evidence and generating an answer…
-                    </div>
-                  )}
-                </div>
-                <label className="check" style={{ marginBottom: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={externalChat}
-                    onChange={(e) => setExternalChat(e.target.checked)}
-                  />
-                  <span className="muted" style={{ fontSize: 10 }}>
-                    {externalNotice(selectedChatModel)}
-                  </span>
-                </label>
-                <form
-                  className="composer"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    sendMessage();
-                  }}
-                >
-                  <textarea
-                    aria-label="Ask a question"
-                    placeholder="Ask a question about your documents…"
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (!answering) sendMessage();
-                      }
-                    }}
-                  />
-                  <div className="row between">
-                    <span className="small muted">
-                      Check cited sources before relying on an answer.
-                    </span>
-                    <div className="row">
-                      {lastPrompt && !answering && (
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={!externalChat || !selectedChatModel || !readyDatasetDocs.length}
-                          onClick={() => sendMessage(lastPrompt)}
-                        >
-                          <RefreshCw size={13} />
-                          Retry
-                        </button>
-                      )}
-                      {answering ? (
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => abort.current?.abort()}
-                        >
-                          <Square size={13} />
-                          Stop
-                        </button>
-                      ) : (
-                        <button
-                          type="submit"
-                          className="btn primary"
-                          disabled={!prompt.trim() || !externalChat || !selectedChatModel || !readyDatasetDocs.length}
-                        >
-                          <Send size={14} />
-                          Send
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </form>
-              </section>
-            </div>
+            <FocusedChat conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
+              answering={answering} lastPrompt={lastPrompt} canSend={!busy && externalChat && !!selectedChatModel && !!readyDatasetDocs.length}
+              externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
+              scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}
+              datasetControl={datasetSelect("Chat dataset")} modelControl={<ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />}
+              exportControl={conversation?.id ? <Download path={`/conversations/${conversation.id}/export`}>Export</Download> : null}
+              onNew={() => { conversationRequest.current += 1; openingConversation.current = false; setConversation(null); setPrompt(""); setLastPrompt(""); setExternalChat(false); setError(""); }}
+              onOpen={id => run(() => openConversation(id))} onSend={sendMessage} onStop={() => abort.current?.abort()}
+              onReload={() => run(() => openConversation(conversation!.id))} onRefresh={reload} loading={loading} onCopy={copy}
+              onFeedback={(id, rating) => run(async () => { await api(`/messages/${id}/feedback`, "POST", { rating }); notify("Feedback saved."); })}
+            />
           )}
           {view === "Extract" && (
             <>
