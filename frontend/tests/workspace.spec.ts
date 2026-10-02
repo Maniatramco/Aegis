@@ -61,11 +61,11 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
     .getByRole("navigation")
     .getByRole("button", { name: "Datasets", exact: true })
     .click();
-  await page.getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await page.locator(".dataset-intro").getByRole("button", { name: "Onboard dataset", exact: true }).click();
   await page.getByLabel("Dataset name", { exact: true }).fill("Cancelled draft dataset");
   await page.getByRole("button", { name: "Cancel dataset onboarding", exact: true }).click();
   await expect(page.getByLabel("Dataset name", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await page.locator(".dataset-intro").getByRole("button", { name: "Onboard dataset", exact: true }).click();
   await expect(page.getByLabel("Dataset name", { exact: true })).toHaveValue("");
   await page.getByLabel("Dataset name", { exact: true }).fill(datasetName);
   await page.getByLabel("Dataset description", { exact: true }).fill("Synthetic onboarding evidence for browser QA.");
