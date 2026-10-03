@@ -1,7 +1,7 @@
 name: Validate Aegis
 on:
   push:
-    branches: [main]
+    branches: [main, recording/issue-7-chat-upload]
   pull_request:
 permissions:
   contents: read
@@ -80,6 +80,18 @@ jobs:
         if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
         working-directory: frontend
         run: npm run test:screenshots
+      - name: Record chat upload preview before main publication
+        if: github.ref == 'refs/heads/recording/issue-7-chat-upload'
+        working-directory: frontend
+        run: npx playwright test -c recording/playwright.config.ts
+      - name: Save chat upload preview video
+        if: always() && github.ref == 'refs/heads/recording/issue-7-chat-upload'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-chat-upload-preview
+          path: frontend/recording-output/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Save requested app screenshots
         if: always()
         uses: actions/upload-artifact@v4
