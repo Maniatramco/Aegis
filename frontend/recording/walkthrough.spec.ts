@@ -114,7 +114,7 @@ test('record chat attachments, durable indexing and a source-grounded answer', a
   } finally {
     if (workerStopped) compose('start');
     const duration = (Date.now() - started) / 1000;
-    await writeFile(path.join(output, 'recording.json'), JSON.stringify({ commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), applicationBaseCommit: '4964434dd417660c1493c43ed553be30a6b5d3a6', localApplicationCommit: 'ad5afc0dcbe12d64d337cb79b0f40cf4078f8dbf', viewport: { width: 1440, height: 960 }, duration, chapters, errors, data: 'Synthetic documents, real app/API/storage and worker; mock model/embeddings. Worker paused briefly to demonstrate the real durable queue. No intercepted responses. Authentication completed before recording.' }, null, 2));
+    await writeFile(path.join(output, 'recording.json'), JSON.stringify({ commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), applicationBaseCommit: '9b2b297b6632f160bf7a8a0bcd95e75bba793523', localApplicationCommit: '714c012b15c235e14e3328ca6fe5a364e1b0605d', viewport: { width: 1440, height: 960 }, duration, chapters, errors, data: 'Synthetic documents, real app/API/storage and worker; mock model/embeddings. Worker paused briefly to demonstrate the real durable queue. No intercepted responses. Authentication completed before recording.' }, null, 2));
     await context.close();
   }
 });
