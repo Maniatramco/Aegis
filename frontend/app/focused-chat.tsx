@@ -134,7 +134,14 @@ export function FocusedChat(p: Props) {
         <div className="composer-meta"><label className="check"><input type="checkbox" aria-label={p.providerNotice} checked={p.externalChat} disabled={p.answering} onChange={e => p.setExternalChat(e.target.checked)} /><span>Allow sending selected documents to {p.modelName}</span></label><details className="provider-details"><summary>Details</summary><p>{p.providerNotice}</p></details>{p.lastPrompt && !p.answering && <button type="button" className="text-button retry-message" disabled={!p.canSend} onClick={() => p.onSend(p.lastPrompt)}><RefreshCw size={13} />Retry</button>}<span className="composer-hint">Check sources before relying on an answer.</span></div>
       </div>
     </section>
-    <dialog className="chat-upload-dialog" ref={uploadDialog} aria-label="Attach documents" onCancel={closeUpload} onClose={closeUpload} onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) closeUpload(); } }}>
+    <dialog className="chat-upload-dialog" ref={uploadDialog} aria-label="Attach documents" onKeyDown={event => {
+      if (event.key !== "Tab") return;
+      const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter(element => element.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }} onCancel={closeUpload} onClose={closeUpload} onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) closeUpload(); } }}>
       <div className="chat-upload-heading"><h2>Add documents</h2><button type="button" className="btn icon" aria-label="Close uploads" onClick={closeUpload}><X size={19} /></button></div>
       <DocumentUploadPanel upload={p.upload} />
       <p className="upload-footnote">You can close this panel and keep writing. Accepted uploads continue indexing in your dataset.</p>

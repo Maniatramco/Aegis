@@ -89,6 +89,25 @@ async function noHorizontalOverflow(page: Page) {
 }
 
 test("picker uploads to the selected dataset, preserves model, scope and draft, and never sends chat", async ({ page, workspace: w }) => {
+  // Chromium can omit a file-bearing multipart body from CDP request events.
+  // Observe the actual FormData at fetch's boundary, then forward the same
+  // arguments unchanged. No request, response, document or ready state is mocked.
+  await page.addInitScript(() => {
+    const observed: Array<{ datasetId: string; allowExternal: string; files: Array<{ name: string; size: number; type: string }> }> = [];
+    Object.defineProperty(window, "__aegisObservedUploads", { value: observed });
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (new URL(url, location.href).pathname === "/api/documents/upload" && init?.method === "POST" && init.body instanceof FormData) {
+        observed.push({
+          datasetId: String(init.body.get("dataset_id")),
+          allowExternal: String(init.body.get("allow_external")),
+          files: init.body.getAll("files").filter((entry): entry is File => entry instanceof File).map(entry => ({ name: entry.name, size: entry.size, type: entry.type })),
+        });
+      }
+      return nativeFetch(input, init);
+    };
+  });
   const original = await uploadReady(page.request, w.headers, w.dataset, "Already-selected-source.txt", synthetic);
   await openChat(page, w.dataset);
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(w.models.careful.id);
@@ -111,8 +130,10 @@ test("picker uploads to the selected dataset, preserves model, scope and draft, 
   expect(result.documents[0]).toMatchObject({ dataset_id: w.dataset.id, name: "Synthetic-review-brief.txt" });
   await expect(row(page, "Synthetic-review-brief.txt")).toContainText("Ready for questions", { timeout: 90000 });
   expect(uploads).toHaveLength(1);
-  expect(uploads[0].postData()).toContain(`name="dataset_id"\r\n\r\n${w.dataset.id}`);
-  expect(uploads[0].postData()).toContain('name="allow_external"\r\n\r\nfalse');
+  expect(await page.evaluate(() => Reflect.get(window, "__aegisObservedUploads"))).toEqual([{
+    datasetId: w.dataset.id, allowExternal: "false",
+    files: [{ name: "Synthetic-review-brief.txt", size: Buffer.byteLength(synthetic), type: "text/plain" }],
+  }]);
   await screenshot(page, "desktop-ready");
   await dialog(page).getByRole("button", { name: "Close uploads", exact: true }).click();
   await expect(page.getByLabel("Chat dataset", { exact: true })).toHaveValue(w.dataset.id);
