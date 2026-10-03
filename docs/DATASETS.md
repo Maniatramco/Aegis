@@ -50,3 +50,11 @@ Existing documents and conversation/extraction artifacts are retained. Review an
 4. Submit new jobs for any legacy queued work that has no immutable execution snapshot. Such work fails with an actionable message instead of guessing which current provider should receive it.
 
 The compatibility API keeps `/api/knowledge-bases` as an alias. New integrations should use `/api/datasets`, `/api/models`, and `/api/datasets/{id}/models`; generation requests send `dataset_id` and an eligible `model_id` (or use the dataset's validated default).
+
+## Uploading from chat
+
+Ask Aegis provides an attachment button on desktop/mobile and a file drop area on desktop. Choose a dataset first. The upload panel shows its destination, accepted types (PDF/DOCX/UTF-8 TXT), the configured per-file size limit and a maximum of 20 selected files. Datasets and chat share the same uploader, `/documents/upload` endpoint, stored originals and durable indexing jobs; there is no chat-specific storage or ingestion pipeline. Each selected file is submitted separately so a rejected later file does not hide an earlier successful upload.
+
+Uploading and asking a question have separate consent controls. External storage/search/embedding still requires the existing upload acknowledgment; chat transmission still requires the selected chat provider’s notice. Uploading never automatically sends a question or changes a conversation’s model or document selection. Only ready documents with a current index appear in Document scope. If using a selected subset, add newly ready documents there yourself.
+
+Close the attachment panel to keep writing while accepted documents index. Navigating within the app retains staged files per dataset; refreshing the whole browser loses local file selections, but stored documents and durable jobs remain and processing states reload. An in-flight file is bound to its original dataset; a dataset/configuration change stops any remaining unsent files. Indexing retry uses the existing stored original and the dataset’s current configuration. A lost or server-error upload response may already have stored an original, so the UI does not automatically retry it: inspect the dataset’s documents before selecting the file again.

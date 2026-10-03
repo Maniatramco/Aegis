@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DocumentUploadPanel, useDocumentUpload } from "./document-upload";
 import { FocusedChat } from "./focused-chat";
 import { DatasetHome } from "./dataset-home";
 import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
@@ -257,7 +258,7 @@ export default function App() {
   const [datasetModelsFocus, setDatasetModelsFocus] = useState(false);
   const [chatModelId, setChatModelId] = useState("");
   const [extractModelId, setExtractModelId] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [documentPollError, setDocumentPollError] = useState(false);
   const [externalUpload, setExternalUpload] = useState(false);
   const [conversations, setConversations] = useState<Entity[]>([]);
   const [conversation, setConversation] = useState<Entity | null>(null);
@@ -331,11 +332,11 @@ export default function App() {
         };
       }
       if (!r.ok) {
-        throw new Error(
+        throw Object.assign(new Error(
           typeof data.detail === "string"
             ? data.detail
             : JSON.stringify(data.detail || data),
-        );
+        ), { status: r.status });
       }
       return data;
     },
@@ -395,6 +396,7 @@ export default function App() {
         if (!active) return;
         setOverview(o);
         setDocs(Array.isArray(d) ? d : d.documents || []);
+        setDocumentPollError(false);
         setKbs(Array.isArray(k) ? k : k.datasets || []);
         setJobs(Array.isArray(j) ? j : j.jobs || []);
         setCaps(c);
@@ -420,10 +422,10 @@ export default function App() {
           const next = Array.isArray(d) ? d : d.jobs || [];
           setJobs(next);
           api("/documents")
-            .then((d) => setDocs(Array.isArray(d) ? d : d.documents || []))
-            .catch(() => {});
+            .then((d) => { setDocs(Array.isArray(d) ? d : d.documents || []); setDocumentPollError(false); })
+            .catch(() => setDocumentPollError(true));
         })
-        .catch(() => {});
+        .catch(() => setDocumentPollError(true));
     }, 6000);
     return () => clearInterval(timer);
   }, [user, api]);
@@ -459,7 +461,6 @@ export default function App() {
     setConversation(null);
     setPrompt("");
     setLastPrompt("");
-    setFiles([]);
     setQuery("");
   };
   const routeHandler = useRef<(hash: string) => void>(() => {});
@@ -499,7 +500,10 @@ export default function App() {
   }, [kb, docs]);
   useEffect(() => { setExternalChat(false); }, [kb, chatModelId, selectedChatModel?.version, selectedChatModel?.connection_profile_version]);
   useEffect(() => { setExternalExtract(false); }, [kb, extractModelId, selectedExtractModel?.version, selectedExtractModel?.connection_profile_version]);
-  useEffect(() => { setExternalUpload(false); }, [kb, selectedDataset?.embedding_selection?.model_id, selectedDataset?.embedding_selection?.model_version, selectedDataset?.embedding_selection?.connection_profile_version, settings.storage_provider]);
+  const uploadContextKey = JSON.stringify([kb, selectedDataset?.active, selectedDataset?.embedding_selection,
+    ...["storage_provider", "search_provider", "oci_storage_namespace", "oci_storage_bucket", "oci_storage_prefix", "oci_storage_region", "oci_storage_auth_mode", "oci_storage_profile", "oci_region", "oci_project_id", "oci_vector_store_id"].map(key => settings[key]),
+  ]);
+  useEffect(() => { setExternalUpload(false); }, [uploadContextKey, csrf]);
   const externalProvider =
     ["openai", "oci"].includes(selectedDataset?.embedding_selection?.embedding_provider || datasetEmbedding?.provider) ||
     selectedDataset?.embedding_selection?.search_provider === "oci" ||
@@ -526,25 +530,18 @@ export default function App() {
       setCsrf(d.csrf_token || "");
       setPassword("");
     });
-  const upload = () =>
-    run(async () => {
-      if (!kb || !datasetEmbedding) throw new Error("Select a dataset and map an embedding model before uploading.");
-      if (!files.length) throw new Error("Choose one or more documents first.");
-      if (externalProvider && !externalUpload)
-        throw new Error(
-          "Please approve the external processing notice before uploading.",
-        );
-      const fd = new FormData();
-      files.forEach((f) => fd.append("files", f));
-      fd.append("dataset_id", kb);
-      fd.append("allow_external", String(externalUpload));
-      await api("/documents/upload", "POST", fd);
-      setFiles([]);
-      notify(
-        "Originals uploaded. Follow their processing status in Jobs & activity.",
-      );
-      reload();
-    });
+  const documentUpload = useDocumentUpload({
+    dataset: selectedDataset, enabled: !!datasetEmbedding, externalRequired: externalProvider,
+    consent: externalUpload, setConsent: setExternalUpload, maxMb: Number(settings.max_upload_mb || 25),
+    sessionKey: user ? csrf : "",
+    contextKey: uploadContextKey,
+    documents: docs, jobs, api, refresh: reload, pollError: documentPollError,
+    onManage: () => navigate("Datasets"),
+    onUploaded: data => {
+      setDocs(previous => [...(data.documents || []), ...previous.filter(d => !(data.documents || []).some((next: Entity) => next.id === d.id))]);
+      setJobs(previous => [...(data.jobs || []), ...previous.filter(j => !(data.jobs || []).some((next: Entity) => next.id === j.id))]);
+    },
+  });
   const openPreview = (d: Entity) =>
     run(async () =>
       setModal({
@@ -1313,68 +1310,7 @@ export default function App() {
               onSelect={changeDataset} onCreated={d => { setKbs(current => [...current, d]); changeDataset(d.id); }}
               api={api} run={run} busy={busy || answering} reload={reload} notify={notify}
               onConnections={() => navigate("Connections")} onUse={navigate}
-              uploadPanel={
-                <section className="dataset-upload">
-                  <h2>Upload documents</h2>
-                  <p className="muted small">
-                    PDF, DOCX, and TXT. Originals are stored before processing
-                    starts.
-                  </p>
-                  <div
-                    className="dropzone"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setFiles(Array.from(e.dataTransfer.files));
-                    }}
-                  >
-                    <UploadCloud size={29} />
-                    <h3>Drop documents here, or choose files</h3>
-                    <p className="muted small">
-                      {files.length
-                        ? `${files.length} file${files.length === 1 ? "" : "s"} selected`
-                        : "Choose multiple files to process together"}
-                    </p>
-                    <input
-                      aria-label="Choose documents"
-                      key={kb}
-                      disabled={!datasetEmbedding}
-                      type="file"
-                      accept=".pdf,.docx,.txt"
-                      multiple
-                      onChange={(e) =>
-                        setFiles(Array.from(e.target.files || []))
-                      }
-                    />
-                  </div>
-                  {externalProvider && (
-                    <label className="check" style={{ marginBottom: 15 }}>
-                      <input
-                        type="checkbox"
-                        checked={externalUpload}
-                        onChange={(e) => setExternalUpload(e.target.checked)}
-                      />
-                      <span>
-                        I approve sending uploaded document text to the
-                        configured external storage, search, or embedding
-                        provider. API usage may be billed separately.
-                      </span>
-                    </label>
-                  )}
-                  <div className="row">
-                    <span className="small muted" style={{ flex: 1 }}>Destination: <strong>{selectedDataset?.name}</strong></span>
-                    <button
-                      className="btn primary"
-                      onClick={upload}
-                      disabled={busy || !files.length || !datasetEmbedding}
-                    >
-                      <UploadCloud size={14} />
-                      Upload {files.length || ""}
-                    </button>
-                  </div>
-                </section>
-
-              }
+              uploadPanel={<DocumentUploadPanel upload={documentUpload} />}
               documentsPanel={
               <section className="panel flush">
                 <div className="panel-head" style={{ padding: "20px 20px 0" }}>
@@ -1489,7 +1425,7 @@ export default function App() {
             </>
           )}
           {view === "Ask Aegis" && (
-            <FocusedChat conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
+            <FocusedChat upload={documentUpload} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
               answering={answering} lastPrompt={lastPrompt} canSend={!busy && externalChat && !!selectedChatModel && !!readyDatasetDocs.length}
               externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
               scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}

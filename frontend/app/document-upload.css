@@ -1,0 +1,51 @@
+.document-upload-panel { min-width:0; }
+.upload-destination { margin:0 0 8px; font-size:13px; overflow-wrap:anywhere; }
+.document-upload-panel>.small { line-height:1.6; }
+.shared-dropzone { display:flex; flex-direction:column; align-items:center; gap:12px; padding:22px 16px; margin:18px 0; }
+.shared-dropzone strong { font-size:14px; }
+.shared-dropzone input { max-width:100%; font-size:13px; }
+.upload-files { list-style:none; margin:16px 0; padding:0; max-height:240px; overflow:auto; }
+.upload-files li { display:flex; gap:10px; align-items:flex-start; border:1px solid #dfe8f7; border-radius:10px; background:#f8faff; margin-bottom:8px; padding:12px; }
+.upload-file-icon { flex-shrink:0; color:#3668ba; padding-top:2px; }
+.upload-file-detail { min-width:0; flex:1; overflow-wrap:anywhere; }
+.upload-file-detail>strong { display:block; font-size:13px; font-weight:600; line-height:1.5; }
+.upload-file-status { display:block; color:#61708e; font-size:12px; margin-top:3px; }
+.upload-file-status.is-ready { color:#167049; }
+.upload-file-detail progress { display:block; width:100%; height:7px; accent-color:#2463ff; margin-top:9px; }
+.upload-file-error { font-size:12px; color:#9c3e30; line-height:1.5; margin:6px 0; }
+.upload-file-detail .text-button { margin-top:8px; font-size:12px; }
+.upload-files .btn.icon { min-width:36px; min-height:36px; padding:6px; }
+.upload-consent { align-items:flex-start; line-height:1.6; font-size:12px; margin:16px 0; }
+.upload-consent input { flex-shrink:0; margin-top:3px; }
+.upload-notice { display:flex; gap:8px; align-items:flex-start; background:#fff7eb; color:#835417; padding:12px; border-radius:8px; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.upload-notice svg { flex-shrink:0; margin-top:2px; }
+.upload-actions { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; }
+.upload-actions>.text-button { font-size:12px; }
+.upload-footnote { font-size:11px; line-height:1.6; color:#65748c; margin:14px 0 0; }
+.chat-upload-dialog { width:min(580px,calc(100vw - 28px)); max-width:calc(100vw - 28px); max-height:calc(100dvh - 28px); margin:auto; padding:24px; border:1px solid #dbe6f7; border-radius:16px; color:#14234b; background:white; box-shadow:0 16px 70px #14234b30; }
+.chat-upload-dialog::backdrop { background:#15295155; }
+.chat-upload-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.chat-upload-heading h2 { margin:0; font-size:21px; }
+.chat-upload-heading .btn { flex-shrink:0; }
+.focused-chat .attach-documents { flex-shrink:0; min-width:44px; width:44px; height:48px; padding:8px; border:0; background:transparent; color:#3265b6; }
+.focused-chat .attach-documents:hover { background:#edf3ff; }
+.chat-upload-status { display:flex; gap:8px; align-items:center; margin:8px 0 0; font-size:12px; color:#527093; }
+.chat-upload-status .text-button { font-size:12px; min-width:0; max-width:100%; text-align:left; }
+.chat-upload-status span { min-width:0; overflow-wrap:anywhere; }
+.chat-drop-overlay { position:absolute; inset:12px; z-index:5; border:2px dashed #2563eb; border-radius:18px; background:#f2f7fff5; color:#2459b2; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:14px; text-align:center; padding:24px; pointer-events:none; }
+.chat-drop-overlay strong { font-size:22px; }
+.chat-drop-overlay span { overflow-wrap:anywhere; }
+.chat-upload-dialog button:focus-visible,.chat-upload-dialog input:focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
+@media(max-width:560px) {
+  .chat-upload-dialog { padding:18px; }
+  .chat-upload-heading h2 { font-size:19px; }
+  .shared-dropzone { padding:18px 10px; }
+  .shared-dropzone strong { font-size:12px; }
+  .shared-dropzone input { font-size:16px; }
+  .upload-files { max-height:210px; }
+  .upload-files .btn.icon { min-width:44px; min-height:44px; }
+  .upload-actions>.btn { width:100%; justify-content:center; }
+  .focused-chat .attach-documents { width:40px; min-width:40px; height:44px; }
+  .chat-upload-status { font-size:11px; }
+}
+@media(prefers-reduced-motion:reduce) { .document-upload-panel * { animation:none!important; transition:none!important; } }

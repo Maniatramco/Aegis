@@ -21,7 +21,7 @@ Only the web app is published, bound to `127.0.0.1`. PostgreSQL and Qdrant have 
 
 1. Configure provider connections and save a named connection profile. Register the chat, extraction, and embedding models you want to use.
 2. Onboard a dataset, map its eligible models, and choose the default chat/extraction models and indexing configuration.
-3. Upload text-based PDF, DOCX, or TXT documents to that dataset. Watch the indexing job; the local embedding model downloads on first use.
+3. Upload text-based PDF, DOCX, or TXT documents from Datasets, or use the attachment button / drag-and-drop in Ask Aegis after selecting a dataset. Both entry points use the same storage-first upload and indexing workflow. Review files and any external-processing notice, then choose Upload. Watch indexing progress; documents become available to questions only when ready. The local embedding model downloads on first use.
 4. In Ask Aegis, select the dataset and an eligible model. With multiple mapped models, the model dropdown lets you choose which one answers. Sources link answers to stored chunks.
 5. In Extract, select the dataset, mapped extraction model, documents, and JSON-schema template. Review the structured output and export JSON/CSV.
 
