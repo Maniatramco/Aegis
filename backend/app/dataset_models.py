@@ -170,6 +170,10 @@ def validate_model(body,owner):
     p=cfg['embedding_provider'] if data['capabilities']==['embedding'] else cfg['model_provider']
     if p=='mock' and __import__('os').getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true')
     if p=='sentence_transformers' and body.provider_model!='sentence-transformers/all-MiniLM-L6-v2':raise HTTPException(400,'Local embeddings currently support sentence-transformers/all-MiniLM-L6-v2 only.')
+    if p=='ollama':
+        from .ollama_provider import local_model_name,OllamaError
+        try:local_model_name(body.provider_model)
+        except OllamaError as exc:raise HTTPException(400,str(exc))
     return data
 
 def save_mappings(r,body):

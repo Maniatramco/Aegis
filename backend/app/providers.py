@@ -1,10 +1,14 @@
-"""Provider calls are bounded, TLS-only and never accept arbitrary credential endpoints."""
+"""Bounded providers: fixed TLS cloud endpoints or credential-free loopback Ollama."""
 import hashlib, math, json, re, os, uuid
 from functools import lru_cache
 import httpx
 from .core import settings, api_key, store, oci_api_key, execution_context
 
 class ProviderError(RuntimeError):pass
+def ollama_call(operation,*args):
+    from . import ollama_provider
+    try:return getattr(ollama_provider,operation)(*args)
+    except ollama_provider.OllamaError as exc:raise ProviderError(str(exc)) from exc
 @lru_cache(maxsize=2)
 def local_model(name):
     from sentence_transformers import SentenceTransformer
@@ -12,7 +16,7 @@ def local_model(name):
 def fingerprint(cfg=None):
     c=cfg or settings()
     if c['search_provider']=='oci':return hashlib.sha256(('oci:'+c.get('oci_region','')+':'+c.get('oci_project_id','')+':'+c.get('oci_vector_store_id','')+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
-    name=c['embedding_model'] if c['embedding_provider']=='openai' else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
+    name=c['embedding_model'] if c['embedding_provider'] in ('openai','ollama') else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
     return hashlib.sha256((c['embedding_provider']+':'+name+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
 def openai_request(path,payload):
     key=api_key()
@@ -43,6 +47,7 @@ def split_utf8_bounded(text,max_bytes=OPENAI_EMBEDDING_MAX_BYTES):
 
 def embed(texts):
     cfg=settings();p=cfg['embedding_provider']
+    if p=='ollama':return ollama_call('embed',cfg['embedding_model'],texts,cfg['timeout'])
     if p=='mock':
         result=[]
         for text in texts:
@@ -118,6 +123,7 @@ def response_text(data):
     return '\n'.join(c.get('text','') for o in data.get('output',[]) for c in o.get('content',[]) if c.get('type')=='output_text')
 def answer(question,sources,history=None):
     if not sources:return "I couldn't find evidence in your selected, ready documents. Upload or reindex documents, or change the scope."
+    if settings()['model_provider']=='ollama':return ollama_call('chat',settings()['model'],question,sources,history,settings()['timeout'])
     if settings()['model_provider']=='oci':return oci_model().chat(question,sources,history)
     if settings()['model_provider']=='mock':return '[MOCK TEST RESPONSE] '+sources[0]['text']+' [1]'
     if settings()['model_provider']!='openai':raise ProviderError('Model provider is disabled or unsupported')
@@ -126,6 +132,7 @@ def answer(question,sources,history=None):
     if out.get('status') in ('failed','incomplete','cancelled') or not response_text(out).strip():raise ProviderError('OpenAI returned an incomplete response')
     return response_text(out)
 def extract(text,schema):
+    if settings()['model_provider']=='ollama':return ollama_call('extract',settings()['model'],text,schema,settings()['timeout'])
     if settings()['model_provider']=='oci':return oci_model().extract(text,schema)
     if settings()['model_provider']=='mock':
         def sample(s):

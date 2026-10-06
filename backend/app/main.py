@@ -354,7 +354,7 @@ def get_settings(owner=Depends(auth)):
     except Exception:has_key=False
     try:has_oci_key=bool(oci_api_key())
     except Exception:has_oci_key=False
-    return settings()|{'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
+    return settings()|{'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'local_only':os.getenv('AEGIS_LOCAL_ONLY')=='true','ollama_endpoint':'http://127.0.0.1:11434','mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
 @app.patch('/api/settings')
 def save_settings(body:dict,owner=Depends(auth)):
     with document_lock('settings-config'):return _save_settings(body,owner)
@@ -366,7 +366,14 @@ def _save_settings(body,owner):
     with Session() as session:
         if session.scalar(select(Job).where(Job.status.in_(['queued','running'])).limit(1)):raise HTTPException(409,'Wait for or cancel active jobs before changing settings')
     cfg=settings()|{k:v for k,v in body.items() if k not in ('api_key','oci_api_key')}
-    if cfg['model_provider'] not in ('mock','openai','oci') or cfg['embedding_provider'] not in ('mock','openai','sentence_transformers') or cfg['search_provider'] not in ('local','qdrant','oci') or cfg['storage_provider'] not in ('local','oci'):raise HTTPException(400,'Selected provider is not implemented; see capabilities')
+    if cfg['model_provider'] not in ('mock','openai','oci','ollama') or cfg['embedding_provider'] not in ('mock','openai','sentence_transformers','ollama') or cfg['search_provider'] not in ('local','qdrant','oci') or cfg['storage_provider'] not in ('local','oci'):raise HTTPException(400,'Selected provider is not implemented; see capabilities')
+    try:
+        enforce_local_only(cfg)
+        from .ollama_provider import local_model_name
+        if cfg['model_provider']=='ollama':local_model_name(cfg['model'])
+        if cfg['embedding_provider']=='ollama':local_model_name(cfg['embedding_model'])
+    except (ValueError,RuntimeError) as exc:raise HTTPException(400,str(exc))
+    if os.getenv('AEGIS_LOCAL_ONLY')=='true' and any(body.get(k) not in (None,'','********') for k in ('api_key','oci_api_key')):raise HTTPException(400,'Provider credentials are disabled in local-only mode.')
     if any(cfg[k]!=settings()[k] for k in ('oci_region','oci_project_id','oci_vector_store_id')):
         with Session() as session:known_docs=list(session.scalars(select(Record).where(Record.kind=='document')))
         for doc in known_docs:
@@ -435,7 +442,7 @@ def test_settings(owner=Depends(auth)):
 def capabilities(owner=Depends(auth)):
     from .oci_adapters import capability_report
     from .queue_transport import get_transport
-    return {'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'openai_responses':True,'sentence_transformers':True,'ocr':False,'streaming':True},'oci':capability_report(),'active':settings()}
+    return {'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'openai_responses':True,'sentence_transformers':True,'ollama':True,'ocr':False,'streaming':True},'oci':capability_report(),'active':settings()}
 
 @app.post('/api/conversations/{id}/messages/stream')
 async def stream_message(id:str,body:MessageInput,request:Request,owner=Depends(auth)):

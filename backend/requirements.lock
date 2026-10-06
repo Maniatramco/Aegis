@@ -98,7 +98,9 @@ oci-genai-auth==1.1.1
 opentelemetry-api==1.45.0
     # via fastapi
 portalocker==3.2.0
-    # via qdrant-client
+    # via
+    #   -r backend/requirements.txt
+    #   qdrant-client
 propcache==0.5.4
     # via
     #   aiohttp

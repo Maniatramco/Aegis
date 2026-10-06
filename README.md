@@ -29,6 +29,13 @@ See [dataset configuration and existing-workspace migration](docs/DATASETS.md). 
 
 Scanned/image-only PDFs require OCR first. Aegis does not silently invent OCR text. OpenAI chat/extraction sends the selected source content and your prompt to OpenAI after the UI's external-processing acknowledgment. OpenAI embeddings also send chunks when selected. API use is billed separately by the provider. Local embeddings keep document text local during indexing; downloading model weights still requires network access.
 
+### Free local inference with Ollama
+
+For native Windows development with local chat, extraction, and embeddings, see
+[the Ollama setup guide](docs/OLLAMA.md). It uses SQLite and local file search,
+with cloud features and paid providers disabled. Ollama model downloads are separate
+from application dependencies; no OpenAI API key or subscription is required.
+
 ## Storage-first architecture
 
 Originals, parsed text, chunks, conversations, templates and extraction artifacts live in persistent filesystem storage. SQL stores only control/access metadata and references. Qdrant stores vectors plus identifiers/filter metadata; retrieved source text is read from storage. Configuration export excludes credentials. Indexes are disposable and rebuildable; changing embedding models requires reindexing.

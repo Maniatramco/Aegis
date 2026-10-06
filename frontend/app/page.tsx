@@ -2208,7 +2208,7 @@ export default function App() {
                     <h2>Connection configuration</h2>
                     <span className="pill">Server-side configuration</span>
                   </div>
-                  <Field label="Connection’s generation provider">
+                  <Field label="Connection's generation provider">
                     <select
                       value={settingsForm.model_provider || "openai"}
                       aria-label="Model provider"
@@ -2219,8 +2219,9 @@ export default function App() {
                         })
                       }
                     >
-                      <option value="openai">OpenAI</option>
-                      <option value="oci">
+                      <option value="ollama">Ollama — local, no API key</option>
+                      <option value="openai" disabled={settings.local_only}>OpenAI</option>
+                      <option value="oci" disabled={settings.local_only}>
                         OCI Generative AI · requires validation
                       </option>
                       <option value="mock">
@@ -2228,6 +2229,9 @@ export default function App() {
                       </option>
                     </select>
                   </Field>
+                  {settingsForm.model_provider === "ollama" && (
+                    <p className="muted small">Runs on this computer through Ollama. No API key is needed. Download the selected models before use.</p>
+                  )}
                   <Field label="Connection’s default generation model">
                     <input
                       aria-label="Answer model"
@@ -2238,7 +2242,7 @@ export default function App() {
                           model: e.target.value,
                         })
                       }
-                      placeholder="gpt-4.1-mini"
+                      placeholder={settingsForm.model_provider === "ollama" ? "qwen3:4b" : "gpt-4.1-mini"}
                     />
                   </Field>
                   <Field label="Embedding provider">
@@ -2258,7 +2262,8 @@ export default function App() {
                       <option value="sentence_transformers">
                         Local · Sentence Transformers
                       </option>
-                      <option value="openai">OpenAI</option>
+                      <option value="ollama">Ollama — local embeddings</option>
+                      <option value="openai" disabled={settings.local_only}>OpenAI</option>
                       <option value="mock">
                         Mock · explicit development test mode
                       </option>
