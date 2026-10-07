@@ -244,7 +244,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
 
   await navigate(page, "Extract");
   await page.getByLabel("Extraction dataset", { exact: true }).selectOption(unavailable.id);
-  await page.getByLabel("Extraction template", { exact: true }).selectOption(template.id);
+  await page.getByLabel("Prompt template", { exact: true }).selectOption(template.id);
   await documentCheckbox(page, documentC.name).check();
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
   await expect(page.getByText("No eligible extraction models", { exact: false })).toBeVisible();

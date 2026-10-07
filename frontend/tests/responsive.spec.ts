@@ -57,7 +57,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
       if (name === "Extract") {
         await page.getByLabel("Extraction dataset", { exact: true }).selectOption(dataset.id);
         await page.getByRole("combobox", { name: "Extraction model", exact: true }).selectOption(models.careful.id);
-        await page.getByLabel("Extraction template", { exact: true }).selectOption(template.id);
+        await page.getByLabel("Prompt template", { exact: true }).selectOption(template.id);
       }
       const dimensions = await geometry(page);
       report.push({ screen: name, height, ...dimensions });
@@ -115,7 +115,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   await navigate(page, "Extract");
   await page.getByLabel("Extraction dataset", { exact: true }).selectOption(dataset.id);
   await page.getByRole("combobox", { name: "Extraction model", exact: true }).selectOption(models.careful.id);
-  await page.getByLabel("Extraction template", { exact: true }).selectOption(template.id);
+  await page.getByLabel("Prompt template", { exact: true }).selectOption(template.id);
   await page.locator(".selection label").filter({ hasText: sourceDocument.name }).getByRole("checkbox").check();
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
   const pending = page.waitForResponse(r => r.url().endsWith("/api/extractions") && r.request().method() === "POST");
