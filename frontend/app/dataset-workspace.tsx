@@ -18,6 +18,12 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
 }) {
   const models = eligibleModels(dataset, capability);
   const label = capability === "chat" ? "Chat model" : "Extraction model";
+  const [localModels,setLocalModels]=useState<Entity | null>(null);
+  const selected=models.find(m=>m.id===value) || (models.length===1 ? models[0] : undefined);
+  const local=selected?.provider==="ollama";
+  useEffect(()=>{let active=true;if(local)fetch("/api/local-models",{credentials:"include"}).then(r=>r.ok?r.json():null).then(data=>{if(active)setLocalModels(data);}).catch(()=>{if(active)setLocalModels({available:false,models:[]});});return()=>{active=false;};},[local,value]);
+  const installed=localModels?.models?.some((m:Entity)=>m.name===selected?.provider_model || m.name===selected?.provider_model+":latest");
+
   const defaultId = dataset?.[capability === "chat" ? "default_chat_model_id" : "default_extraction_model_id"];
   return <div className="model-picker">
     <label className="control-label">{label}</label>
@@ -25,6 +31,7 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
       <div className="model-unavailable"><strong>No eligible {capability} models</strong><p>Map an enabled model with {capability} capability to this dataset.</p><button type="button" className="text-button" onClick={onConfigure}>Configure dataset models <ArrowRight size={13} /></button></div> : models.length === 1 ?
       <div className="model-readonly" aria-label={label}><Layers size={16} /><span>{modelLabel(models[0])}<small>{models[0].provider_model} · Only eligible model</small></span><CheckCircle2 size={15} /></div> :
       <select aria-label={label} value={value} onChange={e => onChange(e.target.value)} disabled={disabled}><option value="" disabled>Select a mapped model</option>{models.map(m => <option key={m.id} value={m.id}>{modelLabel(m)}{m.id === defaultId ? " · Dataset default" : ""}</option>)}</select>}
+    {local && <p className="muted small" role="status">Local · Ollama · {localModels === null ? "Checking installation…" : !localModels.available ? "Ollama unavailable" : installed ? "Installed · No paid API" : "Model not installed"}<br />Embedding: {dataset?.models?.find((m:Entity)=>m.id===dataset?.embedding_model_id)?.provider_model || "Not mapped"}. Changing the chat model keeps this dataset’s embedding index.</p>}
   </div>;
 }
 

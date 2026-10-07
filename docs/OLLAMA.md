@@ -110,3 +110,14 @@ local embedding/indexing, retrieval, cited chat, and structured extraction on
 synthetic data. Ordinary CI tests mock the loopback transport and require no
 model downloads. Ollama answers currently use the application's buffered async
 fallback, so the completed answer appears together rather than token by token.
+
+
+## Free local model choices
+
+Qwen3:4b and nomic-embed-text are Apache-2.0 licensed model weights served by the open-source Ollama runtime. A smaller chat-only option is `smollm2:1.7b-instruct-q4_K_M` (about 1.1 GB, Apache-2.0). Official sources: https://ollama.com/library/qwen3:4b, https://ollama.com/library/nomic-embed-text:latest, https://ollama.com/library/smollm2:1.7b-instruct-q4_K_M. Tags can change; inspect installed digests and licenses with Ollama show/tags.
+
+Keep Nomic as the dataset's embedding model while switching its mapped chat choices. A chat-model selection does not require reindexing. Changing embedding models does require a new compatible index generation, even when dimensions match. Map SmolLM2 with chat capability only unless separately validated for structured extraction. The picker shows local daemon/installation availability; it never downloads models or falls back to a paid provider.
+
+No paid API is required. Google Gemma's separately restricted open-weight license is not presented as an open-source option; hosted Gemini is not configured. Model weights being permissively licensed is not a claim that all training datasets are available.
+
+Temporary chat keeps message history only in the current browser tab and passes a bounded history to the selected model. Reloading clears the messages. Uploaded originals and indexes still belong to the selected dataset; use the explicit session-upload cleanup before leaving, or delete the files in Datasets later. Existing dataset documents are never included in session cleanup. Local-only mode keeps inference on this computer; a separately configured external provider would still receive selected text under the existing consent rules.

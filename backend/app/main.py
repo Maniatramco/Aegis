@@ -207,6 +207,33 @@ def message_execution(body,owner,data):
     external_check(body.allow_external,cfg=snapshot['settings']);external_check(body.allow_external,True,snapshot['embedding_execution']['settings'])
     return [d for d in docs if d.status=='ready'],snapshot
 
+
+class TemporaryTurn(BaseModel):
+    role: str
+    text: str = Field(max_length=12000)
+
+class TemporaryMessageInput(MessageInput):
+    history: list[TemporaryTurn] = Field(default_factory=list,max_length=20)
+
+@app.post('/api/temporary-chat/messages')
+def temporary_message(body:TemporaryMessageInput,owner=Depends(auth)):
+    """No conversation, message, execution snapshot or history is persisted."""
+    if any(turn.role not in ('user','assistant') for turn in body.history):
+        raise HTTPException(400,'Temporary history supports only user and assistant turns')
+    if sum(len(turn.text) for turn in body.history)>60000:
+        raise HTTPException(400,'Start a new temporary chat; history is too long')
+    docs,snapshot=message_execution(body,owner,{})
+    try:
+        with execution_context(snapshot['embedding_execution']):sources=providers.search(body.text,owner,docs,settings()['top_k'])
+        with execution_context(snapshot):answer=providers.answer(body.text,sources,[turn.model_dump() for turn in body.history])
+    except providers.ProviderError as error:raise HTTPException(502,str(error))
+    except Exception:raise HTTPException(502,'Retrieval or generation failed; check configured provider connectivity')
+    import re
+    used={int(value) for value in re.findall(r'\[(\d+)\]',answer)}
+    citations=[{'index':index+1,**source,'url':'/api/documents/'+source['document_id']+'/preview'} for index,source in enumerate(sources) if index+1 in used]
+    return {'message':{'id':uid(),'role':'assistant','text':answer,'citations':citations,'created_at':time.time(),'mock':snapshot['settings']['model_provider']=='mock','model_selection':routing.public_selection(snapshot)},'temporary':True}
+
+
 @app.post('/api/conversations/{id}/messages')
 def message(id:str,body:MessageInput,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');lock=_locks.setdefault(id,threading.Lock())
@@ -546,3 +573,9 @@ routing.install_routes(app,auth,write_profile)
 
 from .browser_recovery import router as browser_recovery_router
 app.include_router(browser_recovery_router)
+
+
+@app.get('/api/local-models')
+def local_models(owner=Depends(auth)):
+    from . import ollama_provider
+    return ollama_provider.installed()

@@ -62,3 +62,15 @@ def embed(model,texts,timeout):
         if len(vector)!=dimension or not norm:raise OllamaError('Local Ollama returned inconsistent embeddings.')
         result.append([x/norm for x in vector])
     return result
+
+
+def installed():
+    """Read only fixed local daemon metadata; never pull or invoke a model."""
+    try:
+        with httpx.Client(timeout=3,follow_redirects=False,trust_env=False) as client:
+            response=client.get(BASE_URL+'/api/tags')
+            response.raise_for_status()
+            models=response.json().get('models',[])
+        return {'available':True,'models':[{'name':local_model_name(m['name']),'digest':m.get('digest',''),'size':m.get('size',0)} for m in models if isinstance(m,dict) and 'cloud' not in m.get('name','').lower()]}
+    except Exception:
+        return {'available':False,'models':[]}

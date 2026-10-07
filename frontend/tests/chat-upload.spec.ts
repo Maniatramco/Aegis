@@ -41,7 +41,7 @@ async function navigate(page: Page, name: string) {
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
 }
 async function openChat(page: Page, dataset: Entity) {
-  await page.goto("/");
+  await page.goto("/#Home");
   await expect(page.locator("main h1")).toHaveText("Home");
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   await navigate(page, "Ask Aegis");
@@ -488,4 +488,33 @@ test("an explicitly sent question retrieves and cites the original uploaded from
   expect(chats.filter(request => /\/messages\/stream$/.test(request.url()))).toHaveLength(1);
   expect((await documents(page, w.dataset)).map(document => document.id)).toEqual([original.id]);
   await expect(page.getByRole("button", { name: "Dismiss error" })).toHaveCount(0);
+});
+
+test("temporary chat does not save history and deletes only this session's uploads", async ({ page, workspace: w }) => {
+  const permanent = await uploadReady(page.request, w.headers, w.dataset, "Dottie-permanent-public-fixture.txt", synthetic);
+  const before = await checked(await page.request.get("/api/conversations"));
+  await page.goto("/");
+  await expect(page.locator("main h1")).toHaveText("Ask Aegis");
+  await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
+  await page.getByRole("button", { name: "Temporary chat", exact: true }).click();
+  await expect(page.getByText("Messages stay in this tab; no saved conversation history.")).toBeVisible();
+  await openUploads(page);
+  await choose(page, [file("Dottie-temporary-upload.txt", "Synthetic public fixture. Dottie's review reference is TEMP-4242.")]);
+  await dialog(page).getByRole("button", { name: "Upload 1", exact: true }).click();
+  await expect(row(page,"Dottie-temporary-upload.txt")).toContainText("Ready for questions",{timeout:90000});
+  await dialog(page).getByRole("button", { name: "Close uploads", exact: true }).click();
+  await chatConsent(page).check();
+  await page.getByLabel("Ask a question").fill("What is Dottie's review reference?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("article",{name:"Aegis answer"})).toBeVisible();
+  expect(await checked(await page.request.get("/api/conversations"))).toEqual(before);
+  await screenshot(page,"temporary-chat");
+  await page.getByRole("button", { name: /Delete this session’s 1 uploads/ }).click();
+  const confirmation=page.getByRole("dialog").filter({hasText:"Delete this session's uploads?"});
+  await confirmation.getByRole("button",{name:"Confirm",exact:true}).click();
+  await expect.poll(async()=> (await documents(page,w.dataset)).map(d=>d.id)).toEqual([permanent.id]);
+  await page.reload();
+  await expect(page.getByRole("article",{name:"Aegis answer"})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Temporary chat",exact:true})).toHaveAttribute("aria-pressed","false");
+  expect(await checked(await page.request.get("/api/conversations"))).toEqual(before);
 });

@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
     throw new Error(
       "Set AEGIS_SMOKE_PASSWORD to the disposable administrator password seeded by scripts/smoke.py.",
     );
-  await page.goto("/");
+  await page.goto("/#Home");
   await expect.poll(() => page.locator('img[src="/aegis-logo.png"]').evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
@@ -465,6 +465,7 @@ test("focused screens reveal secondary controls only when requested", async ({ p
   await page.getByLabel("Ask a question").fill("Draft survives opening and closing optional controls.");
   await scope.locator("summary").click();
   await scope.locator("summary").click();
+  if (!await page.locator(".chat-list").isVisible()) await history.click();
   await page.getByRole("button", { name: "Hide conversations", exact: true }).click();
   await history.click();
   await expect(page.getByLabel("Ask a question")).toHaveValue("Draft survives opening and closing optional controls.");

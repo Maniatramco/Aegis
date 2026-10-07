@@ -73,7 +73,7 @@ export function useDocumentUpload(options: Options) {
           if (currentSession.current !== options.sessionKey) break;
           if (!result.documents?.[0]) throw new Error("The server did not confirm a document.");
           patch(entry.id, { status: "submitted", file: undefined, document: result.documents[0] });
-          options.onUploaded(result);
+          options.onUploaded({ ...result, newUpload: true });
         } catch (error) {
           const status = (error as { status?: number }).status;
           const definite = !!status && status >= 400 && status < 500;
@@ -130,7 +130,7 @@ export function DocumentUploadPanel({ upload: u }: { upload: DocumentUploadContr
       <div className="upload-file-detail"><strong>{row.name}</strong><span className={`upload-file-status ${row.ready ? "is-ready" : ""}`} role="status">{row.label}</span>
         {(row.error || (row.failed && (row.document?.error || row.job?.error))) && <p className="upload-file-error">{row.error || row.document?.error || row.job?.error}</p>}
         {row.status === "uncertain" && <p className="upload-file-error">The original may already be stored. Check this dataset’s documents before selecting this file again to avoid a duplicate.</p>}
-        {row.processing && <progress aria-label={`Indexing ${row.name}`} max={100} value={Math.min(100, Math.max(0, Number(["queued", "running"].includes(row.job?.status) ? row.job?.progress || 0 : 0)))} />}
+        {row.processing && <progress aria-label={`Indexing ${row.name}`} />}
         {row.document && !row.processing && (row.failed || row.document.requires_reindex) && <button type="button" className="text-button" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13} />{u.retrying.includes(row.document.id) ? "Retrying…" : "Retry indexing"}</button>}
       </div>
       {!row.document && row.status !== "uploading" && <button type="button" className="btn icon" aria-label={`Remove ${row.name}`} disabled={u.uploading} onClick={() => u.remove(row.id)}><X size={16} /></button>}

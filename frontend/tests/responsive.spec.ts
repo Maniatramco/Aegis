@@ -46,7 +46,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   const report: unknown[] = [];
   for (const [width, height] of [[320, 740], [390, 844], [768, 1024], [1024, 768], [1440, 1000], [844, 390]]) {
     await page.setViewportSize({ width, height });
-    await page.goto("/");
+    await page.goto("/#Home");
     for (const name of screens) {
       await navigate(page, name);
       if (name === "Ask Aegis") {
@@ -156,7 +156,7 @@ test("drawer supports keyboard, dismissal, resize and short landscape", async ({
   if (!password) throw new Error("AEGIS_SMOKE_PASSWORD is required");
   await checked(await page.request.post("/api/auth/login", { data: { username: process.env.AEGIS_SMOKE_USERNAME || "smoke", password } }));
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.goto("/");
+  await page.goto("/#Home");
   await expect(page.locator("main h1")).toHaveText("Home");
   const trigger = page.locator(".menu-toggle");
   const sidebar = page.locator(".sidebar");

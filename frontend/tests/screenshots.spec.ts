@@ -116,7 +116,7 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   }));
 
   const inactive = await checked(await page.request.post("/api/datasets", { headers, data: { name: "Archived research · synthetic project", description: "Retained reference documents. Processing is paused.", active: false } }));
-  await page.goto("/");
+  await page.goto("/#Home");
   await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: `Open dataset ${collection}`, exact: true }).getByText("Active", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: `Open dataset ${inactive.name}`, exact: true }).getByText("Inactive", { exact: true })).toBeVisible();

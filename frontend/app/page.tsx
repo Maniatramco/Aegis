@@ -183,7 +183,7 @@ function Download({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("Home");
+  const [view, setView] = useState<View>("Ask Aegis");
   const [user, setUser] = useState<Entity | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [csrf, setCsrf] = useState("");
@@ -264,6 +264,9 @@ export default function App() {
   const [externalUpload, setExternalUpload] = useState(false);
   const [conversations, setConversations] = useState<Entity[]>([]);
   const [conversation, setConversation] = useState<Entity | null>(null);
+  const [temporary, setTemporary] = useState(false);
+  const [temporaryUploads, setTemporaryUploads] = useState<string[]>([]);
+  useEffect(() => { setTemporary(false); setTemporaryUploads([]); }, [user?.id]);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<string[]>([]);
   const [externalChat, setExternalChat] = useState(false);
@@ -468,12 +471,12 @@ export default function App() {
   const routeHandler = useRef<(hash: string) => void>(() => {});
   routeHandler.current = (hash: string) => {
     let route: string;
-    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Home"; }
+    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Ask Aegis"; }
     if (route.startsWith("dataset/")) {
       changeDataset(route.slice(8));
       setView("Datasets");
     } else {
-      const next = sections.find(s => s.name.toLowerCase() === route.toLowerCase())?.name || "Home";
+      const next = sections.find(s => s.name.toLowerCase() === route.toLowerCase())?.name || "Ask Aegis";
       setView(next);
       if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(next)) setAdminNavigation(true);
     }
@@ -527,7 +530,7 @@ export default function App() {
         setBootstrap(false);
       }
       const d = await api("/auth/login", "POST", { username, password });
-      navigate("Home");
+      navigate("Ask Aegis");
       setUser(d.user);
       setCsrf(d.csrf_token || "");
       setPassword("");
@@ -540,6 +543,7 @@ export default function App() {
     documents: docs, jobs, api, refresh: reload, pollError: documentPollError,
     onManage: () => navigate("Datasets"),
     onUploaded: data => {
+      if (temporary && data.newUpload) setTemporaryUploads(previous => [...new Set([...previous, ...(data.documents || []).map((d: Entity) => d.id)])]);
       setDocs(previous => [...(data.documents || []), ...previous.filter(d => !(data.documents || []).some((next: Entity) => next.id === d.id))]);
       setJobs(previous => [...(data.jobs || []), ...previous.filter(j => !(data.jobs || []).some((next: Entity) => next.id === j.id))]);
     },
@@ -585,6 +589,7 @@ export default function App() {
     const available = eligibleModels(dataset, "chat");
     setChatModelId(available.some(m => m.id === historicalModel) ? historicalModel : available.some(m => m.id === dataset?.default_chat_model_id) ? dataset!.default_chat_model_id : available.length === 1 ? available[0].id : "");
     setExternalChat(false);
+    setTemporary(false);
     setConversation(d);
     setLastPrompt([...(d.messages || [])].reverse().find((m: Entity) => m.role === "user")?.text || "");
     } catch (error) { if (request === conversationRequest.current) throw error; }
@@ -607,6 +612,15 @@ export default function App() {
     abort.current = new AbortController();
     try {
       let c: Entity | null = conversation ? { ...conversation, messages: (conversation.messages || []).filter((m: Entity) => !["pending-user", "streaming-answer"].includes(m.id)) } : null;
+      if (temporary) {
+        const history = (c?.messages || []).filter((m: Entity) => m.role === "user" || m.role === "assistant").slice(-20).map((m: Entity) => ({ role: m.role, text: m.text || m.content || "" }));
+        const baseMessages = [...(c?.messages || []), { id: crypto.randomUUID(), role: "user", text }];
+        const thread = c || { id: "temporary", title: "Temporary chat", dataset_id: kb };
+        setConversation({ ...thread, messages: baseMessages }); setPrompt("");
+        const result = await api("/temporary-chat/messages", "POST", { text, dataset_id: kb, document_ids: scope, model_id: chatModelId, allow_external: true, history }, abort.current.signal);
+        setConversation({ ...thread, messages: [...baseMessages, result.message] });
+        return;
+      }
       if (!c) {
         c = await api("/conversations", "POST", {
           title: text.slice(0, 70),
@@ -703,7 +717,7 @@ export default function App() {
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") {
         setError(
-          "Stopped waiting for the answer. Server or provider processing may continue. Refresh this conversation before retrying.",
+          temporary ? "Stopped waiting. Provider processing may continue, but temporary messages are not saved." : "Stopped waiting for the answer. Server or provider processing may continue. Refresh this conversation before retrying.",
         );
       } else setError(e instanceof Error ? e.message : "Question failed.");
     } finally {
@@ -1365,15 +1379,18 @@ export default function App() {
             </>
           )}
           {view === "Ask Aegis" && (
-            <FocusedChat upload={documentUpload} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
+            <FocusedChat temporary={temporary} temporaryUploadCount={temporaryUploads.length}
+              onTemporary={() => { conversationRequest.current += 1; setTemporary(!temporary); setConversation(null); setPrompt(""); setLastPrompt(""); setError(""); }}
+              onCleanup={() => setConfirm({ title: "Delete this session's uploads?", body: `Delete the ${temporaryUploads.length} documents uploaded during temporary chat, including their originals and indexes? Existing dataset documents are preserved.`, action: async () => { for (const id of [...temporaryUploads]) { try { await api(`/documents/${id}`, "DELETE"); } catch (error) { if ((error as {status?: number}).status !== 404) throw error; } setTemporaryUploads(previous => previous.filter(value => value !== id)); setScope(previous => previous.filter(value => value !== id)); } reload(); notify("This session's uploads deleted."); } })}
+              upload={documentUpload} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
               answering={answering} lastPrompt={lastPrompt} canSend={!busy && externalChat && !!selectedChatModel && !!readyDatasetDocs.length}
               externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
               scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}
               datasetControl={datasetSelect("Chat dataset")} modelControl={<ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />}
-              exportControl={conversation?.id ? <Download path={`/conversations/${conversation.id}/export`}>Export</Download> : null}
+              exportControl={!temporary && conversation?.id ? <Download path={`/conversations/${conversation.id}/export`}>Export</Download> : null}
               onNew={() => { conversationRequest.current += 1; openingConversation.current = false; setConversation(null); setPrompt(""); setLastPrompt(""); setExternalChat(false); setError(""); }}
               onOpen={id => run(() => openConversation(id))} onSend={sendMessage} onStop={() => abort.current?.abort()}
-              onReload={() => run(() => openConversation(conversation!.id))} onRefresh={reload} loading={loading} onCopy={copy}
+              onReload={() => { if (!temporary) run(() => openConversation(conversation!.id)); }} onRefresh={reload} loading={loading} onCopy={copy}
               onFeedback={(id, rating) => run(async () => { await api(`/messages/${id}/feedback`, "POST", { rating }); notify("Feedback saved."); })}
             />
           )}

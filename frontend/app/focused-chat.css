@@ -189,3 +189,5 @@
 @media(prefers-reduced-motion:reduce) {
   .focused-chat *, .chat-sources { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
 }
+
+.chat-mode{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0}.chat-mode .btn[aria-pressed=true]{background:#edf4ff;color:#1d4ed8;border-color:#bcd2f7}.temporary-notice{font-size:12px;line-height:1.6;color:#617189;margin:8px 0}.temporary-notice button{font-size:12px}

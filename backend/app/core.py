@@ -140,7 +140,7 @@ def api_key():
 def representation(r):
     return {'id':r.id,'name':r.name,'status':r.status,'kb_id':r.parent_id or None,'size':r.size,'version':r.version,'created_at':r.created_at,'updated_at':r.updated_at,'error':r.error or None}
 def job_repr(j):
-    return {'id':j.id,'kind':j.kind,'status':j.status,'progress':j.progress,'attempts':j.attempts,'error':j.error or None,'document_id':j.target_id if j.kind=='index' else None,'target_id':j.target_id,'created_at':j.created_at}
+    return {'id':j.id,'kind':j.kind,'status':j.status,'progress':j.progress,'stage':('Ready' if j.status=='completed' else 'Queued' if j.status=='queued' else ('Extracting text' if j.progress<35 else 'Indexing') if j.kind=='index' and j.status=='running' else j.status.title()),'attempts':j.attempts,'error':j.error or None,'document_id':j.target_id if j.kind=='index' else None,'target_id':j.target_id,'created_at':j.created_at}
 
 def oci_api_key():
     value=execution_secret('oci')

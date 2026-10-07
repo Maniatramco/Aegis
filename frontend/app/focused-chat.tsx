@@ -7,6 +7,7 @@ import "./focused-chat.css";
 
 type Entity = Record<string, any>;
 type Props = {
+  temporary: boolean; temporaryUploadCount: number; onTemporary: () => void; onCleanup: () => void;
   upload: DocumentUploadController;
   conversation: Entity | null; conversations: Entity[]; prompt: string; setPrompt: (value: string) => void;
   answering: boolean; lastPrompt: string; canSend: boolean; externalChat: boolean; setExternalChat: (value: boolean) => void;
@@ -21,7 +22,7 @@ export function FocusedChat(p: Props) {
   const dragDepth = useRef(0);
   const uploadDialog = useRef<HTMLDialogElement>(null);
   const attachTrigger = useRef<HTMLButtonElement>(null);
-  const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [source, setSource] = useState<Entity | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -37,7 +38,7 @@ export function FocusedChat(p: Props) {
   const sources = citations.filter((c, i) => citations.findIndex(v => (v.chunk_id || JSON.stringify(v)) === (c.chunk_id || JSON.stringify(c))) === i);
   useEffect(() => {
     const media = matchMedia("(max-width: 1100px)");
-    const sync = () => { setCompact(media.matches); setHistoryOpen(!media.matches); };
+    const sync = () => { setCompact(media.matches); setHistoryOpen(false); };
     sync(); media.addEventListener("change", sync); return () => media.removeEventListener("change", sync);
   }, []);
   useEffect(() => {
@@ -109,15 +110,18 @@ export function FocusedChat(p: Props) {
       {dragging && <div className="chat-drop-overlay" role="status"><UploadCloud size={38} /><strong>Drop documents to attach</strong><span>{p.upload.blocked || `Upload to ${p.upload.dataset?.name}`}</span><span>Review files before uploading</span></div>}
       <header className="chat-heading">
         <div className="chat-heading-row"><div className="chat-title"><button ref={historyTrigger} className="btn icon history-trigger" aria-label="Conversations" aria-expanded={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}><History size={20} /></button><h1>Ask Aegis</h1></div><div className="chat-header-actions"><button className="btn sources-toggle" onClick={() => showSource(null)}><FileText size={18} />Sources {sources.length}</button><button className="btn icon" aria-label="Refresh workspace" title="Refresh workspace" disabled={p.loading} onClick={p.onRefresh}><RefreshCw size={16} /></button></div></div>
+        <div className="chat-mode"><button type="button" className="btn" aria-pressed={p.temporary} disabled={p.answering || p.upload.uploading} onClick={p.onTemporary}>{p.temporary ? "Temporary chat · On" : "Temporary chat"}</button><span className="small muted">{p.temporary ? "Messages stay in this tab; no saved conversation history." : "Saved chat"}</span></div>
+        {p.temporary && <p className="temporary-notice">Closing or reloading clears messages. Uploaded originals and indexes remain in the dataset until you delete them. {p.temporaryUploadCount > 0 && <button className="text-button" disabled={p.answering || p.upload.uploading} onClick={p.onCleanup}>Delete this session’s {p.temporaryUploadCount} uploads</button>}</p>}
+        {!p.temporary && p.temporaryUploadCount > 0 && <p className="temporary-notice"><button className="text-button" disabled={p.answering || p.upload.uploading} onClick={p.onCleanup}>Delete this session’s {p.temporaryUploadCount} temporary uploads</button></p>}
         <div className="thread-title">{p.conversation?.title || "Your documents. A clearer answer."}</div>
-        <div className="chat-context-row"><details className="disclosure chat-scope"><summary><FileText size={17} /><span>Document scope · {p.scopeCount ? `${p.scopeCount} selected` : "All ready documents"}</span><ChevronDown size={15} /></summary><div className="scope-content"><p className="muted small">No selection searches all ready documents in this dataset.</p>{p.documentControl}</div></details>{p.conversation?.id && <div className="thread-actions"><button className="btn icon" title="Reload conversation" aria-label="Reload conversation" disabled={p.answering} onClick={p.onReload}><RefreshCw size={15} /></button>{p.exportControl}</div>}{!historyOpen && <button className="btn compact-new" aria-label="New conversation" disabled={p.answering} onClick={p.onNew}><Plus size={16} /><span>New chat</span></button>}</div>
+        <div className="chat-context-row"><details className="disclosure chat-scope"><summary><FileText size={17} /><span>Document scope · {p.scopeCount ? `${p.scopeCount} selected` : "All ready documents"}</span><ChevronDown size={15} /></summary><div className="scope-content"><p className="muted small">No selection searches all ready documents in this dataset.</p>{p.documentControl}</div></details>{!p.temporary && p.conversation?.id && <div className="thread-actions"><button className="btn icon" title="Reload conversation" aria-label="Reload conversation" disabled={p.answering} onClick={p.onReload}><RefreshCw size={15} /></button>{p.exportControl}</div>}{!historyOpen && <button className="btn compact-new" aria-label="New conversation" disabled={p.answering} onClick={p.onNew}><Plus size={16} /><span>New chat</span></button>}</div>
       </header>
       <div className="chat-messages" ref={thread} tabIndex={0} aria-label="Conversation messages" onScroll={() => { const el = thread.current!; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!atEnd.current); }}>
         {messages.length ? messages.map((m, i) => <article key={m.id || i} className={`message ${m.role === "user" ? "user" : "assistant"}`} aria-label={m.role === "user" ? "Your message" : "Aegis answer"}>
           {m.role !== "user" && <img className="answer-logo" src="/aegis-logo.png" alt="" width={38} height={38} />}
           <div className="message-body"><div className="message-label">{m.mock && <span className="pill amber">MOCK TEST OUTPUT</span>}{m.role !== "user" && recordedModel(m) && <span className="message-model">{recordedModel(m)}</span>}<span className="sr-only">{m.role === "user" ? "You" : "Aegis"}</span></div><div className="message-text">{m.text || m.content}</div>
           {!!m.citations?.length && <div className="answer-citations">{m.citations.map((c: Entity, n: number) => <button className="citation" key={n} onClick={() => showSource(c)}><FileText size={15} /><span>{c.index || n + 1} · {c.document_name || c.name || c.document_id || "Source document"}{c.page ? ` · page ${c.page}` : ""}</span></button>)}</div>}
-          {m.role !== "user" && <div className="message-actions"><button className="btn icon" title="Copy answer" aria-label="Copy answer" onClick={() => p.onCopy(m.text || m.content || "")}><Copy size={18} /></button><button className="btn icon" title="Helpful answer" aria-label="Helpful answer" disabled={m.id === "streaming-answer"} onClick={() => p.onFeedback(m.id, "up")}><ThumbsUp size={18} /></button><button className="btn icon" title="Unhelpful answer" aria-label="Unhelpful answer" disabled={m.id === "streaming-answer"} onClick={() => p.onFeedback(m.id, "down")}><ThumbsDown size={18} /></button></div>}</div>
+          {m.role !== "user" && <div className="message-actions"><button className="btn icon" title="Copy answer" aria-label="Copy answer" onClick={() => p.onCopy(m.text || m.content || "")}><Copy size={18} /></button><button className="btn icon" title="Helpful answer" aria-label="Helpful answer" disabled={p.temporary || m.id === "streaming-answer"} onClick={() => p.onFeedback(m.id, "up")}><ThumbsUp size={18} /></button><button className="btn icon" title="Unhelpful answer" aria-label="Unhelpful answer" disabled={p.temporary || m.id === "streaming-answer"} onClick={() => p.onFeedback(m.id, "down")}><ThumbsDown size={18} /></button></div>}</div>
         </article>) : <div className="chat-welcome"><img src="/aegis-logo.png" alt="" width={60} height={60} /><h2>What would you like to know?</h2><p>Choose your dataset and model below.<br />Ask a question, then explore the evidence.</p><div className="suggested-prompts">{["Summarize the key points", "What needs my attention?", "Find important dates and deadlines"].map(text => <button className="btn" key={text} onClick={() => { p.setPrompt(text); textarea.current?.focus(); }}>{text}</button>)}</div>{!p.readyCount && <p className="small muted">Add and index documents in your dataset to get started.</p>}</div>}
         <div className="answer-status" role="status">{p.answering && <><Loader2 size={16} className="animate-spin" />Retrieving evidence and generating an answer…</>}</div>
       </div>
