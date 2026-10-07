@@ -216,6 +216,7 @@
 .chat-configuration>.chat-settings,.chat-scope>.scope-content { position:absolute; top:calc(100% + 8px); left:0; width:420px; max-width:calc(100vw - 48px); max-height:min(340px,calc(100dvh - 200px)); overflow:auto; padding:18px; display:block; background:#fff; border:1px solid #dce4ef; border-radius:12px; box-shadow:0 12px 36px #0f172a1a; z-index:8; }
 .chat-settings .field,.chat-settings .model-picker { display:block; margin:0 0 16px; }
 .chat-scope>.scope-content { left:auto; right:0; }
+body .sidebar.chat-rail .admin-navigation { background:#0c274b; }
 .chat-settings label,.chat-settings .control-label { display:block; margin-bottom:7px; font-size:12px; }
 .chat-settings .model-picker>p { margin:9px 0 0; font-size:11px; }
 .chat-settings .model-readonly { padding:10px; }
