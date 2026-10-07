@@ -922,6 +922,7 @@ export default function App() {
                 {bootstrap ? "Create administrator" : "Sign in"}
               </button>
             </form>
+            {!bootstrap && <a className="recovery-entry" href="/recover-password">Forgot password?</a>}
             <div className="notice" style={{ marginTop: 26 }}>
               <KeyRound size={17} />
               <div>

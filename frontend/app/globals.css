@@ -861,3 +861,17 @@ textarea {
 @media(max-width:850px){.task-context{grid-template-columns:1fr 1fr}.task-context>.btn{grid-column:1/-1;justify-self:start}.ask-options{gap:15px}.topbar{padding:0 20px}}
 @media(max-width:560px){.task-context{grid-template-columns:1fr;gap:16px}.task-context>.btn{grid-column:auto}.ask-options{flex-direction:column;gap:0}.ask-options>.disclosure{width:100%}.ask-context{padding:18px}.page-head h1{font-size:24px}.section-tabs{gap:4px}.section-tabs .btn{padding:8px 11px}.top-actions .pill{display:none}.header-logo{width:24px;height:24px}.chat-window{min-height:440px}.nav-item{min-height:46px}}
 .task-context .model-picker{margin-bottom:0}
+
+.recovery-entry{display:block;text-align:center;margin-top:18px;color:#1d4ed8;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.recovery-shell{min-height:100vh;background:#f3f7fd;padding:40px 20px;display:flex;justify-content:center;align-items:flex-start}
+.recovery-card{width:100%;max-width:680px;background:white;border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink)}
+.recovery-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}
+.recovery-header .brand{color:#17386b;display:flex;align-items:center;gap:10px}
+.recovery-card h1{font-size:30px;line-height:1.2;margin:10px 0 12px}.recovery-card h2{font-size:18px;margin:24px 0 10px}
+.recovery-card p,.recovery-steps{line-height:1.65}.recovery-card .notice{margin:24px 0}.recovery-card .notice p{margin:0}
+.recovery-steps{padding-left:22px;margin:18px 0}.recovery-steps li{padding-left:5px;margin-bottom:14px}
+.recovery-instructions{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:24px 0}.recovery-instructions summary{font-weight:600;cursor:pointer}
+.recovery-instructions pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f7fd;padding:12px;border-radius:8px;font-size:12px;line-height:1.7}
+.recovery-instructions a{color:#1d4ed8;text-decoration:underline}.recovery-back{width:100%}
+.recovery-card :focus-visible,.recovery-entry:focus-visible{outline:3px solid #2563eb;outline-offset:4px}
+@media(max-width:560px){.recovery-shell{padding:16px 12px}.recovery-card{padding:22px 18px}.recovery-card h1{font-size:26px}}
