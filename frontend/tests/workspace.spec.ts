@@ -750,6 +750,8 @@ test("compact conversation dialog restores focus on Escape, Close and backdrop",
   await expect(history).not.toBeVisible();
   await expect(page.getByLabel("Ask a question")).toBeFocused();
   await page.setViewportSize({ width: 1440, height: 540 });
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.click();
   await expect(page.getByRole("heading", { name: "Conversations", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Manage workspace", exact: true }).click();
   const setup = page.getByRole("navigation").getByRole("button", { name: "Setup", exact: true });
