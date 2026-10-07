@@ -83,7 +83,11 @@ def test_reextract_preserves_original_reviews_versions_and_duplicate_guard(syste
     assert s.api.post(url+'/reextract',json={'version':2}).status_code==409
     assert s.api.post(url+'/reextract',json={'version':2,'confirm_reviewed':True}).status_code==200
     assert worker.run_once();assert s.api.get(url).json()['version']==3
-    assert s.api.get(url+'/versions').json()[1]['result']=={'owner':'Reviewed Alice'}
+    current=s.api.get(url).json()
+    assert current['review_status']=='unreviewed' and current['edited_fields']==[] and current['original_evidence']==[]
+    assert not any(key in current for key in ('reviewed_at','reviewed_by','evidence_notice'))
+    reviewed=s.api.get(url+'/versions').json()[1]
+    assert reviewed['result']=={'owner':'Reviewed Alice'} and reviewed['edited_fields']==['/owner']
 
 def test_failed_save_keeps_last_version(system,monkeypatch):
     s=system;d,doc,e=extracted(s);url='/api/extractions/'+e['id'];put=core.store.put_json

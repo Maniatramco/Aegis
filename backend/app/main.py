@@ -407,7 +407,9 @@ def reextract_result(id:str,body:ReextractInput,owner=Depends(auth)):
         external_check(body.allow_external,cfg=snapshot['settings'])
         with Session() as s:
             if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'An extraction job is already active')
-        data.update(result=None,evidence=[],review_status='unreviewed',previous_version=r.version,allow_external=body.allow_external,model_selection=routing.public_selection(snapshot))
+        for key in ('reviewed_at','reviewed_by','evidence_notice'):
+            data.pop(key,None)
+        data.update(result=None,evidence=[],original_evidence=[],edited_fields=[],sources=[],review_status='unreviewed',previous_version=r.version,allow_external=body.allow_external,model_selection=routing.public_selection(snapshot))
         r=routing.write_version(r,data)
         with Session.begin() as s:s.get(Record,id).status='queued'
         j=enqueue(owner,'extract',id,body.allow_external,snapshot)
