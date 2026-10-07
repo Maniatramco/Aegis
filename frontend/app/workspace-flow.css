@@ -11,3 +11,8 @@
 @media(max-width:1000px){.directory-row{grid-template-columns:1.3fr 1fr 1fr;gap:12px}.directory-actions{grid-column:1/-1}.directory-header span:last-child{display:none}.review-split{grid-template-columns:minmax(0,1fr)}.review-source iframe{height:520px}}
 @media(max-width:560px){.dataset-directory,.review-workspace{padding:16px}.directory-row{grid-template-columns:1fr 1fr;padding:16px 0}.directory-row>div:first-child{grid-column:1/-1}.directory-header{display:none}.directory-actions{grid-column:1/-1}.directory-actions .btn:not(.icon){flex:1}.review-heading{gap:14px}.review-heading>.row{width:100%;justify-content:space-between}.review-field{grid-template-columns:1fr}.review-field input{font-size:16px;min-height:44px}.review-source,.review-values{padding:14px}.review-source iframe{height:440px}.review-actions{flex-wrap:wrap}.workflow-stages{gap:2px}.workflow-stages li{font-size:11px}.workflow-stages small{font-size:10px}.chat-model-control{max-width:180px;min-width:145px;margin-left:0}.chat-model-control select{font-size:13px}.chat-mode-toggle{font-size:12px}.chat-context-row{gap:8px}.chat-model-control .model-readonly{font-size:11px}.workflow-actions .btn{flex-basis:100%}}
 @media(prefers-reduced-motion:reduce){.workflow-stages *{animation:none!important}}
+
+.chat-dataset-control{flex:1;min-width:170px;max-width:360px}.chat-dataset-control select{height:40px;width:100%;font-size:14px;color:var(--ink);border-color:var(--line);background:white}
+@media(max-width:560px){.chat-dataset-control{flex:1 1 calc(50% - 8px);min-width:140px;max-width:none}.chat-dataset-control select{font-size:13px}.chat-model-control{flex:1 1 calc(50% - 8px);min-width:140px;max-width:none}}
+
+@media(max-width:560px){.chat-refresh{display:none!important}}
