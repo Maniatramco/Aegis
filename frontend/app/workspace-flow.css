@@ -16,3 +16,5 @@
 @media(max-width:560px){.chat-dataset-control{flex:1 1 calc(50% - 8px);min-width:140px;max-width:none}.chat-dataset-control select{font-size:13px}.chat-model-control{flex:1 1 calc(50% - 8px);min-width:140px;max-width:none}}
 
 @media(max-width:560px){.chat-refresh{display:none!important}}
+
+.review-heading>div:first-child{min-width:0;max-width:100%;overflow-wrap:anywhere}
