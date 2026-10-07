@@ -1448,7 +1448,7 @@ export default function App() {
             </>
           )}
           {view === "Prompt templates" && <PromptTemplates templates={templates} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={() => { notify("Prompt template saved."); reload(); }} onUse={id => { chooseTemplate(id); setExtractionTab("Create"); navigate("Extract"); }} />}
-          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} api={api} onRefresh={reload} onConfigure={id => { changeDataset(id); setDatasetModelsFocus(true); navigate("Datasets"); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); reload(); }} />}
+          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} api={api} onRefresh={reload} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); reload(); }} />}
           {view === "Index inspector" && (
             <>
               <section className="panel">

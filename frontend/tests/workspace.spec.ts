@@ -317,6 +317,38 @@ test("saves a strict template and verifies connections without exposing a key", 
     page.getByText('"database": true', { exact: false }),
   ).toBeVisible();
 });
+test("prompt form preserves validation and versions, supports groups and nullable lists, and cancels drafts", async ({page}) => {
+  const headers=await sessionHeaders(page.request),name=`Friendly form roundtrip ${Date.now()}`;
+  const original={type:'object',properties:{total:{type:'number',minimum:0,description:'Final amount'}},required:['total'],additionalProperties:false};
+  const template=await checked(await page.request.post('/api/templates',{headers,data:{name,schema:original}}));
+  await page.reload();await navigate(page,'Prompt templates');
+  await page.getByRole('article').filter({has:page.getByRole('heading',{name,exact:true})}).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByLabel('Field guidance /total',{exact:true}).fill('Changed draft');
+  await page.getByRole('button',{name:'Cancel changes',exact:true}).click();
+  await expect(page.getByLabel('Field guidance /total',{exact:true})).toHaveValue('Final amount');
+  await page.getByRole('button',{name:'Add field',exact:true}).click();
+  await page.getByLabel('Value type /new_field',{exact:true}).selectOption('object');
+  await page.getByRole('button',{name:'Add nested field',exact:true}).click();
+  await page.getByLabel('Field name /new_field/new_field',{exact:true}).fill('reference');
+  await page.getByLabel('Extraction instructions',{exact:true}).click();
+  await page.getByLabel('Field guidance /new_field/reference',{exact:true}).fill('Copy the reference');
+  await page.getByRole('button',{name:'Add field',exact:true}).click();
+  await page.getByLabel('Value type /new_field_2',{exact:true}).selectOption('array');
+  await page.getByLabel('List item type /new_field_2',{exact:true}).selectOption('number');
+  await page.getByLabel('May be missing /new_field_2',{exact:true}).check();
+  await page.getByRole('button',{name:'Save new version',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();
+  const versions=await checked(await page.request.get(`/api/templates/${template.id}/versions`));
+  expect(versions).toHaveLength(2);expect(versions[0].schema).toEqual(original);
+  expect(versions[1].schema.properties.total).toEqual(original.properties.total);
+  expect(versions[1].schema.properties.new_field).toEqual({type:'object',description:'',properties:{reference:{type:'string',description:'Copy the reference'}},required:['reference'],additionalProperties:false});
+  expect(versions[1].schema.properties.new_field_2).toEqual({type:['array','null'],description:'',items:{type:'number'}});
+  await page.getByLabel('Field guidance /total',{exact:true}).fill('Do not save');
+  page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'Home',exact:true}).click();
+  await expect(page.getByLabel('Field guidance /total',{exact:true})).toHaveValue('Do not save');
+  await page.getByRole('button',{name:'Cancel changes',exact:true}).click();
+});
+
 test("mobile dataset and model selection fit the screen and sign out removes the session", async ({
   page,
 }) => {
