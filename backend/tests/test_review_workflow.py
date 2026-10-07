@@ -10,6 +10,26 @@ def extracted(s):
     e=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':t['id']})
     assert worker.run_once();return d,doc,s.api.get('/api/extractions/'+e['id']).json()
 
+def test_extraction_list_links_only_owned_documents_and_saved_versions(system):
+    s=system;d,doc,e=extracted(s)
+    saved=s.api.patch('/api/extractions/'+e['id'],json={'version':1,'result':{'owner':'Reviewed Alice'}}).json()
+    rows=s.api.get('/api/extractions').json()
+    item=next(r for r in rows if r['id']==e['id'])
+    assert item['document_ids']==[doc['id']] and item['version']==saved['version']
+    assert item['review_status']=='reviewed' and item['template_id']==e['template_id']
+    assert 'result' not in item and 'schema' not in item
+    s.owner='bob'
+    assert s.api.get('/api/extractions').json()==[]
+
+def test_prompt_template_instructions_reach_the_extraction_model(system,monkeypatch):
+    captured=[]
+    def extract(text,schema):
+        captured.append(text);return {'data':{'owner':'Alice'},'evidence':[]}
+    monkeypatch.setattr(providers,'extract',extract)
+    schema={'type':'object','description':'Copy the project owner exactly; never guess.','properties':{'owner':{'type':'string'}},'required':['owner'],'additionalProperties':False}
+    providers.extract_with_evidence('Alice owns the project.',schema,[])
+    assert 'Copy the project owner exactly; never guess.' in captured[0]
+
 def test_versions_conflict_schema_and_saved_exports(system):
     s=system;d,doc,e=extracted(s);url='/api/extractions/'+e['id'];original=core.store.get('documents/'+doc['id']+'/original')
     value='  =HYPERLINK("https://invalid.example")\nCafé, 東京'

@@ -5,6 +5,8 @@ import { FocusedChat } from "./focused-chat";
 import { readChatStream } from "./chat-stream";
 import { DatasetHome } from "./dataset-directory";
 import { ExtractionReview } from "./extraction-review";
+import { PromptTemplates } from "./prompt-templates";
+import { ReExtract } from "./re-extract";
 import "./workspace-flow.css";
 import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import {
@@ -55,7 +57,8 @@ type View =
   | "Datasets"
   | "Ask Aegis"
   | "Extract"
-  | "Templates"
+  | "Re-extract"
+  | "Prompt templates"
   | "Index inspector"
   | "Jobs & activity"
   | "Connections"
@@ -67,7 +70,8 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Datasets", icon: BookOpen },
   { name: "Ask Aegis", icon: MessageSquare },
   { name: "Extract", icon: FileSearch },
-  { name: "Templates", icon: FileJson },
+  { name: "Re-extract", icon: RefreshCw },
+  { name: "Prompt templates", icon: FileText },
   { name: "Index inspector", icon: Layers, group: "OPERATIONS" },
   { name: "Jobs & activity", icon: Activity },
   { name: "Connections", icon: Settings2 },
@@ -82,7 +86,8 @@ const descriptions: Record<View, string> = {
     "Onboard your data, map its models, and put a trusted source to work.",
   "Ask Aegis": "Ask across your knowledge, with evidence you can inspect.",
   Extract: "Turn document content into structured, reviewable data.",
-  Templates: "Define the fields and structure your extraction needs.",
+  "Prompt templates": "Describe what to find and choose the fields you need.",
+  "Re-extract": "Find a document and choose how to extract it again.",
   "Index inspector":
     "Inspect document chunks and the retrieval layer behind your answers.",
   "Jobs & activity": "Follow processing work and resolve what needs attention.",
@@ -281,22 +286,12 @@ export default function App() {
   const openingConversation = useRef(false);
   const [templates, setTemplates] = useState<Entity[]>([]);
   const [templateId, setTemplateId] = useState("");
-  const [templateName, setTemplateName] = useState("");
-  const [schema, setSchema] = useState(
-    json({
-      type: "object",
-      properties: {
-        invoice_number: { type: "string", description: "Invoice reference" },
-        total: { type: "number", description: "Total amount" },
-      },
-      required: ["invoice_number", "total"],
-      additionalProperties: false,
-    }),
-  );
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
   const [resultText, setResultText] = useState("");
   const reviewDirty = useRef(false);
+  const templateDirty = useRef(false);
+  const onTemplateDirty = useCallback((dirty: boolean) => { templateDirty.current = dirty; }, []);
   const onReviewDirty = useCallback((dirty: boolean) => { reviewDirty.current = dirty; }, []);
   const [temporarySession, setTemporarySession] = useState("");
   const [externalExtract, setExternalExtract] = useState(false);
@@ -441,11 +436,11 @@ export default function App() {
     return () => clearInterval(timer);
   }, [user, api]);
   const navigate = (name: View) => {
-    if (reviewDirty.current && !window.confirm("Discard unsaved extraction changes before leaving?")) return;
-    reviewDirty.current = false;
+    if ((reviewDirty.current || templateDirty.current) && !window.confirm("Discard unsaved changes before leaving?")) return;
+    reviewDirty.current = false; templateDirty.current = false;
     window.location.hash = encodeURIComponent(name);
     setView(name);
-    if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(name)) setAdminNavigation(true);
+    if (!["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(name)) setAdminNavigation(true);
     setDatasetModelsFocus(false);
     setError("");
     setMobile(false);
@@ -478,17 +473,17 @@ export default function App() {
   };
   const routeHandler = useRef<(hash: string) => void>(() => {});
   routeHandler.current = (hash: string) => {
-    if (reviewDirty.current && !window.confirm("Discard unsaved extraction changes before leaving?")) { window.history.replaceState(null, "", "#Extract"); return; }
-    reviewDirty.current = false;
+    if ((reviewDirty.current || templateDirty.current) && !window.confirm("Discard unsaved changes before leaving?")) { window.history.replaceState(null, "", "#" + encodeURIComponent(view)); return; }
+    reviewDirty.current = false; templateDirty.current = false;
     let route: string;
     try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Ask Aegis"; }
     if (route.startsWith("dataset/")) {
       changeDataset(route.slice(8));
       setView("Datasets");
     } else {
-      const next = sections.find(s => s.name.toLowerCase() === route.toLowerCase())?.name || "Ask Aegis";
+      const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Ask Aegis";
       setView(next);
-      if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(next)) setAdminNavigation(true);
+      if (!["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(next)) setAdminNavigation(true);
     }
     setMobile(false);
     setError("");
@@ -717,32 +712,7 @@ export default function App() {
       setError("Clipboard is unavailable. Select and copy the text manually.");
     }
   };
-  const chooseTemplate = (id: string) => {
-    setTemplateId(id);
-    const t = templates.find((t) => t.id === id);
-    if (t) {
-      setTemplateName(t.name);
-      setSchema(json(t.schema || t.schema_json || {}));
-    }
-  };
-  const saveTemplate = () =>
-    run(async () => {
-      let parsed;
-      try {
-        parsed = JSON.parse(schema);
-      } catch {
-        throw new Error("The schema must be valid JSON.");
-      }
-      if (!templateName.trim()) throw new Error("Give the template a name.");
-      const d = await api(
-        `/templates${templateId ? "/" + templateId : ""}`,
-        templateId ? "PUT" : "POST",
-        { name: templateName, schema: parsed },
-      );
-      setTemplateId(d.id);
-      notify(`Template saved${d.version ? " · version " + d.version : ""}.`);
-      reload();
-    });
+  const chooseTemplate = (id: string) => setTemplateId(id);
   const extract = () =>
     run(async () => {
       if (!kb || !selectedExtractModel) throw new Error("Choose a dataset and an eligible extraction model.");
@@ -903,12 +873,12 @@ export default function App() {
         </div>
         <div className="brand-sub">Document intelligence</div>
         <nav>
-          {sections.filter(s => ["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => (
+          {sections.filter(s => ["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => (
             <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{s.name}</span></button>
           ))}
           <button className="nav-item nav-more" aria-label="Manage workspace" title="Manage workspace" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} /><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
           {adminNavigation && <div id="admin-navigation" className="admin-navigation">
-            {sections.filter(s => !["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
+            {sections.filter(s => !["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
           </div>}
         </nav>
         <div className="nav-footer">
@@ -1388,18 +1358,18 @@ export default function App() {
                 <section className="panel" hidden={extractionTab !== "Create"}>
                   <h2>Create an extraction</h2>
                   <p className="muted small">
-                    Select a schema and documents. Review extracted values and
+                    Select a prompt template and documents. Review extracted values and
                     their evidence.
                   </p>
                   <Field label="Dataset">{datasetSelect("Extraction dataset")}</Field>
                   <ModelPicker dataset={selectedDataset} capability="extraction" value={extractModelId} onChange={setExtractModelId} onConfigure={configureDataset} />
-                  <Field label="Extraction template">
+                  <Field label="Prompt template">
                     <select
-                      aria-label="Extraction template"
+                      aria-label="Prompt template"
                       value={templateId}
                       onChange={(e) => chooseTemplate(e.target.value)}
                     >
-                      <option value="">Select a template</option>
+                      <option value="">Select a prompt template</option>
                       {templates.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name} · v{t.version || 1}
@@ -1477,122 +1447,8 @@ export default function App() {
               {extraction && extractionTab === "Review" && <ExtractionReview extraction={extraction} documents={docs} api={api} onDirty={onReviewDirty} onSaved={d => { setExtraction(d); setResultText(json(d.result || {})); reload(); }} />}
             </>
           )}
-          {view === "Templates" && (
-            <div className="grid2">
-              <section className="panel">
-                <div className="panel-head">
-                  <h2>Extraction schemas</h2>
-                  <button
-                    className="btn"
-                    onClick={() => {
-                      setTemplateId("");
-                      setTemplateName("");
-                      setSchema(
-                        json({
-                          type: "object",
-                          properties: {},
-                          required: [],
-                          additionalProperties: false,
-                        }),
-                      );
-                    }}
-                  >
-                    <Plus size={14} />
-                    New template
-                  </button>
-                </div>
-                {templates.length ? (
-                  templates.map((t) => (
-                    <div className="item row between" key={t.id}>
-                      <div>
-                        <h3>{t.name}</h3>
-                        <span className="muted small">
-                          Version {t.version || 1} ·{" "}
-                          {date(t.updated_at || t.created_at)}
-                        </span>
-                      </div>
-                      <div className="row">
-                        <button
-                          className="btn"
-                          onClick={() =>
-                            run(async () => {
-                              const versions = await api(
-                                `/templates/${t.id}/versions`,
-                              );
-                              setModal({
-                                title: `${t.name} · version history`,
-                                data: { versions },
-                              });
-                            })
-                          }
-                        >
-                          Versions
-                        </button>
-                        <button
-                          className="btn"
-                          onClick={() => chooseTemplate(t.id)}
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <Empty
-                    icon={FileJson}
-                    title="Reusable structure, consistent results"
-                    detail="Create a template to define what Aegis should extract."
-                  />
-                )}
-                <Notice>
-                  Use JSON Schema to define field names, types, required fields,
-                  nested objects, and arrays. Saving an existing template
-                  creates a new version.
-                </Notice>
-              </section>
-              <section className="panel">
-                <h2>{templateId ? "Edit template" : "New template"}</h2>
-                <Field label="Template name">
-                  <input
-                    aria-label="Template name"
-                    placeholder="e.g. Invoice summary"
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                  />
-                </Field>
-                <Field
-                  label="JSON Schema"
-                  help="Supported structure is validated by the server before saving. Use additionalProperties: false on every object and mark every property required. Use nullable types for values that may be missing."
-                >
-                  <textarea
-                    className="mono"
-                    aria-label="Template JSON schema"
-                    style={{ minHeight: 340 }}
-                    value={schema}
-                    onChange={(e) => setSchema(e.target.value)}
-                  />
-                </Field>
-                <div className="row">
-                  <button
-                    className="btn primary"
-                    disabled={busy}
-                    onClick={saveTemplate}
-                  >
-                    <Check size={14} />
-                    Save {templateId ? "new version" : "template"}
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={!templateId}
-                    onClick={() => navigate("Extract")}
-                  >
-                    <Play size={14} />
-                    Test with documents
-                  </button>
-                </div>
-              </section>
-            </div>
-          )}
+          {view === "Prompt templates" && <PromptTemplates templates={templates} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={() => { notify("Prompt template saved."); reload(); }} onUse={id => { chooseTemplate(id); setExtractionTab("Create"); navigate("Extract"); }} />}
+          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} api={api} onRefresh={reload} onConfigure={id => { changeDataset(id); setDatasetModelsFocus(true); navigate("Datasets"); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); reload(); }} />}
           {view === "Index inspector" && (
             <>
               <section className="panel">

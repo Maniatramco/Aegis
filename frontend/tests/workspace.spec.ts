@@ -23,7 +23,8 @@ test("navigates all workspace screens and preserves an authenticated refresh", a
     "Datasets",
     "Ask Aegis",
     "Extract",
-    "Templates",
+    "Re-extract",
+    "Prompt templates",
     "Index inspector",
     "Jobs & activity",
     "Connections",
@@ -288,22 +289,19 @@ test("saves a strict template and verifies connections without exposing a key", 
   page,
 }) => {
   const name = `Browser schema ${Date.now()}`;
-  await navigate(page, "Templates");
-  await page.getByLabel("Template name", { exact: true }).fill(name);
+  await navigate(page, "Prompt templates");
+  await page.getByLabel("Prompt template name", { exact: true }).fill(name);
+  await page.getByLabel("Extraction instructions", { exact: true }).fill("Copy the invoice reference without guessing.");
+  await page.getByRole("button", {name:"Add field",exact:true}).click();
+  await page.getByLabel("Field name /new_field",{exact:true}).fill("invoice_number");
+  await page.getByLabel("Extraction instructions",{exact:true}).click();
+  await page.getByLabel("Field guidance /invoice_number",{exact:true}).fill("Invoice reference");
   await page
-    .getByLabel("Template JSON schema")
-    .fill(
-      JSON.stringify({
-        type: "object",
-        properties: { invoice_number: { type: "string" } },
-        required: ["invoice_number"],
-        additionalProperties: false,
-      }),
-    );
-  await page
-    .getByRole("button", { name: "Save template", exact: true })
+    .getByRole("button", { name: "Save prompt template", exact: true })
     .click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  const savedTemplates=await checked(await page.request.get('/api/templates'));
+  expect(savedTemplates.find((t:{name:string})=>t.name===name).schema).toMatchObject({type:'object',description:'Copy the invoice reference without guessing.',properties:{invoice_number:{type:'string',description:'Invoice reference'}},required:['invoice_number'],additionalProperties:false});
   await navigate(page, "Connections");
   await page.getByRole("button", { name: "Providers", exact: true }).click();
   await expect(page.getByLabel("OpenAI API key", { exact: true })).toHaveValue(

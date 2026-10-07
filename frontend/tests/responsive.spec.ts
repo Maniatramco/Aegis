@@ -5,7 +5,7 @@ import { checked, seedMockCatalog, seedDataset, uploadReady, seedTemplate } from
 
 test.use({ actionTimeout: 15000 });
 const output = path.join(process.cwd(), "screenshots", "responsive");
-const screens = ["Home", "Datasets", "Ask Aegis", "Extract", "Templates", "Dashboard", "Index inspector", "Jobs & activity", "Connections", "Services & migration", "Setup"];
+const screens = ["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates", "Dashboard", "Index inspector", "Jobs & activity", "Connections", "Services & migration", "Setup"];
 async function navigate(page: Page, name: string) {
   await expect(page.locator("main h1")).toBeVisible();
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
@@ -132,13 +132,13 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   // 1440px browser at 200% zoom has a 720 CSS-pixel layout viewport.
   // This checks that reflow equivalence; it is not native browser-chrome zoom automation.
   await page.setViewportSize({ width: 720, height: 500 });
-  for (const name of ["Home", "Ask Aegis", "Extract", "Templates", "Connections", "Setup"]) {
+  for (const name of ["Home", "Ask Aegis", "Extract", "Re-extract", "Prompt templates", "Connections", "Setup"]) {
     await navigate(page, name);
     expect.soft((await geometry(page)).overflow, `${name} 200% reflow equivalent`).toEqual([]);
   }
   // Independently enlarge rendered text to 200%, including fixed-pixel declarations.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const name of ["Home", "Ask Aegis", "Extract", "Templates", "Connections", "Setup"]) {
+  for (const name of ["Home", "Ask Aegis", "Extract", "Re-extract", "Prompt templates", "Connections", "Setup"]) {
     await page.reload();
     await navigate(page, name);
     await page.evaluate(() => {

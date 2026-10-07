@@ -1,5 +1,23 @@
 import {test,expect} from "@playwright/test";
 import {checked,seedMockCatalog,seedDataset,seedTemplate,uploadReady} from "./fixtures";
+
+test("document Re-extract options preserve reviewed versions and the original through real jobs",async({page})=>{
+ const password=process.env.AEGIS_SMOKE_PASSWORD;if(!password)throw new Error('Disposable smoke password required');
+ const session=await checked(await page.request.post('/api/auth/login',{data:{username:process.env.AEGIS_SMOKE_USERNAME||'smoke',password}})),headers={'X-CSRF-Token':session.csrf_token};
+ const models=await seedMockCatalog(page.request,headers,'Re-extract regression'),dataset=await seedDataset(page.request,headers,'Re-extract synthetic '+Date.now(),[models.fast],models.embedding),doc=await uploadReady(page.request,headers,dataset,'Re-extract-safe-'+Date.now()+'.txt','Alice owns the project. Safe original reference INV-2026.'),template=await seedTemplate(page.request,headers,'Re-extract fields '+Date.now());
+ const original=await (await page.request.get(`/api/documents/${doc.id}/download`)).body();
+ await page.goto('/#Re-extract');const row=page.getByRole('article',{name:`Extraction document ${doc.name}`,exact:true});await row.getByRole('button',{name:'Extract',exact:true}).click();
+ const options=page.getByRole('dialog',{name:'Document extraction options'});await options.getByLabel('Re-extract prompt template').selectOption(template.id);
+ const creating=page.waitForResponse(r=>r.url().endsWith('/api/extractions')&&r.request().method()==='POST');await options.getByRole('button',{name:'Start extraction',exact:true}).click();const result=await checked(await creating);
+ await expect.poll(async()=> (await checked(await page.request.get(`/api/extractions/${result.id}`))).status,{timeout:90000}).toBe('ready');await page.getByRole('button',{name:'Reload extraction',exact:true}).click();
+ await page.getByLabel('Value /reference',{exact:true}).fill('Reviewed safe reference');await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();
+ await page.goto('/#Re-extract');await row.getByRole('button',{name:'Re-extract',exact:true}).click();await options.getByRole('radio',{name:/Rerun a saved extraction/}).check();await options.getByLabel('Saved extraction to rerun').selectOption(result.id);
+ page.once('dialog',d=>d.accept());await options.getByRole('button',{name:'Rerun extraction',exact:true}).click();await expect.poll(async()=> (await checked(await page.request.get(`/api/extractions/${result.id}`))).status,{timeout:90000}).toBe('ready');
+ const versions=await checked(await page.request.get(`/api/extractions/${result.id}/versions`));expect(versions).toHaveLength(3);expect(versions[1].result.reference).toBe('Reviewed safe reference');
+ await page.goto('/#Re-extract');await row.getByRole('button',{name:'Re-extract',exact:true}).click();await options.getByRole('radio',{name:/Rebuild text and index/}).check();page.once('dialog',d=>d.accept());await options.getByRole('button',{name:'Rebuild document',exact:true}).click();await expect(options.getByRole('status')).toContainText('Document processing queued');await options.getByRole('button',{name:'Done',exact:true}).click();
+ await expect.poll(async()=> (await checked(await page.request.get(`/api/documents/${doc.id}`))).status,{timeout:90000}).toBe('ready');expect(await (await page.request.get(`/api/documents/${doc.id}/download`)).body()).toEqual(original);
+ expect((await checked(await page.request.get(`/api/documents/${doc.id}`))).version).toBe(2);expect((await checked(await page.request.get(`/api/extractions/${result.id}`))).version).toBe(3);
+});
 test("saved review, source fallback, conflict, cancel and downloads use the real backend",async({page})=>{
  const password=process.env.AEGIS_SMOKE_PASSWORD;if(!password)throw new Error("Disposable smoke password required");
  const session=await checked(await page.request.post('/api/auth/login',{data:{username:process.env.AEGIS_SMOKE_USERNAME||'smoke',password}}));const headers={'X-CSRF-Token':session.csrf_token};

@@ -66,7 +66,7 @@ async function capture(page: Page, filename: string) {
   await expect.poll(() => page.locator('img[src="/aegis-logo.png"]').evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   const manage = page.getByRole("button", { name: "Manage workspace", exact: true });
   const primary = await page.locator("main h1").textContent();
-  if (["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(primary || "") && await manage.isVisible() && await manage.getAttribute("aria-expanded") === "true") await manage.click();
+  if (["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(primary || "") && await manage.isVisible() && await manage.getAttribute("aria-expanded") === "true") await manage.click();
   // Native Sources dialog makes the background inert, so use the DOM control.
   await expect(page.locator('button[aria-label="Refresh workspace"]')).toBeEnabled();
   const dismiss = page.getByRole("button", { name: "Dismiss notification" });
@@ -226,8 +226,8 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await expect(page.getByRole("heading", { name: templateName, exact: true }).first()).toBeVisible();
   await capture(page, "14-extract-history.png");
 
-  await navigate(page, "Templates");
-  await expect(page.getByLabel("Template name", { exact: true })).toHaveValue(templateName);
+  await navigate(page, "Prompt templates");
+  await expect(page.getByLabel("Prompt template name", { exact: true })).toHaveValue(templateName);
   await capture(page, "05-templates.png");
   await navigate(page, "Index inspector");
   await page.getByLabel("Document to inspect").selectOption(documents[0].id);

@@ -350,7 +350,12 @@ def template_versions(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'template');return [store.json(f'template/{id}/v{n}.json') for n in range(1,r.version+1)]
 class ExtractInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=20);template_id:str;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
 @app.get('/api/extractions')
-def extractions(owner=Depends(auth)):return [representation(r) for r in records(owner,'extraction')]
+def extractions(owner=Depends(auth)):
+    output=[]
+    for r in records(owner,'extraction'):
+        data=store.json(r.ref)
+        output.append(representation(r)|{key:data.get(key) for key in ('document_ids','template_id','template_version','review_status','model_selection')})
+    return output
 @app.post('/api/extractions')
 def create_extraction(body:ExtractInput,owner=Depends(auth)):
     t=get_record(body.template_id,owner,'template');dataset,docs=routing.documents_scope(owner,body.dataset_id,body.document_ids)

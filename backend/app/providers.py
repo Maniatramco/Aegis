@@ -230,6 +230,8 @@ def evidence_schema(schema,compact=False):
 
 def extract_with_evidence(text,schema,sources):
     instruction='Return data plus field-level evidence. Each evidence field is a JSON Pointer, chunk_id must match the supplied identifier, and quote must be a short verbatim substring from that chunk. Do not repeat equivalent evidence.\n'
+    template_instruction=('User prompt template instructions: '+str(schema['description'])+'\n') if schema.get('description') else ''
+    instruction+=template_instruction
     # Small local models can produce valid JSON while overlooking items late in
     # a long document. Collect unbounded top-level arrays in small source batches
     # and merge exact duplicates; retain the initial scalar interpretation.
@@ -254,7 +256,7 @@ def extract_with_evidence(text,schema,sources):
                 # Enumerating names and generating quotes together can distract
                 # a small model. Verify exact source matches and build the quotes
                 # here instead of asking the model to repeat all evidence.
-                extracted=extract(prompt,partial);extra={'data':{},'evidence':[]}
+                extracted=extract(template_instruction+prompt,partial);extra={'data':{},'evidence':[]}
                 for key in arrays:
                     extra['data'][key]=[]
                     for value in extracted[key]:
