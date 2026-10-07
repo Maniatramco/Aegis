@@ -55,6 +55,10 @@ docker compose start
 
 Never run `docker compose down -v` unless you intend to destroy all deployment volumes. Restore requires the original master key and reindexing all documents; see the backup runbook. Keep backups private: they contain original documents and conversation contents.
 
+## Forgotten administrator password
+
+Local SQLite installations can use the [offline operator recovery runbook](docs/PASSWORD_RECOVERY.md). It preserves the existing account and workspace, creates a private backup, and revokes existing sessions. The owner enters the new password privately; there is no unauthenticated web reset endpoint.
+
 ## Development and verification
 
 ```sh
