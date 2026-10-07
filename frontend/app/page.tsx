@@ -2132,13 +2132,14 @@ export default function App() {
                   <Field
                     label="OpenAI API key"
                     help={
-                      settings.api_key_configured
+                      settings.local_only ? "Provider credentials are disabled in this local-only workspace." : settings.api_key_configured
                         ? "A key is configured. Leave blank to keep it unchanged."
                         : "No key configured. Enter your own provider key; it is encrypted by the server."
                     }
                   >
                     <input
                       aria-label="OpenAI API key"
+                      disabled={settings.local_only}
                       type="password"
                       autoComplete="off"
                       value={apiKey}
@@ -2633,20 +2634,20 @@ export default function App() {
                     to: "Setup" as View,
                   },
                   {
-                    title: "Connect your providers",
-                    text: "Choose local embeddings or add your own OpenAI key. Keys stay encrypted on the server.",
+                    title: settings.local_only ? "Configure local models" : "Connect your providers",
+                    text: settings.local_only ? "Use installed Qwen3 or SmolLM2 through Ollama and compatible Nomic embeddings. No paid API or cloud fallback is enabled." : "Choose local embeddings or add your own OpenAI key. Keys stay encrypted on the server.",
                     action: "Configure connections",
                     to: "Connections" as View,
                   },
                   {
-                    title: "Onboard a dataset",
+                    title: "Create a dataset",
                     text: "Name your dataset, map its chat, extraction, and embedding models, then upload PDF, DOCX, or TXT files.",
                     action: "Add documents",
                     to: "Datasets" as View,
                   },
                   {
                     title: "Verify your first answer",
-                    text: "Approve external processing, ask a focused question, and inspect the cited excerpts.",
+                    text: settings.local_only ? "Ask a focused question locally and inspect its clickable source evidence." : "Approve external processing, ask a focused question, and inspect the cited excerpts.",
                     action: "Ask Aegis",
                     to: "Ask Aegis" as View,
                   },
@@ -2677,10 +2678,7 @@ export default function App() {
                 ))}
               </section>
               <Notice tone="warn">
-                Before using an external provider, review what content is sent
-                and who is billed. Aegis asks for approval for document
-                processing, chat, and extraction. Always review generated
-                answers against their original sources.
+                {settings.local_only ? "This workspace runs inference locally through Ollama. No paid API or cloud fallback is enabled. Review generated answers against their original sources." : "Before using an external provider, review what content is sent and who is billed. Aegis asks for approval for document processing, chat, and extraction. Always review generated answers against their original sources."}
               </Notice>
             </>
           )}

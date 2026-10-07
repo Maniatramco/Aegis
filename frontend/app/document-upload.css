@@ -5,7 +5,7 @@
 .shared-dropzone strong { font-size:14px; }
 .shared-dropzone input { max-width:100%; font-size:13px; }
 .upload-files { list-style:none; margin:16px 0; padding:0; max-height:240px; overflow:auto; }
-.upload-files li { display:flex; gap:10px; align-items:flex-start; border:1px solid #dfe8f7; border-radius:10px; background:#f8faff; margin-bottom:8px; padding:12px; }
+.upload-files > li { display:flex; gap:10px; align-items:flex-start; border:1px solid #dfe8f7; border-radius:10px; background:#f8faff; margin-bottom:8px; padding:12px; }
 .upload-file-icon { flex-shrink:0; color:#3668ba; padding-top:2px; }
 .upload-file-detail { min-width:0; flex:1; overflow-wrap:anywhere; }
 .upload-file-detail>strong { display:block; font-size:13px; font-weight:600; line-height:1.5; }
