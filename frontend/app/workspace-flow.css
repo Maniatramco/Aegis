@@ -18,4 +18,6 @@
 @media(max-width:560px){.chat-refresh{display:none!important}}
 
 .review-heading>div:first-child{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.review-mobile-source{display:none}
+@media(max-width:560px){.review-mobile-source{display:block}.review-mobile-source .btn{max-width:100%;white-space:normal;text-align:left}.review-source iframe{display:none}}
 @media(max-width:560px){.review-heading>.row{position:relative}.review-heading .download-results{position:static}.review-heading .download-results>div{left:0;right:auto;min-width:0;width:min(230px,100%);max-width:100%}}
