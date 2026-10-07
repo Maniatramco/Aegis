@@ -1,3 +1,19 @@
+# Private browser recovery (local SQLite)
+
+The trusted installation operator can open a private reset page while the local app runs:
+
+```powershell
+python scripts/open_password_recovery.py --database "<existing-data-folder>/control.db" --username "<existing-username>"
+```
+
+The account owner enters and confirms the new password privately in the browser. Never send passwords or recovery links in chat. The helper never prints the link; the browser removes its secret fragment immediately. Reloading or closing the page requires a fresh link.
+
+Each 256-bit capability is hashed at rest, bound to the existing administrator, expires after five minutes and works once. Issuing a new link invalidates earlier links. There is no public link-issuance endpoint. Redemption requires local-only SQLite mode, a direct loopback connection, the exact local frontend origin and a CSRF cookie/header. The frontend proxy rejects recovery requests.
+
+A protected backup is verified before resetting. The password update, old-session revocation and grant consumption commit together. Login and recovery share a filesystem lock. Identity, documents, indexes, configuration and other users remain intact. The browser never receives database paths or backup contents. This method is for the local single-computer launcher on ports 3000/8000; it is unavailable for remote or PostgreSQL deployments.
+
+## Offline recovery alternative
+
 # Local administrator password recovery
 
 If you saved your password in a password manager, try that first. Aegis stores a

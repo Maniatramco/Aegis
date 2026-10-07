@@ -191,6 +191,8 @@ export default function App() {
   const [bootstrapToken, setBootstrapToken] = useState("");
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [signInErrors, setSignInErrors] = useState<{ username?: string; password?: string; code?: string }>({});
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -820,133 +822,70 @@ export default function App() {
     );
   if (!user)
     return (
-      <div className="auth-shell">
-        <section className="auth-brand">
-          <div className="brand">
-            <span className="brandmark">
-              <img src="/aegis-logo.png" alt="" width={40} height={40} />
-            </span>
-            Aegis
-          </div>
-          <div className="auth-art">
-            <div className="eyebrow" style={{ color: "#2563eb" }}>
-              DOCUMENT INTELLIGENCE, GROUNDED.
+      <main className="login-shell">
+        <section className="login-card" aria-labelledby="login-heading">
+          <div className="login-brand"><img src="/aegis-logo.png" alt="" width={38} height={38} /><span>Aegis</span></div>
+          <h1 id="login-heading">{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
+          <p className="login-description">{bootstrap ? "Set up your first account to get started." : "Sign in to your workspace."}</p>
+          {error && <div className="login-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}
+          <form noValidate aria-busy={busy} onSubmit={e => {
+            e.preventDefault();
+            if (busy) return;
+            const next: { username?: string; password?: string; code?: string } = {};
+            if (!username.trim()) next.username = "Enter your username.";
+            if (!password) next.password = "Enter your password.";
+            else if (bootstrap && password.length < 12) next.password = "Use at least 12 characters.";
+            if (bootstrap && !bootstrapToken) next.code = "Enter your setup code.";
+            setSignInErrors(next);
+            if (Object.keys(next).length) {
+              document.getElementById(next.code ? "login-code" : next.username ? "login-username" : "login-password")?.focus();
+              return;
+            }
+            setShowPassword(false);
+            authenticate();
+          }}>
+            {bootstrap && <div className="field">
+              <label htmlFor="login-code">Bootstrap token</label>
+              <input id="login-code" autoComplete="off" type="password" value={bootstrapToken} required
+                aria-invalid={!!signInErrors.code} aria-describedby={signInErrors.code ? "login-code-error" : "login-code-help"}
+                onChange={e => { setBootstrapToken(e.target.value); setSignInErrors(current => ({ ...current, code: undefined })); setError(""); }} />
+              <small id="login-code-help">Use the one-time setup code from your installation.</small>
+              {signInErrors.code && <small className="field-error" id="login-code-error">{signInErrors.code}</small>}
+            </div>}
+            <div className="field">
+              <label htmlFor="login-username">Username</label>
+              <input id="login-username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} required
+                aria-invalid={!!signInErrors.username} aria-describedby={signInErrors.username ? "login-username-error" : undefined}
+                onChange={e => { setUsername(e.target.value); setSignInErrors(current => ({ ...current, username: undefined })); setError(""); }} />
+              {signInErrors.username && <small className="field-error" id="login-username-error">{signInErrors.username}</small>}
             </div>
-            <h1>
-              Your knowledge.
-              <br />
-              Clear answers.
-              <br />A source for each.
-            </h1>
-            <p>
-              A private workspace for document search, grounded conversations,
-              and structured extraction. Originals stay safely stored,
-              independent of your search index.
-            </p>
-            <div className="row" style={{ marginTop: 34, color: "#4a6387" }}>
-              <Shield size={18} />
-              <span className="small">
-                Local-first · Your providers · Your control
-              </span>
-            </div>
-          </div>
-          <span className="small" style={{ color: "#7085a7" }}>
-            AEGIS / DOCUMENT INTELLIGENCE WORKSPACE
-          </span>
-        </section>
-        <section className="auth-form">
-          <div>
-            <div className="eyebrow">WELCOME TO AEGIS</div>
-            <h1>{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
-            <p className="muted" style={{ marginBottom: 30 }}>
-              {bootstrap
-                ? "Set up your first administrator account."
-                : "Sign in to your document intelligence workspace."}
-            </p>
-            {error && <Notice tone="error">{error}</Notice>}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                authenticate();
-              }}
-            >
-              {bootstrap && (
-                <Field
-                  label="Bootstrap token"
-                  help="Use AEGIS_BOOTSTRAP_TOKEN from your deployment environment."
-                >
-                  <input
-                    aria-label="Bootstrap token"
-                    type="password"
-                    autoComplete="off"
-                    value={bootstrapToken}
-                    onChange={(e) => setBootstrapToken(e.target.value)}
-                    required
-                  />
-                </Field>
-              )}
-              <Field label="Username">
-                <input
-                  aria-label="Username"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                />
-              </Field>
-              <Field
-                label="Password"
-                help={bootstrap ? "Use a strong, unique password." : ""}
-              >
-                <input
-                  aria-label="Password"
-                  autoComplete={bootstrap ? "new-password" : "current-password"}
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={bootstrap ? 12 : 1}
-                />
-              </Field>
-              <button
-                className="btn primary"
-                type="submit"
-                disabled={busy}
-                style={{ width: "100%", padding: 13 }}
-              >
-                {busy ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <ArrowRight size={16} />
-                )}{" "}
-                {bootstrap ? "Create administrator" : "Sign in"}
-              </button>
-            </form>
-            {!bootstrap && <a className="recovery-entry" href="/recover-password">Forgot password?</a>}
-            <div className="notice" style={{ marginTop: 26 }}>
-              <KeyRound size={17} />
-              <div>
-                No API key is needed to store documents. Add your own provider
-                key in Connections when you’re ready. Keys stay encrypted on the
-                server.
+            <div className="field">
+              <label htmlFor="login-password">Password</label>
+              <div className="login-password-entry">
+                <input id="login-password" autoComplete={bootstrap ? "new-password" : "current-password"} type={showPassword ? "text" : "password"}
+                  value={password} required minLength={bootstrap ? 12 : 1} maxLength={200}
+                  aria-invalid={!!signInErrors.password} aria-describedby={signInErrors.password ? "login-password-error" : undefined}
+                  onChange={e => { setPassword(e.target.value); setSignInErrors(current => ({ ...current, password: undefined })); setError(""); }} />
+                <button type="button" className="login-password-toggle" aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-controls="login-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)} disabled={busy}>
+                  {showPassword ? "Hide" : "Show"}
+                </button>
               </div>
+              {signInErrors.password && <small className="field-error" id="login-password-error">{signInErrors.password}</small>}
             </div>
-            <button
-              className="btn"
-              style={{ width: "100%" }}
-              onClick={() => {
-                setBootstrap(!bootstrap);
-                setError("");
-              }}
-            >
-              {bootstrap
-                ? "Already configured? Sign in"
-                : "First run? Set up administrator"}
+            <button className="btn primary login-submit" type="submit" disabled={busy}>
+              {busy && <Loader2 size={17} className="animate-spin" aria-hidden="true" />}
+              {busy ? (bootstrap ? "Creating account..." : "Signing in...") : (bootstrap ? "Create administrator" : "Sign in")}
             </button>
-          </div>
+          </form>
+          {!bootstrap && <a className="recovery-entry" href="/recover-password">Forgot password?</a>}
+          {bootstrap && <button className="login-switch" type="button" onClick={() => {
+            setBootstrap(false); setPassword(""); setShowPassword(false); setSignInErrors({}); setError("");
+          }}>Already configured? Sign in</button>}
         </section>
-      </div>
+      </main>
     );
+
   return (
     <>
       {drawerOpen && <div className="navigation-backdrop" aria-hidden="true" onClick={() => setMobile(false)} />}

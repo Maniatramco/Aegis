@@ -12,6 +12,8 @@ SCRIPT = Path(__file__).resolve().parents[2] / 'scripts/reset_admin_password.py'
 spec = importlib.util.spec_from_file_location('recovery', SCRIPT)
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)
+cli = r
+r = cli.recovery
 PASSWORD = 'synthetic-new-password-only'
 
 
@@ -126,10 +128,10 @@ def test_session_revocation_failure_rolls_back_password(database):
 
 def test_cli_requires_stopped_services_and_tty(database, monkeypatch, capsys):
     args = ['--database',str(database),'--username','operator']
-    assert r.main(args) == 1
-    monkeypatch.setattr(r, 'check_local_services', lambda: None)
+    assert cli.main(args) == 1
+    monkeypatch.setattr(cli, 'check_local_services', lambda: None)
     monkeypatch.setattr(sys, 'stdin', io.StringIO(PASSWORD))
-    assert r.main(args+['--services-stopped']) == 1
+    assert cli.main(args+['--services-stopped']) == 1
     output = capsys.readouterr()
     assert PASSWORD not in output.out + output.err
     assert not list(database.parent.glob('password-recovery-*'))
@@ -138,18 +140,18 @@ def test_cli_requires_stopped_services_and_tty(database, monkeypatch, capsys):
 @pytest.mark.parametrize('mode', ['cancel', 'mismatch', 'warning', 'eof', 'success'])
 def test_interactive_prompt_contract(database, monkeypatch, capsys, mode):
     before = snapshot(database)
-    monkeypatch.setattr(r, 'check_local_services', lambda: None)
+    monkeypatch.setattr(cli, 'check_local_services', lambda: None)
     monkeypatch.setattr(sys.stdin, 'isatty', lambda: True)
     values = iter([PASSWORD, 'wrong' if mode=='mismatch' else PASSWORD])
     def prompt(_):
         if mode == 'warning':
-            r.warnings.warn('unhidden input', r.getpass.GetPassWarning)
+            cli.warnings.warn('unhidden input', cli.getpass.GetPassWarning)
         if mode == 'eof':
             raise EOFError
         return next(values)
-    monkeypatch.setattr(r.getpass, 'getpass', prompt)
+    monkeypatch.setattr(cli.getpass, 'getpass', prompt)
     monkeypatch.setattr('builtins.input', lambda _: 'no' if mode=='cancel' else 'RESET')
-    result = r.main(['--database',str(database),'--username','operator','--services-stopped'])
+    result = cli.main(['--database',str(database),'--username','operator','--services-stopped'])
     assert result == (0 if mode=='success' else 1)
     if mode != 'success':
         assert snapshot(database) == before
@@ -163,9 +165,9 @@ def test_listening_service_blocks_recovery(monkeypatch):
         def __exit__(self, *args): pass
         def settimeout(self, value): pass
         def connect_ex(self, address): return 0
-    monkeypatch.setattr(r.socket, 'socket', Listening)
+    monkeypatch.setattr(cli.socket, 'socket', Listening)
     with pytest.raises(r.RecoveryError, match='Stop Aegis'):
-        r.check_local_services()
+        cli.check_local_services()
 
 
 def test_password_argument_is_not_supported():

@@ -81,12 +81,13 @@ def login(body:Credentials,response:Response,request:Request):
     attempts=[t for t in _login_attempts.get(client,[]) if t>now-300]
     if len(attempts)>=15:raise HTTPException(429,'Too many login attempts; try again in five minutes')
     _login_attempts[client]=attempts+[now]
-    with Session.begin() as s:
-        u=s.scalar(select(User).where(User.username==body.username))
-        if not u or not password_valid(body.password,u.password_hash):raise HTTPException(401,'Invalid username or password')
-        token=secrets.token_urlsafe(40);csrf=secrets.token_urlsafe(32)
-        s.add(Login(id=hashlib.sha256(token.encode()).hexdigest(),owner=u.id,expires=now+43200,csrf=csrf))
-        user={'id':u.id,'username':u.username}
+    with document_lock('administrator-auth'):
+        with Session.begin() as s:
+            u=s.scalar(select(User).where(User.username==body.username))
+            if not u or not password_valid(body.password,u.password_hash):raise HTTPException(401,'Invalid username or password')
+            token=secrets.token_urlsafe(40);csrf=secrets.token_urlsafe(32)
+            s.add(Login(id=hashlib.sha256(token.encode()).hexdigest(),owner=u.id,expires=now+43200,csrf=csrf))
+            user={'id':u.id,'username':u.username}
     _login_attempts.pop(client,None)
     response.set_cookie('aegis_session',token,httponly=True,secure=os.getenv('COOKIE_SECURE','false')=='true',samesite='strict',max_age=43200,path='/')
     return {'user':user,'csrf_token':csrf}
@@ -542,3 +543,6 @@ def export_profile(id:str,owner=Depends(auth)):
 
 
 routing.install_routes(app,auth,write_profile)
+
+from .browser_recovery import router as browser_recovery_router
+app.include_router(browser_recovery_router)
