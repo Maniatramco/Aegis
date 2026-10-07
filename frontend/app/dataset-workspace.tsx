@@ -76,7 +76,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
         <div className="row dataset-create-actions"><button type="button" className="btn" onClick={() => setCreating(false)}>Cancel</button><button className="btn primary" disabled={busy || !name.trim()}>Create dataset <ArrowRight size={14} /></button></div>
       </form>
     </section> : showList || !dataset ? <>
-      {datasets.length > 0 && <DirectoryRows datasets={datasets} documents={documents} onChat={id=>{onSelect(id);onUse("Ask Aegis");}}/>}
+      {datasets.length > 0 && <DirectoryRows datasets={datasets} documents={documents} onOpen={openDataset} onChat={id=>{onSelect(id);onUse("Ask Aegis");}}/>}
       <div className="dataset-grid" hidden={datasets.length>0}>
         {visibleDatasets.map(d => {
           const all = documents.filter(doc => (doc.dataset_id || doc.kb_id) === d.id);

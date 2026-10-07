@@ -797,7 +797,7 @@ export default function App() {
               onChange={() => selectDoc(d.id)}
             />
             <span>
-              {d.name} <span className="muted">· {d.requires_reindex ? "reindex required" : d.status}</span>
+              {d.name} <span className="muted">· {d.status === "ready" && d.requires_reindex ? "reindex required" : d.status}</span>
             </span>
           </label>
         ))
@@ -1305,7 +1305,7 @@ export default function App() {
                               </div>
                             </td>
                             <td>
-                              <Status value={d.requires_reindex ? "reindex_required" : d.status} />
+                              <Status value={d.status === "ready" && d.requires_reindex ? "reindex_required" : d.status} />
                             </td>
                             <td className="muted">{byteSize(d.size)}</td>
                             <td className="muted">{date(d.created_at)}</td>

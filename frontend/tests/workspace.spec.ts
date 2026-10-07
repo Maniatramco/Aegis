@@ -146,7 +146,7 @@ async function navigate(page: Page, name: string) {
 }
 
 async function openDocumentScope(page: Page) {
-  const details = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Document scope/ }) });
+  const details = page.locator(".chat-scope");
   if (!await details.evaluate(el => el.hasAttribute("open"))) await details.locator("summary").click();
 }
 
@@ -209,7 +209,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "All datasets", exact: true }).click();
-  await expect(page.getByRole("link", { name: unavailable.name, exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Open dataset ${unavailable.name}`, exact: true })).toBeVisible();
   await expect(page.getByRole("button", {name:"Open chat",exact:true})).not.toHaveCount(0);
   await navigate(page, "Ask Aegis");
 
@@ -330,7 +330,7 @@ test("mobile dataset and model selection fit the screen and sign out removes the
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
   await navigate(page, "Datasets");
-  await page.getByRole("button", { name: `Open dataset ${dataset.name}`, exact: true }).first().click();
+  await page.getByRole("link", { name: `Open dataset ${dataset.name}`, exact: true }).first().click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Map models", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
@@ -443,7 +443,7 @@ test("focused screens reveal secondary controls only when requested", async ({ p
   await expect(manage).toHaveAttribute("aria-expanded", "false");
 
   await navigate(page, "Datasets");
-  const cards = page.getByRole("button", { name: /^Open dataset / });
+  const cards = page.getByRole("link", { name: /^Open dataset / });
   await expect(cards.first()).toBeVisible();
   await expect(page.locator(".dataset-detail")).not.toBeVisible();
   await page.getByLabel("Search datasets", { exact: true }).fill("no-dataset-matches-this-qa-query");
@@ -460,7 +460,7 @@ test("focused screens reveal secondary controls only when requested", async ({ p
   await expect(cards.first()).toBeVisible();
 
   await navigate(page, "Ask Aegis");
-  const scope = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Document scope/ }) });
+  const scope = page.locator(".chat-scope");
   const history = page.getByRole("button", { name: "Conversations", exact: true });
   await expect(scope).not.toHaveAttribute("open", "");
   await page.getByLabel("Ask a question").fill("Draft survives opening and closing optional controls.");

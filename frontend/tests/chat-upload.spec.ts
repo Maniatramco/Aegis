@@ -30,7 +30,7 @@ const synthetic = "SYNTHETIC UI TEST. Review reference ATTACH-2026. Source origi
 const file = (name: string, content = synthetic) => ({ name, mimeType: "text/plain", buffer: Buffer.from(content) });
 const dialog = (page: Page) => page.getByRole("dialog", { name: "Attach documents", exact: true });
 const chatConsent = (page: Page) => page.getByRole("checkbox", { name: /I approve sending this request/ });
-const row = (page: Page, name: string) => dialog(page).getByRole("listitem").filter({ has: page.getByText(name, { exact: true }) });
+const row = (page: Page, name: string) => dialog(page).locator(".upload-files > li").filter({ has: page.getByText(name, { exact: true }) });
 const isUpload = (request: Request) => new URL(request.url()).pathname === "/api/documents/upload" && request.method() === "POST";
 const isChatWrite = (request: Request) => /^\/api\/conversations(?:\/|$)/.test(new URL(request.url()).pathname) && request.method() === "POST";
 async function navigate(page: Page, name: string) {
@@ -157,7 +157,7 @@ test("dropping into chat and the panel requires explicit upload", async ({ page,
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator(".chat-drop-overlay")).toHaveCount(0);
   await drop(page, dialog(page).locator(".shared-dropzone"), [file("Dropped-panel-evidence.txt")]);
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(2);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(2);
   expect(uploads).toEqual([]);
   await dialog(page).getByRole("button", { name: "Upload 2", exact: true }).click();
   for (const name of ["Dropped-chat-evidence.txt", "Dropped-panel-evidence.txt"]) await expect(row(page, name)).toContainText("Ready for questions", { timeout: 90000 });
@@ -216,13 +216,13 @@ test("invalid extension, empty files, configured size and twenty-file limit neve
   for (const name of ["Unsupported.csv", "Empty.txt", "Too-large.txt"]) await dialog(page).getByRole("button", { name: `Remove ${name}`, exact: true }).click();
   await choose(page, Array.from({ length: 21 }, (_, i) => file(`Synthetic-batch-${i + 1}.txt`)));
   await expect(dialog(page).getByRole("alert")).toContainText("Choose at most 20 files at once");
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(0);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
   await choose(page, Array.from({ length: 20 }, (_, i) => file(`Synthetic-batch-${i + 1}.txt`)));
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(20);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(20);
   await expect(dialog(page).getByRole("button", { name: "Upload 20", exact: true })).toBeEnabled();
   await choose(page, [file("One-too-many.txt")]);
   await expect(dialog(page).getByRole("alert")).toContainText("Choose at most 20 files at once");
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(20);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(20);
   expect(uploads).toEqual([]);
   expect(await documents(page, w.dataset)).toEqual([]);
 });
@@ -344,7 +344,7 @@ test("close, navigation and dataset change during delayed upload preserve destin
     await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.other.id);
     await openUploads(page);
     await expect(dialog(page)).toContainText(w.other.name);
-    await expect(dialog(page).getByRole("listitem")).toHaveCount(0);
+    await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
     release();
     await expect(dialog(page).getByRole("alert")).toContainText("Remaining files were not uploaded");
     expect(attempts).toBe(1);
@@ -377,7 +377,7 @@ test("mobile dialog fits narrow and landscape screens with keyboard focus and di
   await expect(dialog(page)).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(1);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(1);
   await upload.click();
   await expect(dialog(page).getByText("Ready for questions", { exact: true })).toBeVisible({ timeout: 90000 });
   await screenshot(page, "mobile-ready");
@@ -415,7 +415,7 @@ test("missing, inactive and unmapped datasets block attachments until a configur
   await expect(dialog(page).getByLabel("Choose documents", { exact: true })).toBeDisabled();
   await expect(dialog(page).getByRole("button", { name: /^Upload\s*$/ })).toBeDisabled();
   await drop(page, dialog(page).locator(".shared-dropzone"), [file("Must-not-upload.txt")]);
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(0);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
   expect(await documents(page, unmapped)).toEqual([]);
   await page.keyboard.press("Escape");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
