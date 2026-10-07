@@ -76,7 +76,7 @@ test("login reports rejected synthetic credentials without leaving the form", as
   await page.getByLabel("Username", { exact: true }).fill("nonexistent-synthetic-user");
   await page.getByLabel("Password", { exact: true }).fill("wrong-synthetic-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Invalid username or password");
+  await expect(page.locator("main").getByRole("alert")).toContainText("Invalid username or password");
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeEnabled();
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
   await expect(page.getByRole("link", { name: "Forgot password?", exact: true })).toBeVisible();
@@ -95,11 +95,11 @@ test("private recovery form scrubs the capability, validates and confirms succes
   await expect(page.getByLabel("New password", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/recover-password$/);
   await page.getByRole("button", { name: "Reset password", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("12 to 200");
+  await expect(page.locator("main").getByRole("alert")).toContainText("12 to 200");
   await page.getByLabel("New password", { exact: true }).fill("synthetic-Dottie-password");
   await page.getByLabel("Confirm new password", { exact: true }).fill("different-synthetic-password");
   await page.getByRole("button", { name: "Reset password", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("do not match");
+  await expect(page.locator("main").getByRole("alert")).toContainText("do not match");
   expect(resets).toBe(0);
   await page.getByLabel("Confirm new password", { exact: true }).fill("synthetic-Dottie-password");
   await page.getByRole("button", { name: "Show passwords", exact: true }).click();
@@ -121,7 +121,7 @@ test("private recovery form scrubs the capability, validates and confirms succes
 test("expired private recovery link gives a recoverable error without a reset form", async ({ page }) => {
   await page.route("http://127.0.0.1:8000/api/auth/recovery/prepare", route => route.fulfill({ status: 403, json: { detail: "This recovery link is invalid or expired. Open a new private link." } }));
   await page.goto("/recover-password#recovery=synthetic-expired-capability-aaaaaaaaaaaaaaaaa");
-  await expect(page.getByRole("alert")).toContainText("expired");
+  await expect(page.locator("main").getByRole("alert")).toContainText("expired");
   await expect(page.locator("input")).toHaveCount(0);
   await expect(page).toHaveURL(/\/recover-password$/);
   await page.getByRole("link", { name: "Back to sign in" }).click();
