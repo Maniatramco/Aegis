@@ -81,11 +81,13 @@ def test_reextract_preserves_original_reviews_versions_and_duplicate_guard(syste
     assert core.store.get('documents/'+did+'/versions/v1/parsed.json')
     assert s.api.get(url).json()['result']=={'owner':'Reviewed Alice'}
     assert s.api.post(url+'/reextract',json={'version':2}).status_code==409
-    assert s.api.post(url+'/reextract',json={'version':2,'confirm_reviewed':True}).status_code==200
+    queued=s.api.post(url+'/reextract',json={'version':2,'confirm_reviewed':True});assert queued.status_code==200
+    assert not any(key in queued.json() for key in ('reviewed_at','reviewed_by','evidence_notice'))
     assert worker.run_once();assert s.api.get(url).json()['version']==3
     current=s.api.get(url).json()
     assert current['review_status']=='unreviewed' and current['edited_fields']==[] and current['original_evidence']==[]
-    assert not any(key in current for key in ('reviewed_at','reviewed_by','evidence_notice'))
+    assert not any(key in current for key in ('reviewed_at','reviewed_by'))
+    assert current['evidence_notice'].startswith('Review all values.')
     reviewed=s.api.get(url+'/versions').json()[1]
     assert reviewed['result']=={'owner':'Reviewed Alice'} and reviewed['edited_fields']==['/owner']
 
