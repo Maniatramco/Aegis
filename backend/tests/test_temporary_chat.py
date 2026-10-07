@@ -50,8 +50,8 @@ def test_scoped_upload_cleanup_preserves_existing_dataset_documents(system):
     assert system.api.get('/api/documents/'+existing['id']).json()['status']=='ready'
     assert request(system,d).json()['message']['citations'][0]['document_id']==existing['id']
 
-@pytest.mark.parametrize('status,progress,stage',[('queued',0,'Queued'),('running',10,'Extracting text'),('running',35,'Indexing'),('running',95,'Indexing'),('completed',100,'Ready'),('failed',35,'Failed')])
-def test_index_stages_reflect_worker_checkpoints(status,progress,stage):
+@pytest.mark.parametrize('status,progress,stage',[('queued',0,'Queued'),('running',10,'Running'),('running',35,'Running'),('running',95,'Running'),('completed',100,'Ready'),('failed',35,'Failed')])
+def test_legacy_job_does_not_invent_stages_from_percentages(status,progress,stage):
     from types import SimpleNamespace
     j=SimpleNamespace(id='synthetic',kind='index',status=status,progress=progress,attempts=1,error='',target_id='doc',created_at=0)
     assert core.job_repr(j)['stage']==stage

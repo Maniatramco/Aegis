@@ -8,6 +8,7 @@ type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
 type Entry = { id: string; datasetId: string; file?: File; name: string; size: number; status: "selected" | "invalid" | "uploading" | "submitted" | "failed" | "uncertain"; error?: string; document?: Entity };
 type Options = {
   dataset?: Entity; enabled: boolean; externalRequired: boolean; consent: boolean; setConsent: (value: boolean) => void;
+  temporarySessionId?: string;
   maxMb: number; contextKey: string; sessionKey: string; documents: Entity[]; jobs: Entity[]; api: Api; onUploaded: (data: Entity) => void;
   refresh: () => void; onManage: () => void; pollError: boolean;
 };
@@ -68,6 +69,7 @@ export function useDocumentUpload(options: Options) {
         body.append("files", entry.file!);
         body.append("dataset_id", datasetId);
         body.append("allow_external", String(options.consent));
+        if (options.temporarySessionId) body.append("temporary_session_id", options.temporarySessionId);
         try {
           const result = await options.api("/documents/upload", "POST", body);
           if (currentSession.current !== options.sessionKey) break;
@@ -90,15 +92,25 @@ export function useDocumentUpload(options: Options) {
     if (options.externalRequired && !options.consent) { setNotice("Approve the external processing notice before retrying indexing."); return; }
     retryLocks.current.add(document.id); setRetrying(ids => [...ids, document.id]); setNotice("");
     try {
-      const job = await options.api(`/documents/${document.id}/reindex`, "POST", { allow_external: options.consent });
+      const failed = options.jobs.filter(j => j.target_id === document.id && ["failed","cancelled"].includes(j.status)).sort((a,b) => b.created_at-a.created_at)[0];
+      const job = failed ? await options.api(`/jobs/${failed.id}/retry`, "POST", {}) : await options.api(`/documents/${document.id}/reindex`, "POST", { allow_external: options.consent });
       if (currentSession.current !== options.sessionKey) return;
       options.onUploaded({ documents: [{ ...document, status: "queued", error: null }], jobs: [job] });
     } catch (error) { if (currentSession.current === options.sessionKey) setNotice(error instanceof Error ? error.message : "Could not retry indexing. Check the document status before trying again."); }
     finally { retryLocks.current.delete(document.id); setRetrying(ids => ids.filter(id => id !== document.id)); options.refresh(); }
   };
+  const reextract = async (document: Entity) => {
+    if (retryLocks.current.has(document.id) || blocked) return;
+    if (!window.confirm("Re-extract text and rebuild the dependent index? The original and prior parsed versions are retained. Existing reviewed structured results are preserved; rerun them separately to replace edits.")) return;
+    retryLocks.current.add(document.id); setRetrying(ids => [...ids,document.id]); setNotice("");
+    try { const job = await options.api(`/documents/${document.id}/reextract`, "POST", {allow_external:options.consent,confirm_reviewed:true}); options.onUploaded({documents:[{...document,status:"queued",error:null}],jobs:[job]}); }
+    catch(error) { setNotice((error as Error).message); }
+    finally { retryLocks.current.delete(document.id); setRetrying(ids => ids.filter(id => id!==document.id)); options.refresh(); }
+  };
   const trackedIds = new Set(selected.flatMap(e => e.document ? [e.document.id] : []));
+  const keep = async (document:Entity) => {setNotice("");try{await options.api(`/documents/${document.id}/keep`,"POST",{});}catch(error){setNotice((error as Error).message);}finally{options.refresh();}};
   // Pending/failed persisted documents remain visible after refresh or navigation.
-  const recovered: Entry[] = options.documents.filter(d => (d.dataset_id || d.kb_id) === datasetId && !trackedIds.has(d.id) && (["queued", "processing", "failed", "cancelled"].includes(d.status) || d.requires_reindex)).map(d => ({ id: d.id, datasetId, name: d.name, size: d.size, status: "submitted", document: d }));
+  const recovered: Entry[] = options.documents.filter(d => (d.dataset_id || d.kb_id) === datasetId && !trackedIds.has(d.id)).map(d => ({ id: d.id, datasetId, name: d.name, size: d.size, status: "submitted", document: d }));
   const rows = [...selected, ...recovered].map(entry => {
     const document = entry.document && options.documents.find(d => d.id === entry.document!.id);
     const job = document && options.jobs.filter(j => (j.document_id || j.target_id) === document.id && j.kind === "index").sort((a, b) => b.created_at - a.created_at)[0];
@@ -111,7 +123,7 @@ export function useDocumentUpload(options: Options) {
   });
   const processing = rows.filter(r => r.status === "uploading" || r.processing).length;
   const summary = uploading ? `Uploading to ${uploadDestination}…` : processing ? `${processing} indexing` : pending.length ? `${pending.length} selected` : rows.some(r => r.status === "invalid" || r.status === "failed" || r.status === "uncertain" || r.failed || r.document?.requires_reindex) ? "Needs attention" : rows.some(r => r.ready) ? "Documents ready" : "";
-  return { ...options, datasetId, blocked, rows, notice, uploading, uploadDestination, retrying, pending, summary, choose, start, retryIndex, remove: (id: string) => { if (!inFlight.current) setEntries(previous => previous.filter(e => e.id !== id)); } };
+  return { ...options, datasetId, blocked, rows, notice, uploading, uploadDestination, retrying, pending, summary, choose, start, retryIndex, reextract, keep, remove: (id: string) => { if (!inFlight.current) setEntries(previous => previous.filter(e => e.id !== id)); } };
 }
 export type DocumentUploadController = ReturnType<typeof useDocumentUpload>;
 
@@ -129,9 +141,11 @@ export function DocumentUploadPanel({ upload: u }: { upload: DocumentUploadContr
       <div className="upload-file-icon">{row.ready ? <CheckCircle2 size={19} /> : row.status === "uploading" || row.processing ? <Loader2 className="animate-spin" size={19} /> : <FileText size={19} />}</div>
       <div className="upload-file-detail"><strong>{row.name}</strong><span className={`upload-file-status ${row.ready ? "is-ready" : ""}`} role="status">{row.label}</span>
         {(row.error || (row.failed && (row.document?.error || row.job?.error))) && <p className="upload-file-error">{row.error || row.document?.error || row.job?.error}</p>}
+        {row.document?.index_notice && <p className="small muted">{row.document.index_notice}</p>}
         {row.status === "uncertain" && <p className="upload-file-error">The original may already be stored. Check this dataset’s documents before selecting this file again to avoid a duplicate.</p>}
-        {row.processing && <progress aria-label={`Indexing ${row.name}`} />}
-        {row.document && !row.processing && (row.failed || row.document.requires_reindex) && <button type="button" className="text-button" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13} />{u.retrying.includes(row.document.id) ? "Retrying…" : "Retry indexing"}</button>}
+        {row.document && <><ol className="workflow-stages" aria-label={`Processing ${row.name}`}>{["upload","extract","index","ready"].map(stage=>{const actual=row.job?.workflow?.stages?.[stage];const status=stage==="upload"?"completed":actual?.status || (stage==="ready"&&row.ready?"completed":"unknown");return <li key={stage} className={`stage-${status}`}><span className="stage-symbol">{status==="completed"?<CheckCircle2 size={21}/>:status==="failed"?<AlertCircle size={21}/>:status==="running"?<Loader2 className="animate-spin" size={21}/>:<span className="stage-dot"/>}</span><strong>{stage[0].toUpperCase()+stage.slice(1)}</strong><small>{status==="unknown"?"Details unavailable":status}</small></li>;})}</ol>
+        {row.job?.workflow?.notice && <p className="small muted">{row.job.workflow.notice}</p>}
+        <div className="workflow-actions">{!row.processing && (row.failed || row.document.requires_reindex) && <button type="button" className="btn primary" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13}/>{u.retrying.includes(row.document.id)?"Retrying…":"Retry failed step"}</button>}<button type="button" className="btn" disabled={row.processing||u.retrying.includes(row.document.id)||!!u.blocked} onClick={()=>u.reextract(row.document!)}>Re-extract document</button>{row.document.temporary_session_id&&<button type="button" className="text-button" onClick={()=>u.keep(row.document!)}>Keep in dataset</button>}</div></>}
       </div>
       {!row.document && row.status !== "uploading" && <button type="button" className="btn icon" aria-label={`Remove ${row.name}`} disabled={u.uploading} onClick={() => u.remove(row.id)}><X size={16} /></button>}
     </li>)}</ul>}
@@ -139,6 +153,6 @@ export function DocumentUploadPanel({ upload: u }: { upload: DocumentUploadContr
     {u.notice && <p className="upload-notice" role="alert"><AlertCircle size={16} />{u.notice}</p>}
     {u.pollError && <p className="upload-notice" role="status">Could not refresh processing status. <button type="button" className="text-button" onClick={u.refresh}>Check again</button></p>}
     <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={u.start}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>
-    <p className="upload-footnote">Only ready, current-index documents are available to chat. If you use a document selection, add new files in Document scope when ready. Uploading never sends a question.</p>
+    <p className="upload-footnote">Only ready, compatible-index documents are available for questions. Hiding this popup does not cancel accepted processing. The original is retained.</p>
   </section>;
 }

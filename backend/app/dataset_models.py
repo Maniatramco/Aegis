@@ -93,6 +93,10 @@ def embedding_snapshot(r):
     if current['model_version']!=snap['model_version']:raise HTTPException(409,'Embedding model configuration changed. Save the dataset model mapping and reindex documents.')
     cfg=core.settings().copy();cfg.update({k:snap['settings'][k] for k in EMBED_KEYS if k in snap['settings']})
     snap['settings']=cfg
+    if cfg['embedding_provider']=='ollama':
+        from .ollama_provider import model_digest,OllamaError
+        try:cfg['_embedding_digest']=model_digest(cfg['embedding_model'])
+        except OllamaError as error:raise HTTPException(409,str(error))
     snap['settings']['_index_namespace']=r.id+':'+str(data['index_generation'])
     snap.update(dataset_id=r.id,index_generation=data['index_generation'])
     return snap
@@ -139,9 +143,12 @@ def require_indexes(docs,snapshot):
 
 def document_public(d):
     result=core.representation(d)|{'dataset_id':d.parent_id or None,'requires_reindex':True}
+    from .temporary_files import marker
+    result.update(marker(d.id))
     if not d.parent_id:return result
     try:result['requires_reindex']=not index_matches(d,embedding_snapshot(owned(d.parent_id,d.owner,'knowledge_base')))
     except HTTPException:pass
+    if result['requires_reindex'] and d.status=='ready':result['index_notice']='Reindex required: embedding configuration or installed model digest differs, or this older index has no verified model digest. Original retained.'
     return result
 
 class ModelInput(BaseModel):

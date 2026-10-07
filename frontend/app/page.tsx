@@ -2,7 +2,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DocumentUploadPanel, useDocumentUpload } from "./document-upload";
 import { FocusedChat } from "./focused-chat";
-import { DatasetHome } from "./dataset-home";
+import { readChatStream } from "./chat-stream";
+import { DatasetHome } from "./dataset-directory";
+import { ExtractionReview } from "./extraction-review";
+import "./workspace-flow.css";
 import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import {
   Activity,
@@ -293,6 +296,9 @@ export default function App() {
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
   const [resultText, setResultText] = useState("");
+  const reviewDirty = useRef(false);
+  const onReviewDirty = useCallback((dirty: boolean) => { reviewDirty.current = dirty; }, []);
+  const [temporarySession, setTemporarySession] = useState("");
   const [externalExtract, setExternalExtract] = useState(false);
   const [indexDoc, setIndexDoc] = useState("");
   const [indexData, setIndexData] = useState<Entity>({});
@@ -435,6 +441,8 @@ export default function App() {
     return () => clearInterval(timer);
   }, [user, api]);
   const navigate = (name: View) => {
+    if (reviewDirty.current && !window.confirm("Discard unsaved extraction changes before leaving?")) return;
+    reviewDirty.current = false;
     window.location.hash = encodeURIComponent(name);
     setView(name);
     if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(name)) setAdminNavigation(true);
@@ -470,6 +478,8 @@ export default function App() {
   };
   const routeHandler = useRef<(hash: string) => void>(() => {});
   routeHandler.current = (hash: string) => {
+    if (reviewDirty.current && !window.confirm("Discard unsaved extraction changes before leaving?")) { window.history.replaceState(null, "", "#Extract"); return; }
+    reviewDirty.current = false;
     let route: string;
     try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Ask Aegis"; }
     if (route.startsWith("dataset/")) {
@@ -539,6 +549,7 @@ export default function App() {
     dataset: selectedDataset, enabled: !!datasetEmbedding, externalRequired: externalProvider,
     consent: externalUpload, setConsent: setExternalUpload, maxMb: Number(settings.max_upload_mb || 25),
     sessionKey: user ? csrf : "",
+    temporarySessionId: temporary ? temporarySession : "",
     contextKey: uploadContextKey,
     documents: docs, jobs, api, refresh: reload, pollError: documentPollError,
     onManage: () => navigate("Datasets"),
@@ -601,7 +612,7 @@ export default function App() {
       setError("Choose a dataset with ready documents and an eligible chat model.");
       return;
     }
-    if (!externalChat) {
+    if (selectedChatModel?.provider !== "ollama" && !externalChat) {
       setError("Approve the provider notice before sending a question.");
       return;
     }
@@ -659,67 +670,40 @@ export default function App() {
       }
       if (!response.body)
         throw new Error("The server did not return an answer stream.");
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "",
-        answer = "";
-      const baseMessages = [
-        ...(c!.messages || []),
-        { id: "pending-user", role: "user", text },
-      ];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || "";
-        for (const event of events) {
-          const type = event
-            .split("\n")
-            .find((l) => l.startsWith("event:"))
-            ?.slice(6)
-            .trim();
-          const raw = event
-            .split("\n")
-            .filter((l) => l.startsWith("data:"))
-            .map((l) => l.slice(5).trim())
-            .join("\n");
-          if (!raw) continue;
-          const payload = JSON.parse(raw);
-          if (type === "error")
-            throw new Error(payload.detail || "Answer interrupted.");
-          if (type === "delta") {
-            answer += payload.text;
-            setConversation({
-              ...c,
-              messages: [
-                ...baseMessages,
-                {
-                  id: "streaming-answer",
-                  role: "assistant",
-                  text: answer,
-                  mock: selectedChatModel?.provider === "mock",
-                  model_selection: { model_id: chatModelId, model_name: modelLabel(selectedChatModel), provider_model: selectedChatModel?.provider_model },
-                },
-              ],
-            });
-          }
-          if (type === "done")
-            setConversation({
-              ...c,
-              messages: [...baseMessages, payload.message],
-            });
+      let answer = "";
+      const baseMessages = [...(c!.messages || []), { id: "pending-user", role: "user", text }];
+      await readChatStream(response.body, ({ type, payload }) => {
+        if (type === "delta") {
+          answer += payload.text;
+          setConversation({ ...c, messages: [...baseMessages, {
+            id: "streaming-answer", role: "assistant", text: answer, status: "streaming",
+            mock: selectedChatModel?.provider === "mock",
+            model_selection: { model_id: chatModelId, model_name: modelLabel(selectedChatModel), provider_model: selectedChatModel?.provider_model },
+          }] });
         }
-      }
-      await openConversation(c!.id, true);
+        if (type === "done" || type === "error") {
+          if (payload.message) setConversation({ ...c, messages: [...baseMessages.slice(0,-1), payload.user_message || baseMessages.at(-1), payload.message] });
+          if (type === "error") throw new Error(payload.detail || "The model could not complete this answer.");
+        }
+      });
       const cs = await api("/conversations");
       setConversations(Array.isArray(cs) ? cs : cs.conversations || []);
     } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") {
-        setError(
-          temporary ? "Stopped waiting. Provider processing may continue, but temporary messages are not saved." : "Stopped waiting for the answer. Server or provider processing may continue. Refresh this conversation before retrying.",
-        );
-      } else setError(e instanceof Error ? e.message : "Question failed.");
+      const stopped = e instanceof Error && e.name === "AbortError";
+      const detail = stopped ? "Generation stopped. Any partial response is kept below. The model may take a moment to finish stopping." : e instanceof Error ? e.message : "The question could not be completed. Try again.";
+      setError(detail);
+      setPrompt(text);
+      setConversation(current => {
+        if (!current) return current;
+        const messages = [...(current.messages || [])];
+        const last = messages.at(-1);
+        if (last?.role === "assistant" && last.status === "failed") return current;
+        const failed = { id: crypto.randomUUID(), role: "assistant", text: last?.id === "streaming-answer" ? last.text : "", status: stopped ? "aborted" : "failed", error: { detail, retryable: true } };
+        if (last?.id === "streaming-answer") messages[messages.length-1] = failed;
+        else if (last?.role === "user") messages.push(failed);
+        else return current;
+        return { ...current, messages };
+      });
     } finally {
       sending.current = false;
       setAnswering(false);
@@ -824,7 +808,7 @@ export default function App() {
       )}
     </div>
   );
-  const externalNotice = (model: Entity | undefined) => `I approve sending this request and relevant document content to ${modelLabel(model)} (${model?.provider || "model provider"}), with the dataset’s pinned embedding model ${selectedDataset?.embedding_selection?.provider_model || datasetEmbedding?.provider_model || "not configured"} and configured retrieval connection. External API usage is billed separately by those providers; ChatGPT does not cover these charges.`;
+  const externalNotice = (model: Entity | undefined) => model?.provider === "ollama" && !externalProvider ? `I approve running this question and selected document content with ${modelLabel(model)} locally through Ollama. No paid model API is used.` : `I approve sending this request and relevant document content to ${modelLabel(model)} (${model?.provider || "model provider"}), with the dataset’s pinned embedding model ${selectedDataset?.embedding_selection?.provider_model || datasetEmbedding?.provider_model || "not configured"} and configured retrieval connection. External API usage is billed separately by those providers; ChatGPT does not cover these charges.`;
   const datasetSelect = (label: string) => <select aria-label={label} value={kb} onChange={e => changeDataset(e.target.value)} disabled={answering}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>;
   const configureDataset = () => { navigate("Datasets"); setDatasetModelsFocus(true); };
 
@@ -1011,7 +995,7 @@ export default function App() {
               )}
             </div>
           </div>}
-          {error && view !== "Home" && (
+          {error && view !== "Home" && view !== "Ask Aegis" && (
             <Notice tone="error">
               {error}
               <button
@@ -1257,7 +1241,7 @@ export default function App() {
               </section>
             </>
           )}
-          {view === "Home" && <DatasetHome api={api} refresh={refresh} onLoaded={setKbs} onBrowse={() => navigate("Datasets")} />}
+          {view === "Home" && <DatasetHome api={api} refresh={refresh} onLoaded={setKbs} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Ask Aegis"); }} onCreated={d => { changeDataset(d.id); navigate("Datasets"); setDatasetModelsFocus(true); reload(); }} />}
           {view === "Datasets" && (
             <>
             <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}
@@ -1379,11 +1363,12 @@ export default function App() {
             </>
           )}
           {view === "Ask Aegis" && (
-            <FocusedChat temporary={temporary} temporaryUploadCount={temporaryUploads.length}
-              onTemporary={() => { conversationRequest.current += 1; setTemporary(!temporary); setConversation(null); setPrompt(""); setLastPrompt(""); setError(""); }}
-              onCleanup={() => setConfirm({ title: "Delete this session's uploads?", body: `Delete the ${temporaryUploads.length} documents uploaded during temporary chat, including their originals and indexes? Existing dataset documents are preserved.`, action: async () => { for (const id of [...temporaryUploads]) { try { await api(`/documents/${id}`, "DELETE"); } catch (error) { if ((error as {status?: number}).status !== 404) throw error; } setTemporaryUploads(previous => previous.filter(value => value !== id)); setScope(previous => previous.filter(value => value !== id)); } reload(); notify("This session's uploads deleted."); } })}
+            <FocusedChat temporary={temporary} temporaryUploadCount={docs.filter(d=>d.temporary_session_id===temporarySession).length}
+              onTemporary={() => run(async () => { if (!temporary) { const session = await api("/temporary-chat/sessions", "POST", {}); setTemporarySession(session.id); } conversationRequest.current += 1; setTemporary(!temporary); setConversation(null); setPrompt(""); setLastPrompt(""); setError(""); })}
+              onCleanup={() => setConfirm({ title: "Clean up temporary-only uploads?", body: "Delete this temporary session’s originals and indexes? Permanent dataset documents and uploads kept or used in saved chat/extraction are preserved.", action: async () => { const result = await api(`/temporary-chat/sessions/${temporarySession}`, "DELETE"); setTemporaryUploads(result.pending_document_ids || []); reload(); notify(result.pending_document_ids?.length ? "Some cleanup remains pending; check service health and retry." : "Temporary-only uploads cleaned up. Permanent documents preserved."); } })}
               upload={documentUpload} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
-              answering={answering} lastPrompt={lastPrompt} canSend={!busy && externalChat && !!selectedChatModel && !!readyDatasetDocs.length}
+              error={error} onDismissError={() => setError("")} datasetName={selectedDataset?.name || "Choose a dataset"} localProcessing={selectedChatModel?.provider === "ollama" && !externalProvider} reranker={settings.reranker || {}}
+              answering={answering} lastPrompt={lastPrompt} canSend={!busy && (selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length}
               externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
               scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}
               datasetControl={datasetSelect("Chat dataset")} modelControl={<ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />}
@@ -1397,7 +1382,7 @@ export default function App() {
           {view === "Extract" && (
             <>
               <div className="section-tabs" aria-label="Extraction sections">
-                {["Create", "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => setExtractionTab(tab)}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
+                {["Create", "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => { if (reviewDirty.current && !window.confirm("Discard unsaved changes before changing sections?")) return; setExtractionTab(tab); }}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
               </div>
               <div className="extraction-focus">
                 <section className="panel" hidden={extractionTab !== "Create"}>
@@ -1489,102 +1474,7 @@ export default function App() {
                   )}
                 </section>
               </div>
-              {extraction && (
-                <section className="panel" hidden={extractionTab !== "Review"}>
-                  <div className="panel-head">
-                    <div>
-                      <h2>Review extraction</h2>
-                      <p className="small muted">Dataset: {kbs.find(d => d.id === (extraction.model_selection?.dataset_id || extraction.dataset_id || extraction.kb_id))?.name || "Recorded extraction dataset"}</p>
-                      {recordedModel(extraction) && <p className="small muted">Recorded model: {recordedModel(extraction)}</p>}
-                      <p className="small muted">
-                        Review all values against the source before exporting.
-                        Edits are saved to this result.
-                      </p>
-                    </div>
-                    <div className="row">
-                      <Status value={extraction.status} />
-                      <button
-                        className="btn icon"
-                        title="Reload extraction"
-                        onClick={() =>
-                          run(async () => {
-                            const d = await api(
-                              `/extractions/${extraction.id}`,
-                            );
-                            setExtraction(d);
-                                setExtractionTab("Review");
-                            setResultText(json(d.result || {}));
-                          })
-                        }
-                      >
-                        <RefreshCw size={14} />
-                      </button>
-                      <Download
-                        path={`/extractions/${extraction.id}/export?format=json`}
-                      >
-                        JSON
-                      </Download>
-                      <Download
-                        path={`/extractions/${extraction.id}/export?format=csv`}
-                      >
-                        CSV
-                      </Download>
-                    </div>
-                  </div>
-                  {extraction.mock && (
-                    <Notice tone="warn">
-                      MOCK TEST OUTPUT · Synthetic development data, not model
-                      extraction. Review against the original source.
-                    </Notice>
-                  )}
-                  {extraction.error && (
-                    <Notice tone="error">{extraction.error}</Notice>
-                  )}
-                  <textarea
-                    className="mono"
-                    style={{ minHeight: 280 }}
-                    aria-label="Extraction result JSON"
-                    value={resultText}
-                    onChange={(e) => setResultText(e.target.value)}
-                  />
-                  {(extraction.evidence ||
-                    extraction.citations ||
-                    extraction.sources) && (
-                    <details style={{ marginTop: 15 }}>
-                      <summary>Source evidence</summary>
-                      <pre className="code mono">
-                        {json({
-                          field_evidence: extraction.evidence || [],
-                          sources:
-                            extraction.citations || extraction.sources || [],
-                        })}
-                      </pre>
-                    </details>
-                  )}
-                  <button
-                    className="btn primary"
-                    style={{ marginTop: 16 }}
-                    disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        const result = JSON.parse(resultText);
-                        const d = await api(
-                          `/extractions/${extraction.id}`,
-                          "PATCH",
-                          { result },
-                        );
-                        setExtraction(d);
-                                setExtractionTab("Review");
-                        notify("Reviewed result saved.");
-                        reload();
-                      })
-                    }
-                  >
-                    <Check size={14} />
-                    Save reviewed result
-                  </button>
-                </section>
-              )}
+              {extraction && extractionTab === "Review" && <ExtractionReview extraction={extraction} documents={docs} api={api} onDirty={onReviewDirty} onSaved={d => { setExtraction(d); setResultText(json(d.result || {})); reload(); }} />}
             </>
           )}
           {view === "Templates" && (
@@ -1825,6 +1715,7 @@ export default function App() {
                         {retrievalResult.duration_ms} ms
                       </span>
                       <span className="pill">{retrievalResult.provider}</span>
+                      {retrievalResult.reranking?.enabled && <span className="pill">Local reranking · {retrievalResult.reranking.candidate_count} → {retrievalResult.count} chunks · {retrievalResult.reranking.rerank_ms} ms</span>}
                       <span className="muted small">
                         {retrievalResult.ready_documents} ready /{" "}
                         {retrievalResult.scoped_documents} scoped documents
@@ -1846,9 +1737,9 @@ export default function App() {
                             {m.document_name} {m.page ? `· page ${m.page}` : ""}
                           </strong>
                           <span>
-                            Score{" "}
-                            {typeof m.score === "number"
-                              ? m.score.toFixed(4)
+                            {typeof m.rerank_score === "number" ? "Rerank" : "Similarity"}{" "}
+                            {typeof (m.rerank_score ?? m.score) === "number"
+                              ? (m.rerank_score ?? m.score).toFixed(4)
                               : "—"}
                           </span>
                         </div>

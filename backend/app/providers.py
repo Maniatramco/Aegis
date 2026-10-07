@@ -1,5 +1,5 @@
 """Bounded providers: fixed TLS cloud endpoints or credential-free loopback Ollama."""
-import hashlib, math, json, re, os, uuid
+import hashlib, math, json, re, os, uuid, time
 from functools import lru_cache
 import httpx
 from .core import settings, api_key, store, oci_api_key, execution_context
@@ -17,7 +17,7 @@ def fingerprint(cfg=None):
     c=cfg or settings()
     if c['search_provider']=='oci':return hashlib.sha256(('oci:'+c.get('oci_region','')+':'+c.get('oci_project_id','')+':'+c.get('oci_vector_store_id','')+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
     name=c['embedding_model'] if c['embedding_provider'] in ('openai','ollama') else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
-    return hashlib.sha256((c['embedding_provider']+':'+name+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
+    return hashlib.sha256((c['embedding_provider']+':'+name+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')+(':'+c['_embedding_digest'] if c.get('_embedding_digest') else '')).encode()).hexdigest()[:16]
 def openai_request(path,payload):
     key=api_key()
     if not key:raise ProviderError('Configure an OpenAI API key in Settings before using this provider')
@@ -47,7 +47,12 @@ def split_utf8_bounded(text,max_bytes=OPENAI_EMBEDDING_MAX_BYTES):
 
 def embed(texts):
     cfg=settings();p=cfg['embedding_provider']
-    if p=='ollama':return ollama_call('embed',cfg['embedding_model'],texts,cfg['timeout'])
+    if p=='ollama':
+        expected=cfg.get('_embedding_digest')
+        if expected and ollama_call('model_digest',cfg['embedding_model'])!=expected:raise ProviderError('Installed embedding weights changed. Reindex with the current model before retrieval; indexes are not mixed.')
+        vectors=ollama_call('embed',cfg['embedding_model'],texts,cfg['timeout'])
+        if expected and ollama_call('model_digest',cfg['embedding_model'])!=expected:raise ProviderError('Embedding model changed during inference. Retry with a current pinned index.')
+        return vectors
     if p=='mock':
         result=[]
         for text in texts:
@@ -94,7 +99,23 @@ def delete_vectors(document_id):
     q=client()
     for c in q.get_collections().collections:
         if c.name.startswith('aegis_'):q.delete(c.name,FilterSelector(filter=Filter(must=[FieldCondition(key='document_id',match=MatchValue(value=document_id))])),wait=True)
-def search(query,owner,documents,top_k):
+def search(query,owner,documents,top_k,diagnostics=None):
+    from . import reranker
+    try:
+        active=reranker.enabled()
+        limit=reranker.candidate_limit(top_k) if active else top_k
+        results=_retrieve(query,owner,documents,limit)
+        count=len(results);started=time.monotonic()
+        results=reranker.rank(query,results,top_k) if active else results[:top_k]
+        if diagnostics is not None:
+            diagnostics.update(enabled=active,model=reranker.MODEL_ID if active else None,
+                revision=reranker.REVISION if active else None,candidate_limit=limit,candidate_count=count,
+                returned_count=len(results),rerank_ms=round((time.monotonic()-started)*1000,2) if active else 0,
+                sorted_by='rerank_score' if active else 'score')
+        return results
+    except reranker.RerankerError as exc:raise ProviderError(str(exc)) from exc
+
+def _retrieve(query,owner,documents,top_k):
     if not documents:return []
     if settings()['search_provider']=='oci':return oci_vector().search(query,owner,documents,top_k,store)
     v=embed([query])[0];allowed={d.id:d for d in documents};found=[]
@@ -197,12 +218,88 @@ async def answer_stream_async(question,sources,history=None):
 
     if not completed:raise ProviderError('OpenAI stream ended before completion')
 
+def evidence_limit(schema):
+    if schema.get('type')=='array':return 32
+    if schema.get('type')=='object':return max(1,min(64,sum(evidence_limit(value) for value in schema.get('properties',{}).values())))
+    return 1
+
+
+def evidence_schema(schema,compact=False):
+    return {'type':'object','properties':{'data':schema,'evidence':{'type':'array',**({'maxItems':evidence_limit(schema)} if compact else {}),'items':{'type':'object','properties':{'field':{'type':'string'},'chunk_id':{'type':'string'},'quote':{'type':'string',**({'maxLength':240} if compact else {})}},'required':['field','chunk_id','quote'],'additionalProperties':False}}},'required':['data','evidence'],'additionalProperties':False}
+
+
 def extract_with_evidence(text,schema,sources):
-    wrapper={'type':'object','properties':{'data':schema,'evidence':{'type':'array','items':{'type':'object','properties':{'field':{'type':'string'},'chunk_id':{'type':'string'},'quote':{'type':'string'}},'required':['field','chunk_id','quote'],'additionalProperties':False}}},'required':['data','evidence'],'additionalProperties':False}
-    output=extract('Return data plus field-level evidence. Each evidence field is a JSON Pointer, chunk_id must match the supplied identifier, and quote must be verbatim from that chunk.\n'+text,wrapper)
-    by_id={c['id']:c for c in sources};evidence=[]
+    instruction='Return data plus field-level evidence. Each evidence field is a JSON Pointer, chunk_id must match the supplied identifier, and quote must be a short verbatim substring from that chunk. Do not repeat equivalent evidence.\n'
+    # Small local models can produce valid JSON while overlooking items late in
+    # a long document. Collect unbounded top-level arrays in small source batches
+    # and merge exact duplicates; retain the initial scalar interpretation.
+    arrays={key:{'type':'array','items':value.get('items',{}),'description':value.get('description','')}
+        for key,value in schema.get('properties',{}).items()
+        if value.get('type')=='array' and 'maxItems' not in value and 'enum' not in value}
+    local=settings()['model_provider']=='ollama'
+    complete_arrays=local and arrays and len(sources)>1
+    initial=schema
+    if complete_arrays:
+        properties={key:value for key,value in schema['properties'].items() if key not in arrays}
+        initial={'type':'object','properties':properties,'required':[key for key in schema.get('required',[]) if key not in arrays],'additionalProperties':False}
+    output=extract(instruction+text,evidence_schema(initial,local)) if not complete_arrays or initial['properties'] else {'data':{},'evidence':[]}
+    if complete_arrays:
+        partial={'type':'object','properties':arrays,'required':list(arrays),'additionalProperties':False}
+        strings_only=all(value['items'].get('type')=='string' for value in arrays.values())
+        for source in sources:
+            batch=[source]
+            context='\n\n'.join(f'Document: {c["document_name"]}; chunk {c["id"]}; page {c["page"]}\n{c["text"]}' for c in batch)
+            prompt='Which items matching each requested field definition are explicitly mentioned in this excerpt?\nRequested fields: '+json.dumps({key:value['description'] for key,value in arrays.items()},ensure_ascii=False)+'\nReturn only items fitting those definitions. Read the whole excerpt and include every matching item. If a field asks for names, return only the names, not surrounding workflow actions, generic words, or full heading sentences. Copy source wording with ordinary whitespace. Use an empty array if no items fit.\nExcerpt:\n'+context
+            if strings_only:
+                # Enumerating names and generating quotes together can distract
+                # a small model. Verify exact source matches and build the quotes
+                # here instead of asking the model to repeat all evidence.
+                extracted=extract(prompt,partial);extra={'data':{},'evidence':[]}
+                for key in arrays:
+                    extra['data'][key]=[]
+                    for value in extracted[key]:
+                        pattern=r'\s+'.join(re.escape(word) for word in value.split())
+                        match=re.search(pattern,source['text'],re.IGNORECASE) if pattern else None
+                        if not match:continue
+                        index=len(extra['data'][key]);extra['data'][key].append(value)
+                        pointer='/'+key.replace('~','~0').replace('/','~1')+'/'+str(index)
+                        extra['evidence'].append({'field':pointer,'chunk_id':source['id'],'quote':match.group()})
+            else:
+                extra=extract(instruction+prompt,evidence_schema(partial,True))
+            positions={}
+            for key in arrays:
+                values=output['data'].setdefault(key,[])
+                seen={json.dumps(item,sort_keys=True,ensure_ascii=False):index for index,item in enumerate(values)}
+                positions[key]={}
+                for index,item in enumerate(extra['data'][key]):
+                    encoded=json.dumps(item,sort_keys=True,ensure_ascii=False)
+                    if encoded not in seen:seen[encoded]=len(values);values.append(item)
+                    positions[key][str(index)]=str(seen[encoded])
+            for item in extra.get('evidence',[]):
+                parts=item.get('field','').split('/')
+                if len(parts)>2 and parts[0]=='':
+                    key=parts[1].replace('~1','/').replace('~0','~')
+                    if key in positions and parts[2] in positions[key]:
+                        parts[2]=positions[key][parts[2]];item=item|{'field':'/'.join(parts)}
+                output['evidence'].append(item)
+    by_id={c['id']:c for c in sources};evidence=[];seen_evidence=set()
     for item in output.get('evidence',[]):
+        # A quote is useful field evidence only when its pointer resolves to
+        # an actual extracted value; local models sometimes put prose here.
+        pointer=item.get('field');value=output['data']
+        if not isinstance(pointer,str) or (pointer and not pointer.startswith('/')):continue
+        try:
+            for part in pointer.split('/')[1:]:
+                part=part.replace('~1','/').replace('~0','~')
+                if isinstance(value,list):
+                    if not re.fullmatch(r'0|[1-9][0-9]*',part):raise KeyError(part)
+                    value=value[int(part)]
+                else:value=value[part]
+        except (KeyError,IndexError,TypeError):continue
         chunk=by_id.get(item.get('chunk_id'))
         if not chunk or not item.get('quote') or item['quote'] not in chunk['text']:continue
+        key=(item.get('field'),item['chunk_id'],item['quote'])
+        if key in seen_evidence:continue
+        seen_evidence.add(key)
         evidence.append(item|{'document_id':chunk['document_id'],'document_name':chunk['document_name'],'page':chunk['page']})
     return output['data'],evidence

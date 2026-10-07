@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, Database, FileSearch, FileText, Layers, MessageSquare, Plus, Search, Settings2, Shield, X } from "lucide-react";
 import "./dataset-focus.css";
+import {DirectoryRows} from "./dataset-directory";
 
 type Entity = Record<string, any>;
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
@@ -65,7 +66,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
   return <div className="dataset-focus">
     <div className="dataset-intro dataset-navigation">
       {!creating && dataset && !showList ? <button className="text-button" onClick={() => { setShowList(true); setShowUpload(false); }}><ArrowLeft size={15} />All datasets</button> : <div><h2>{creating ? "New dataset" : "Your datasets"}</h2><p>{creating ? "Give your documents a name and a place." : `${datasets.length} dataset${datasets.length === 1 ? "" : "s"} · Choose one to view its documents`}</p></div>}
-      {!creating && <button className={`btn ${showList || !dataset ? "primary" : ""}`} onClick={startCreating}><Plus size={15} />Onboard dataset</button>}
+      {!creating && <button className={`btn ${showList || !dataset ? "primary" : ""}`} onClick={startCreating}><Plus size={15} />New dataset</button>}
     </div>
     {creating ? <section className="panel onboarding-panel">
       <div className="panel-head"><div><h2>Name your dataset</h2><p className="muted small">You can choose its models after creating it.</p></div><button className="btn icon" aria-label="Cancel dataset onboarding" onClick={() => setCreating(false)}><X size={16} /></button></div>
@@ -75,8 +76,8 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
         <div className="row dataset-create-actions"><button type="button" className="btn" onClick={() => setCreating(false)}>Cancel</button><button className="btn primary" disabled={busy || !name.trim()}>Create dataset <ArrowRight size={14} /></button></div>
       </form>
     </section> : showList || !dataset ? <>
-      {datasets.length > 0 && <div className="dataset-list-tools"><label className="dataset-search"><Search size={16} /><input aria-label="Search datasets" placeholder="Search datasets" value={search} onChange={e => setSearch(e.target.value)} /></label></div>}
-      <div className="dataset-grid">
+      {datasets.length > 0 && <DirectoryRows datasets={datasets} documents={documents} onChat={id=>{onSelect(id);onUse("Ask Aegis");}}/>}
+      <div className="dataset-grid" hidden={datasets.length>0}>
         {visibleDatasets.map(d => {
           const all = documents.filter(doc => (doc.dataset_id || doc.kb_id) === d.id);
           const usable = all.filter(doc => doc.status === "ready" && !doc.requires_reindex).length;
@@ -90,7 +91,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
             <span className="dataset-card-link">Open dataset<ChevronRight size={14} /></span>
           </button>;
         })}
-        {!datasets.length && <div className="panel dataset-empty"><Database size={30} /><h3>Your first dataset starts here</h3><p>Create a dataset, choose its models, and add documents.</p><button className="btn primary" onClick={startCreating}>Onboard dataset <ArrowRight size={14} /></button></div>}
+        {!datasets.length && <div className="panel dataset-empty"><Database size={30} /><h3>Your first dataset starts here</h3><p>Create a dataset, choose its models, and add documents.</p><button className="btn primary" onClick={startCreating}>New dataset <ArrowRight size={14} /></button></div>}
         {!!datasets.length && !visibleDatasets.length && <div className="panel dataset-empty"><Search size={28} /><h3>No matching datasets</h3><p>Try another name or description.</p><button className="btn" onClick={() => setSearch("")}>Clear search</button></div>}
       </div>
     </> : <>
@@ -107,6 +108,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
           <div id="dataset-add-documents" className="dataset-upload-panel" hidden={!showUpload}>{uploadPanel}</div>
         </div>
         <div hidden={tab !== "models"}>
+          <p><button className="btn" disabled={busy} onClick={()=>run(async()=>{await api(`/datasets/${dataset.id}/local-models`,"POST",{});notify("Installed local models mapped. Existing embedding index selection preserved.");reload();})}>Use installed local models</button></p>
           {dataset.migration_required && <div className="notice warn"><Settings2 size={16} /><div><strong>This dataset needs model mappings.</strong><p>Import your current deployment settings, then review the models below.</p><button className="btn" disabled={busy} onClick={() => run(async () => { await api(`/datasets/${dataset.id}/migrate-settings`, "POST", {}); notify("Current settings imported. Review the dataset’s model mappings."); reload(); })}>Import current settings</button></div></div>}
           <DatasetMappings key={dataset.id} dataset={dataset} models={models} api={api} run={run} busy={busy} reload={reload} notify={notify} onConnections={onConnections} />
         </div>

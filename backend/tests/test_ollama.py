@@ -36,6 +36,58 @@ def test_schema_and_incomplete_output_rejected(monkeypatch):
     monkeypatch.setattr(ollama,'request',lambda *a:{'done':True,'done_reason':'length','message':{'content':'truncated'}})
     with pytest.raises(ollama.OllamaError):ollama.chat('qwen3:4b','Q',[{'document_name':'x','text':'x'}],[],30)
 
+
+def test_qwen_legacy_thinking_template_returns_only_completed_answer(monkeypatch):
+    monkeypatch.setattr(ollama,'request',lambda *a:{'done':True,'done_reason':'stop',
+        'message':{'content':'Internal analysis\n</think>\nKeep the approved version. [1]'}})
+    assert ollama.chat('qwen3:4b','What if validation fails?',
+        [{'document_name':'workflow','text':'Keep the approved version on failure.'}],[],30)=='Keep the approved version. [1]'
+    monkeypatch.setattr(ollama,'request',lambda *a:{'done':True,'done_reason':'length',
+        'message':{'content':'Internal analysis\n</think>\nPartial answer [1]'}})
+    with pytest.raises(ollama.OllamaError):
+        ollama.chat('qwen3:4b','Q',[{'document_name':'x','text':'x'}],[],30)
+
+
+def test_extraction_reserves_space_for_late_document_facts(monkeypatch):
+    text='Synthetic document content. '*600+'The last named service is Late Service.'
+    schema={'type':'object','properties':{'service':{'type':'string','description':'The last explicitly named software service, not a workflow action'}},'required':['service']}
+    def response(path,payload,timeout):
+        assert 'Late Service.' in payload['messages'][1]['content']
+        assert payload['messages'][-1]['content']=='<think>\n</think>\n\n'
+        assert 'not a workflow action' in payload['messages'][0]['content']
+        assert payload['options']['num_ctx']>=16384
+        assert payload['options']['num_predict']>=4096
+        return {'done':True,'message':{'content':'{"service":"Late Service"}'}}
+    monkeypatch.setattr(ollama,'request',response)
+    assert ollama.extract('qwen3:4b',text,schema,30)=={'service':'Late Service'}
+
+
+def test_oversized_local_context_rejected_before_inference(monkeypatch):
+    def forbidden(*args):raise AssertionError('Must not silently truncate the document')
+    monkeypatch.setattr(ollama,'request',forbidden)
+    with pytest.raises(ollama.OllamaError,match='context budget'):
+        ollama.extract('qwen3:4b','Synthetic '*20000,{'type':'object'},30)
+
+
+def test_local_array_extraction_covers_later_chunks_and_deduplicates(monkeypatch):
+    monkeypatch.setattr(providers,'settings',lambda:core.DEFAULTS|{'model_provider':'ollama'})
+    schema={'type':'object','properties':{'subject':{'type':'string'},'services':{'type':'array','items':{'type':'string'},'description':'Named software services'}},'required':['subject','services']}
+    names=['Early Service','Second Service','Third Service','Fourth Service','Late Service']
+    sources=[{'id':str(i),'page':1,'document_id':'doc','document_name':'Synthetic','text':name+'; Copy the file'} for i,name in enumerate(names)]
+    calls=[]
+    def extract(text,wrapper):
+        calls.append(text)
+        if 'data' in wrapper['properties']:
+            return {'data':{'subject':'Synthetic subject'},'evidence':[{'field':'Prose, not a pointer','chunk_id':'0','quote':'Early Service'},{'field':'/missing','chunk_id':'0','quote':'Early Service'}]}
+        service=next(name for i,name in enumerate(names) if 'chunk '+str(i)+';' in text)
+        return {'services':[service,service,'Invented service']}
+    monkeypatch.setattr(providers,'extract',extract)
+    result,evidence=providers.extract_with_evidence('All chunks',schema,sources)
+    assert result=={'subject':'Synthetic subject','services':names}
+    assert {item['quote'] for item in evidence}==set(names)
+    assert {item['field'] for item in evidence}=={'/services/'+str(i) for i in range(5)}
+    assert len(calls)==6
+
 def test_fingerprints_preserve_existing_spaces_and_separate_ollama():
     cfg=core.DEFAULTS|{'search_provider':'local','embedding_provider':'mock'}
     assert providers.fingerprint(cfg)==hashlib.sha256(b'mock:mock-sha256-v1').hexdigest()[:16]
@@ -73,6 +125,7 @@ def test_unavailable_ollama_never_falls_back(monkeypatch):
         providers.answer('Question',[{'document_name':'synthetic','text':'Synthetic fact'}])
 
 def test_ollama_routing_upload_chat_extraction(system,monkeypatch):
+    monkeypatch.setattr(ollama,'model_digest',lambda name:'a'*64)
     def response(path,payload,timeout):
         if path=='/api/embed':return {'embeddings':[[1.,0.,0.] for _ in payload['input']]}
         if 'format' in payload:return {'done':True,'message':{'content':'{"data":{"owner":"Alice"},"evidence":[]}'}}

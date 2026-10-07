@@ -4,6 +4,7 @@
 secrets/
 backups/
 data/
+local-models/
 *.sqlite*
 *.db
 __pycache__/

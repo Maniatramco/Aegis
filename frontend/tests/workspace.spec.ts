@@ -57,11 +57,11 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   const models = await seedMockCatalog(page.request, headers, datasetName);
   await page.reload();
   await navigate(page, "Datasets");
-  await page.locator(".dataset-intro").getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await page.locator(".dataset-intro").getByRole("button", { name: "New dataset", exact: true }).click();
   await page.getByLabel("Dataset name", { exact: true }).fill("Cancelled draft dataset");
   await page.getByRole("button", { name: "Cancel dataset onboarding", exact: true }).click();
   await expect(page.getByLabel("Dataset name", { exact: true })).toHaveCount(0);
-  await page.locator(".dataset-intro").getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await page.locator(".dataset-intro").getByRole("button", { name: "New dataset", exact: true }).click();
   await expect(page.getByLabel("Dataset name", { exact: true })).toHaveValue("");
   await page.getByLabel("Dataset name", { exact: true }).fill(datasetName);
   await page.getByLabel("Dataset description", { exact: true }).fill("Synthetic onboarding evidence for browser QA.");
@@ -209,7 +209,8 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "All datasets", exact: true }).click();
-  await expect(page.getByRole("button", { name: `Open dataset ${unavailable.name}`, exact: true })).toContainText("Models needed");
+  await expect(page.getByRole("link", { name: unavailable.name, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", {name:"Open chat",exact:true})).not.toHaveCount(0);
   await navigate(page, "Ask Aegis");
 
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(multiple.id);
@@ -363,13 +364,13 @@ test("Home cards use saved activity, open the right dataset, and retain status a
   const active = await checked(await page.request.post("/api/datasets", { headers, data: { name, description: "Registered without models or documents." } }));
   const inactive = await checked(await page.request.post("/api/datasets", { headers, data: { name: `${name} paused`, active: false } }));
   await page.reload();
-  const activeCard = page.getByRole("link", { name: `Open dataset ${name}`, exact: true });
-  const inactiveCard = page.getByRole("link", { name: `Open dataset ${name} paused`, exact: true });
+  const activeCard = page.getByRole("article", { name: `Dataset ${name}`, exact: true });
+  const inactiveCard = page.getByRole("article", { name: `Dataset ${name} paused`, exact: true });
   await expect(activeCard.getByText("Active", { exact: true })).toBeVisible();
   await expect(inactiveCard.getByText("Inactive", { exact: true })).toBeVisible();
   // Active is a saved setting, not an inference from an index, document count, or model readiness.
   expect(active.embedding_model_id).toBeNull();
-  await activeCard.click();
+  await activeCard.getByRole("link", {name: `Open dataset ${name}`,exact:true}).click();
   await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`#dataset/${active.id}$`));
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -392,7 +393,7 @@ test("Home cards use saved activity, open the right dataset, and retain status a
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(activeCard).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await inactiveCard.focus();
+  await inactiveCard.getByRole("link", {name: `Open dataset ${name} paused`,exact:true}).focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".dataset-detail").getByRole("heading", { name: `${name} paused`, exact: true })).toBeVisible();
 });

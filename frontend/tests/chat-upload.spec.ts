@@ -294,14 +294,14 @@ test("failed indexing retries the same stored original after a page reload", asy
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
   await openUploads(page);
-  await expect(row(page, original.name).getByRole("button", { name: "Retry indexing", exact: true })).toBeEnabled();
-  const retried = page.waitForResponse(response => new URL(response.url()).pathname === `/api/documents/${original.id}/reindex` && response.request().method() === "POST");
-  await row(page, original.name).getByRole("button", { name: "Retry indexing", exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await expect(row(page, original.name).getByRole("button", { name: "Retry failed step", exact: true })).toBeEnabled();
+  const retried = page.waitForResponse(response => new URL(response.url()).pathname === `/api/jobs/${result.jobs[0].id}/retry` && response.request().method() === "POST");
+  await row(page, original.name).getByRole("button", { name: "Retry failed step", exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   const response = await retried;
   const job = await checked(response);
-  expect(response.request().postDataJSON()).toEqual({ allow_external: false });
+  expect(response.request().postDataJSON()).toEqual({});
   expect(job.target_id || job.document_id).toBe(original.id);
-  expect(job.id).not.toBe(result.jobs[0].id);
+  expect(job.id).toBe(result.jobs[0].id);
   // A retry cannot repair invalid bytes. Verify honest failure and identical
   // retained original, rather than fabricating a successful indexing response.
   await expect.poll(async () => (await checked(await page.request.get(`/api/documents/${original.id}`))).status, { timeout: 90000 }).toBe("failed");
@@ -311,7 +311,7 @@ test("failed indexing retries the same stored original after a page reload", asy
   expect(await download.body()).toEqual(bytes);
   expect(uploads).toHaveLength(1);
   const jobs: Entity[] = await checked(await page.request.get("/api/jobs"));
-  expect(jobs.filter(item => item.kind === "index" && (item.target_id || item.document_id) === original.id)).toHaveLength(2);
+  expect(jobs.filter(item => item.kind === "index" && (item.target_id || item.document_id) === original.id)).toHaveLength(1);
 });
 
 test("close, navigation and dataset change during delayed upload preserve destination and stop the batch", async ({ page, workspace: w }) => {
@@ -497,7 +497,7 @@ test("temporary chat does not save history and deletes only this session's uploa
   await expect(page.locator("main h1")).toHaveText("Ask Aegis");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
   await page.getByRole("button", { name: "Temporary chat", exact: true }).click();
-  await expect(page.getByText("Messages stay in this tab; no saved conversation history.")).toBeVisible();
+  await expect(page.getByText(/Messages are not saved and clear on reload/).first()).toBeVisible();
   await openUploads(page);
   await choose(page, [file("Dottie-temporary-upload.txt", "Synthetic public fixture. Dottie's review reference is TEMP-4242.")]);
   await dialog(page).getByRole("button", { name: "Upload 1", exact: true }).click();
@@ -509,8 +509,8 @@ test("temporary chat does not save history and deletes only this session's uploa
   await expect(page.getByRole("article",{name:"Aegis answer"})).toBeVisible();
   expect(await checked(await page.request.get("/api/conversations"))).toEqual(before);
   await screenshot(page,"temporary-chat");
-  await page.getByRole("button", { name: /Delete this session’s 1 uploads/ }).click();
-  const confirmation=page.getByRole("dialog").filter({hasText:"Delete this session's uploads?"});
+  await page.getByRole("button", { name: "Delete session uploads", exact:true }).click();
+  const confirmation=page.getByRole("dialog").filter({hasText:"Clean up temporary-only uploads?"});
   await confirmation.getByRole("button",{name:"Confirm",exact:true}).click();
   await expect.poll(async()=> (await documents(page,w.dataset)).map(d=>d.id)).toEqual([permanent.id]);
   await page.reload();
