@@ -118,8 +118,8 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   const inactive = await checked(await page.request.post("/api/datasets", { headers, data: { name: "Archived research · synthetic project", description: "Retained reference documents. Processing is paused.", active: false } }));
   await page.goto("/#Home");
   await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: `Open dataset ${collection}`, exact: true }).getByText("Active", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: `Open dataset ${inactive.name}`, exact: true }).getByText("Inactive", { exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: `Dataset ${collection}`, exact: true }).getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: `Dataset ${inactive.name}`, exact: true }).getByText("Inactive", { exact: true })).toBeVisible();
   await capture(page, "00-home.png");
   await page.setViewportSize({ width: 390, height: 844 });
   await capture(page, "00-home-mobile.png");
@@ -128,7 +128,7 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await expect(page.getByRole("row").filter({ hasText: invoiceName })).toBeVisible();
   await capture(page, "01-dashboard.png");
   await navigate(page, "Datasets");
-  await page.getByRole("button", { name: `Open dataset ${collection}`, exact: true }).first().click();
+  await page.getByRole("link", { name: `Open dataset ${collection}`, exact: true }).first().click();
   await page.getByRole("button", { name: "Documents", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: invoiceName }).getByText("ready", { exact: true })).toBeVisible();
   await capture(page, "02-datasets.png");

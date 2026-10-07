@@ -581,15 +581,16 @@ test("focused chat blocks duplicate submissions, stops pending output, and retri
     await expect(page.getByRole("button", { name: "New conversation", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     release();
-    await expect(page.getByText(/Stopped waiting for the answer/)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
-    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.locator(".answer-failure")).toContainText("Generation stopped");
+    await expect(page.getByRole("button", { name: "Retry question", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Retry question", exact: true }).click();
     await expect(page.getByTitle("Copy answer")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
     await expect(page.locator(".citation").first()).toBeVisible();
     await expect(page.locator(".message.user")).toHaveCount(1);
-    await expect(page.locator(".message:not(.user)")).toHaveCount(1);
+    await expect(page.locator(".message.assistant:not(.incomplete)")).toHaveCount(1);
+    await expect(page.locator(".message.incomplete")).toHaveCount(1);
     expect(count).toBe(2);
   } finally { release(); }
 });
@@ -607,7 +608,7 @@ test("focused chat recovers a failed request and restores conversation model and
   await page.getByLabel("Ask a question").fill(question);
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText("Synthetic temporary answer outage", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.getByRole("button", { name: "Retry question", exact: true }).click();
   await expect(page.getByTitle("Copy answer")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
@@ -703,22 +704,22 @@ test("latest history selection and New chat win over stale conversation loads", 
     await choose(a.title).click();
     await expect.poll(() => loads).toBe(1);
     await choose(b.title).click();
-    await expect(page.locator(".thread-title")).toHaveText(b.title);
+    await expect(choose(b.title)).toHaveAttribute("aria-current", "true");
     const first = page.waitForResponse(response => response.url().endsWith(`/api/conversations/${a.id}`));
     gates[0].release();
     await first;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    await expect(page.locator(".thread-title")).toHaveText(b.title);
+    await expect(choose(b.title)).toHaveAttribute("aria-current", "true");
     await choose(a.title).click();
     await expect.poll(() => loads).toBe(2);
-    await page.getByRole("button", { name: "New conversation", exact: true }).click();
+    await page.locator(".chat-heading").getByRole("button", { name: "New conversation", exact: true }).click();
     await page.getByLabel("Ask a question").fill("A fresh draft");
     const second = page.waitForResponse(response => response.url().endsWith(`/api/conversations/${a.id}`));
     gates[1].release();
     await second;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await expect(page.getByRole("heading", { name: "What would you like to know?", exact: true })).toBeVisible();
-    await expect(page.locator(".thread-title")).toHaveText("Your documents. A clearer answer.");
+    await expect(page.locator('.chat-list button[aria-current="true"]')).toHaveCount(0);
     await expect(page.getByLabel("Ask a question")).toHaveValue("A fresh draft");
   } finally { gates.forEach(gate => gate.release()); }
 });
@@ -747,7 +748,7 @@ test("compact conversation dialog restores focus on Escape, Close and backdrop",
   await expect(history).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  await history.getByRole("button", { name: "New conversation", exact: true }).click();
   await expect(history).not.toBeVisible();
   await expect(page.getByLabel("Ask a question")).toBeFocused();
   await page.setViewportSize({ width: 1440, height: 540 });
