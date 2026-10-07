@@ -9,7 +9,7 @@ from test_dataset_models import system,dataset,model,mapping,post
 def test_installed_metadata_is_readonly_loopback(monkeypatch):
     original=httpx.Client
     def handle(request):
-        assert request.method=='GET' and str(request.url)=='http://127.0.0.1:11434/api/tags'
+        assert request.method=='GET' and str(request.url)==ollama.base_url()+'/api/tags'
         return httpx.Response(200,json={'models':[{'name':'qwen3:4b','digest':'synthetic','size':42},{'name':'cloud-model'}]})
     def client(**kwargs):
         assert kwargs['trust_env'] is False and kwargs['follow_redirects'] is False
@@ -44,7 +44,7 @@ def test_public_rfc_two_models_same_index_temporary_chat(system,monkeypatch):
         assert answer.status_code==200,answer.text
         message=answer.json()['message']
         assert 'UTF-8' in message['text'],message['text']
-        assert message['citations'] and all(c['document_id']==doc['id'] for c in message['citations'])
+        assert message['citations'] and all(c['document_id']==doc['id'] for c in message['citations']),message['text']
         assert message['model_selection']['model_id']==selected['id']
         print(selected['provider_model']+': grounded UTF-8 answer with citations passed')
     assert core.store.get('documents/'+doc['id']+'/index.json')==index_before
@@ -53,3 +53,14 @@ def test_public_rfc_two_models_same_index_temporary_chat(system,monkeypatch):
     result=system.api.post('/api/temporary-chat/messages',json={'text':"What is Dottie's birthday?",'dataset_id':empty['id']})
     assert result.status_code==200 and not result.json()['message']['citations']
     assert 'evidence' in result.json()['message']['text'].lower()
+
+
+@pytest.mark.parametrize('port',['11434','11435'])
+def test_endpoint_is_fixed_loopback(monkeypatch,port):
+    monkeypatch.setenv('AEGIS_OLLAMA_PORT',port)
+    assert ollama.base_url()=='http://127.0.0.1:'+port
+
+@pytest.mark.parametrize('value',['443','http://example.com','11435/path','11435@evil',''])
+def test_invalid_model_endpoint_rejected(monkeypatch,value):
+    monkeypatch.setenv('AEGIS_OLLAMA_PORT',value)
+    with pytest.raises(ollama.OllamaError):ollama.base_url()

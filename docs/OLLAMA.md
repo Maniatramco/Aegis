@@ -121,3 +121,10 @@ Keep Nomic as the dataset's embedding model while switching its mapped chat choi
 No paid API is required. Google Gemma's separately restricted open-weight license is not presented as an open-source option; hosted Gemini is not configured. Model weights being permissively licensed is not a claim that all training datasets are available.
 
 Temporary chat keeps message history only in the current browser tab and passes a bounded history to the selected model. Reloading clears the messages. Uploaded originals and indexes still belong to the selected dataset; use the explicit session-upload cleanup before leaving, or delete the files in Datasets later. Existing dataset documents are never included in session cleanup. Local-only mode keeps inference on this computer; a separately configured external provider would still receive selected text under the existing consent rules.
+
+
+### Native Windows daemon isolation
+
+`scripts/windows-dev.py start` owns a separate portable Ollama daemon on `127.0.0.1:11435`, using the existing sibling `.local-tools/ollama-models` store. The installed Ollama desktop app and its default port/store remain untouched. Override executable/model paths with `--ollama-executable` and `--ollama-models` when needed. The launcher verifies required models, disables cloud use, runs one model at a time and records exact child command lines for guarded shutdown. `stop` preserves all model files and app data. Restart through the same wrapper to retain the original runtime directory.
+
+Standalone/default deployments still use loopback11434. The backend-only `AEGIS_OLLAMA_PORT` permits only11434 or11435; arbitrary hosts/URLs are not accepted. For opt-in real tests against the native launcher, set `AEGIS_OLLAMA_PORT=11435`.

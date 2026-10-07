@@ -382,7 +382,7 @@ def get_settings(owner=Depends(auth)):
     except Exception:has_key=False
     try:has_oci_key=bool(oci_api_key())
     except Exception:has_oci_key=False
-    return settings()|{'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'local_only':os.getenv('AEGIS_LOCAL_ONLY')=='true','ollama_endpoint':'http://127.0.0.1:11434','mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
+    return settings()|{'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'local_only':os.getenv('AEGIS_LOCAL_ONLY')=='true','ollama_endpoint':__import__('app.ollama_provider',fromlist=['base_url']).base_url(),'mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
 @app.patch('/api/settings')
 def save_settings(body:dict,owner=Depends(auth)):
     with document_lock('settings-config'):return _save_settings(body,owner)

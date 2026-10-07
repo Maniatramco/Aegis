@@ -12,9 +12,9 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Home", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask Aegis", exact: true })).toBeVisible();
+  await page.goto("/#Home");
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
 });
 test("navigates all workspace screens and preserves an authenticated refresh", async ({
   page,
