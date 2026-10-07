@@ -200,7 +200,7 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await page.getByLabel("Extraction dataset", { exact: true }).selectOption(kb.id);
   await page.getByRole("combobox", { name: "Extraction model", exact: true }).selectOption(models.careful.id);
   await page.getByRole("checkbox", { name: new RegExp(invoiceName.replaceAll(".", "\\.")) }).check();
-  await page.getByLabel("Prompt template").selectOption(template.id);
+  await page.getByLabel("Prompt template", {exact:true}).selectOption(template.id);
   const extractionConsent = page.getByRole("checkbox", { name: /I approve sending this request/ });
   if (await extractionConsent.isVisible()) await extractionConsent.check();
   await capture(page, "13-extract-start.png");
