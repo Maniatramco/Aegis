@@ -28,7 +28,7 @@ const test = base.extend<{ workspace: {
 test.use({ viewport: { width: 1440, height: 1000 }, locale: "en-US", timezoneId: "UTC", trace: "off", screenshot: "off", video: "off", actionTimeout: 15000 });
 const synthetic = "SYNTHETIC UI TEST. Review reference ATTACH-2026. Source originals remain stored. New documents are available after indexing completes.";
 const file = (name: string, content = synthetic) => ({ name, mimeType: "text/plain", buffer: Buffer.from(content) });
-const dialog = (page: Page) => page.getByRole("dialog", { name: "Attach documents", exact: true });
+const dialog = (page: Page) => page.getByRole("dialog", { name: /^(Attach documents|Document processing)$/ });
 const chatConsent = (page: Page) => page.getByRole("checkbox", { name: /I approve sending this request/ });
 const row = (page: Page, name: string) => dialog(page).locator(".upload-files > li").filter({ has: page.getByText(name, { exact: true }) });
 const isUpload = (request: Request) => new URL(request.url()).pathname === "/api/documents/upload" && request.method() === "POST";
@@ -146,6 +146,37 @@ test("picker uploads to the selected dataset, preserves model, scope and draft, 
   expect(chats).toEqual([]);
   expect((await documents(page, w.dataset)).map(document => document.id).sort()).toEqual([original.id, result.documents[0].id].sort());
   expect(await documents(page, w.other)).toEqual([]);
+});
+
+test("attachment opens a clean chooser while completed workflows remain available", async ({ page, workspace: w }) => {
+  const stored = await uploadReady(page.request, w.headers, w.dataset, "Completed-before-attachment.txt", synthetic);
+  await openChat(page, w.dataset);
+  const uploads: Request[] = [];
+  page.on("request", request => { if (isUpload(request)) uploads.push(request); });
+  await page.getByLabel("Ask a question").fill("Preserve this draft while viewing uploads.");
+  await openUploads(page);
+  await expect(dialog(page).getByRole("heading", {name:"Add documents",exact:true})).toBeVisible();
+  await expect(dialog(page).getByLabel("Choose documents", {exact:true})).toBeEnabled();
+  await expect(dialog(page).locator(".workflow-stages")).toHaveCount(0);
+  await expect(dialog(page).getByText(stored.name, {exact:true})).toHaveCount(0);
+  await dialog(page).getByRole("button", {name:"View processing status",exact:true}).click();
+  await expect(dialog(page).getByRole("heading", {name:"Document processing",exact:true})).toBeVisible();
+  await expect(row(page, stored.name)).toContainText("Ready for questions");
+  await choose(page, [file("New-attachment-only.txt")]);
+  await dialog(page).getByRole("button", {name:"Upload 1",exact:true}).click();
+  await expect(row(page,"New-attachment-only.txt")).toContainText("Ready for questions",{timeout:90000});
+  await dialog(page).getByRole("button", {name:"Close uploads",exact:true}).click();
+  await openUploads(page);
+  await expect(dialog(page).locator(".workflow-stages")).toHaveCount(0);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", {name:"View document workflows",exact:true}).click();
+  await expect(row(page, stored.name)).toContainText("Ready for questions");
+  await expect(row(page,"New-attachment-only.txt")).toContainText("Ready for questions");
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Ask a question")).toHaveValue("Preserve this draft while viewing uploads.");
+  expect(uploads).toHaveLength(1);
+  expect((await documents(page,w.dataset)).map(document=>document.name).sort()).toEqual([stored.name,"New-attachment-only.txt"].sort());
 });
 
 test("dropping into chat and the panel requires explicit upload", async ({ page, workspace: w }) => {
@@ -294,6 +325,7 @@ test("failed indexing retries the same stored original after a page reload", asy
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
   await openUploads(page);
+  await dialog(page).getByRole("button", { name: "View processing status", exact: true }).click();
   await expect(row(page, original.name).getByRole("button", { name: "Retry failed step", exact: true })).toBeEnabled();
   const retried = page.waitForResponse(response => new URL(response.url()).pathname === `/api/jobs/${result.jobs[0].id}/retry` && response.request().method() === "POST");
   await row(page, original.name).getByRole("button", { name: "Retry failed step", exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
@@ -354,6 +386,7 @@ test("close, navigation and dataset change during delayed upload preserve destin
     await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
     await openUploads(page);
     await expect(row(page, "Remaining-pending.txt")).toContainText("Ready to upload");
+    await dialog(page).getByRole("button", { name: "View processing status", exact: true }).click();
     await expect(row(page, "Original-destination.txt")).toContainText("Ready for questions", { timeout: 90000 });
   } finally { release(); }
 });

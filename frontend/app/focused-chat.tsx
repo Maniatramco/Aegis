@@ -19,6 +19,7 @@ type Props = {
 };
 export function FocusedChat(p: Props) {
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadView, setUploadView] = useState<"attach" | "workflow">("attach");
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const uploadDialog = useRef<HTMLDialogElement>(null);
@@ -87,6 +88,8 @@ export function FocusedChat(p: Props) {
     return () => { window.removeEventListener("dragend", reset); window.removeEventListener("drop", reset); window.removeEventListener("blur", reset); window.removeEventListener("keydown", key); };
   }, []);
   const closeUpload = () => { setUploadOpen(false); setDragging(false); dragDepth.current = 0; };
+  const openAttachments = () => { setUploadView("attach"); setUploadOpen(true); };
+  const openWorkflow = () => { setUploadView("workflow"); setUploadOpen(true); };
   const closeHistory = () => {
     historyDialog.current?.close();
     setHistoryOpen(false);
@@ -110,7 +113,7 @@ export function FocusedChat(p: Props) {
       onDragEnter={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
       onDragOver={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = p.upload.blocked || p.upload.uploading ? "none" : "copy"; } }}
       onDragLeave={e => { if (e.dataTransfer.types.includes("Files")) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
-      onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); dragDepth.current = 0; setDragging(false); p.upload.choose(Array.from(e.dataTransfer.files)); setUploadOpen(true); }}>
+      onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); dragDepth.current = 0; setDragging(false); p.upload.choose(Array.from(e.dataTransfer.files)); openAttachments(); }}>
       {dragging && <div className="chat-drop-overlay" role="status"><UploadCloud size={38} /><strong>Drop documents to attach</strong><span>{p.upload.blocked || `Upload to ${p.upload.dataset?.name}`}</span><span>Review files before uploading</span></div>}
       <header className="chat-heading">
         <div className="chat-heading-row">
@@ -147,16 +150,16 @@ export function FocusedChat(p: Props) {
         <div className="composer-heading"><span className="model-status"><span className="status-dot" />{p.localProcessing ? "Local model" : "Selected model"}<strong>{p.modelName}</strong></span>{p.reranker?.enabled && <span className="retrieval-status" title={`${p.reranker.model} · up to ${p.reranker.candidate_limit} candidates, then the configured number of source chunks`}>{p.reranker.ready ? "Local reranking" : "Reranker unavailable"}</span>}</div>
         {p.error && !messages.at(-1)?.error && <div className="chat-error" role="alert"><AlertCircle size={17} aria-hidden="true" /><span>{p.error}</span><button className="btn icon" aria-label="Dismiss error" onClick={p.onDismissError}><X size={15} /></button></div>}
         <form className="composer" onSubmit={e => { e.preventDefault(); p.onSend(); }}>
-          <button ref={attachTrigger} type="button" className="btn attach-documents" aria-label="Attach documents" title="Attach documents to the selected dataset" aria-haspopup="dialog" onClick={() => setUploadOpen(true)}><Paperclip size={22} /></button>
+          <button ref={attachTrigger} type="button" className="btn attach-documents" aria-label="Attach documents" title="Attach documents to the selected dataset" aria-haspopup="dialog" onClick={openAttachments}><Paperclip size={22} /></button>
           <textarea ref={textarea} aria-label="Ask a question" placeholder={messages.length ? "Ask a follow-up about your documents…" : "Ask a question about your documents…"} rows={1} value={p.prompt} onChange={e => p.setPrompt(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); if (!p.answering) p.onSend(); } }} />
           {p.answering ? <button key="stop" type="button" className="btn primary send-message" aria-label="Stop" title="Stop generating" onClick={event => { event.preventDefault(); p.onStop(); }}><Square size={19} /></button> : <button key="send" type="submit" className="btn primary send-message" aria-label="Send" title="Send message" disabled={!p.prompt.trim() || !p.canSend}><Send size={22} /></button>}
         </form>
-        {p.upload.summary && <div className="chat-upload-status"><button type="button" className="text-button" onClick={() => setUploadOpen(true)}><FileText size={13} /><span role="status">{p.upload.summary}</span></button></div>}
+        {p.upload.summary && <div className="chat-upload-status"><button type="button" className="text-button" aria-label="View document workflows" onClick={openWorkflow}><FileText size={13} /><span role="status">{p.upload.summary}</span></button></div>}
         <div className="composer-meta">{!p.localProcessing&&<label className="check"><input type="checkbox" aria-label={p.providerNotice} checked={p.externalChat} disabled={p.answering} onChange={e => p.setExternalChat(e.target.checked)} /><span>Allow selected documents to be sent to this model</span></label>}<details className="provider-details"><summary>{p.localProcessing ? "Privacy" : "Provider details"}</summary><p>{p.providerNotice}</p></details><span className="composer-hint">{p.localProcessing ? "Local · Ollama · compatible dataset embeddings" : "Review sources before use"}</span></div>
 
       </div>
     </section>
-    <dialog className="chat-upload-dialog" ref={uploadDialog} aria-label="Attach documents" onKeyDown={event => {
+    <dialog className="chat-upload-dialog" ref={uploadDialog} aria-label={uploadView === "attach" ? "Attach documents" : "Document processing"} onKeyDown={event => {
       if (event.key !== "Tab") return;
       const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter(element => element.getClientRects().length > 0);
       const first = controls[0], last = controls[controls.length - 1];
@@ -164,8 +167,9 @@ export function FocusedChat(p: Props) {
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }} onCancel={closeUpload} onClose={closeUpload} onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) closeUpload(); } }}>
-      <div className="chat-upload-heading"><h2>Add documents</h2><button type="button" className="btn icon" aria-label="Close uploads" onClick={closeUpload}><X size={19} /></button></div>
-      <DocumentUploadPanel upload={p.upload} />
+      <div className="chat-upload-heading"><h2>{uploadView === "attach" ? "Add documents" : "Document processing"}</h2><button type="button" className="btn icon" aria-label="Close uploads" onClick={closeUpload}><X size={19} /></button></div>
+      {uploadView === "workflow" && <button type="button" className="text-button" onClick={openAttachments}>Add more documents</button>}
+      <DocumentUploadPanel upload={p.upload} attachmentOnly={uploadView === "attach"} onStart={() => setUploadView("workflow")} onWorkflow={openWorkflow} />
       <p className="upload-footnote">You can close this panel and keep writing. Accepted uploads continue indexing in your dataset.</p>
     </dialog>
     <dialog className="chat-sources" ref={dialog} aria-label="Sources" onCancel={() => setSourcesOpen(false)} onClose={() => setSourcesOpen(false)} onClick={e => { if (e.target === e.currentTarget) setSourcesOpen(false); }}><div className="sources-surface"><div className="sources-heading"><div><h2>Sources</h2><p>Evidence from your stored documents</p></div><button className="btn icon" aria-label="Close sources" onClick={() => setSourcesOpen(false)}><X size={19} /></button></div>{sources.length ? <>{source && <button className="text-button" onClick={() => setSource(null)}>View all {sources.length} sources</button>}{(source ? [source] : sources).map((c, i) => <section className="source-evidence" key={i}><h3><FileText size={18} />{c.document_name || c.name || "Source document"}</h3>{c.page && <span className="small muted">Page {c.page}</span>}<p>{c.excerpt || c.text || c.chunk_text || "No excerpt was returned for this source."}</p>{c.document_id && <a className="text-button" href={`/api/documents/${c.document_id}/source#page=${c.page||1}`} target="_blank" rel="noopener">Open original source{c.page ? ` · page ${c.page}` : ""}</a>}{c.chunk_id && <small className="muted">Chunk: {c.chunk_id}</small>}</section>)}</> : <p className="muted">Cited evidence will appear here when an answer includes sources.</p>}</div></dialog>

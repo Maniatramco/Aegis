@@ -127,7 +127,9 @@ export function useDocumentUpload(options: Options) {
 }
 export type DocumentUploadController = ReturnType<typeof useDocumentUpload>;
 
-export function DocumentUploadPanel({ upload: u }: { upload: DocumentUploadController }) {
+export function DocumentUploadPanel({ upload: u, attachmentOnly = false, onStart, onWorkflow }: { upload: DocumentUploadController; attachmentOnly?: boolean; onStart?: () => void; onWorkflow?: () => void }) {
+  const rows = attachmentOnly ? u.rows.filter(row => !row.document) : u.rows;
+  const storedCount = u.rows.filter(row => row.document).length;
   return <section className="document-upload-panel" aria-label="Document uploads">
     <p className="upload-destination">Destination: <strong>{u.dataset?.name || "No dataset selected"}</strong></p>
     <p className="muted small">PDF, DOCX or UTF-8 TXT · up to {u.maxMb} MB per file · 20 files at a time. Originals are stored, then indexed using this dataset’s configuration.</p>
@@ -137,7 +139,7 @@ export function DocumentUploadPanel({ upload: u }: { upload: DocumentUploadContr
       <UploadCloud size={28} /><strong>Drop documents here, or choose files</strong>
       <input aria-label="Choose documents" disabled={!!u.blocked || u.uploading} type="file" accept=".pdf,.docx,.txt" multiple onChange={e => { u.choose(Array.from(e.target.files || [])); e.target.value = ""; }} />
     </div>
-    {u.rows.length > 0 && <ul className="upload-files" aria-label="Selected and processing documents">{u.rows.map(row => <li key={row.id}>
+    {rows.length > 0 && <ul className="upload-files" aria-label="Selected and processing documents">{rows.map(row => <li key={row.id}>
       <div className="upload-file-icon">{row.ready ? <CheckCircle2 size={19} /> : row.status === "uploading" || row.processing ? <Loader2 className="animate-spin" size={19} /> : <FileText size={19} />}</div>
       <div className="upload-file-detail"><strong>{row.name}</strong><span className={`upload-file-status ${row.ready ? "is-ready" : ""}`} role="status">{row.label}</span>
         {(row.error || (row.failed && (row.document?.error || row.job?.error))) && <p className="upload-file-error">{row.error || row.document?.error || row.job?.error}</p>}
@@ -152,7 +154,8 @@ export function DocumentUploadPanel({ upload: u }: { upload: DocumentUploadContr
     {u.externalRequired && <label className="check upload-consent"><input type="checkbox" checked={u.consent} disabled={u.uploading} onChange={e => u.setConsent(e.target.checked)} /><span>I approve sending original files to the configured external storage, and document text to external search or embedding providers. API usage may be billed separately.</span></label>}
     {u.notice && <p className="upload-notice" role="alert"><AlertCircle size={16} />{u.notice}</p>}
     {u.pollError && <p className="upload-notice" role="status">Could not refresh processing status. <button type="button" className="text-button" onClick={u.refresh}>Check again</button></p>}
-    <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={u.start}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>
+    {attachmentOnly && storedCount > 0 && onWorkflow && <button type="button" className="text-button" onClick={onWorkflow}>View processing status</button>}
+    <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={() => { onStart?.(); void u.start(); }}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>
     <p className="upload-footnote">Only ready, compatible-index documents are available for questions. Hiding this popup does not cancel accepted processing. The original is retained.</p>
   </section>;
 }
