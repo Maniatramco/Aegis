@@ -1417,7 +1417,7 @@ export default function App() {
             </section>}
             </>
           )}
-          {view === "Aegis Agent" && <section className="agent-header"><div><h1>Aegis Agent</h1><p>Upload documents, ask questions, and extract fields in one workspace.</p></div><div className="tabs" role="tablist" aria-label="Agent task">{["Chat","Extract"].map(tab=><button key={tab} role="tab" aria-selected={agentTab===tab} className={agentTab===tab?"active":""} onClick={()=>{if((reviewDirty.current||templateDirty.current)&&!window.confirm("Discard unsaved changes before switching tasks?"))return;setAgentTab(tab);}}>{tab==="Chat"?"Chat":"Extract & review"}</button>)}</div></section>}
+          {view === "Aegis Agent" && <section className="agent-header"><div><h1>Aegis Agent</h1></div><div className="tabs" role="tablist" aria-label="Agent task">{["Chat","Extract"].map(tab=><button key={tab} role="tab" aria-selected={agentTab===tab} className={agentTab===tab?"active":""} onClick={()=>{if((reviewDirty.current||templateDirty.current)&&!window.confirm("Discard unsaved changes before switching tasks?"))return;setAgentTab(tab);}}>{tab==="Chat"?"Chat":"Extract & review"}</button>)}</div></section>}
           {view === "Aegis Agent" && agentTab === "Chat" && temporary && <TemporaryDocumentChat models={models} initialModelId={chatModelId} settings={settings} api={api} onExit={() => setTemporary(false)} />}
           {view === "Aegis Agent" && agentTab === "Chat" && !temporary && (
             <FocusedChat
