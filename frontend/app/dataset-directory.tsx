@@ -14,7 +14,7 @@ export function DatasetHome({datasets,loading,onBrowse,documents,onChat}:{datase
  return <section className="home-datasets" aria-label="Your datasets">
  <div className="home-datasets-header"><div className="home-datasets-heading"><h2>Your datasets</h2><span>{visible.length}{search?` of ${datasets.length}`:''} dataset{datasets.length===1?'':'s'}</span></div>
  <label className="home-datasets-search"><Search size={16} aria-hidden="true"/><input aria-label="Search datasets" placeholder="Search datasets…" value={search} onChange={e=>setSearch(e.target.value)}/></label></div>
- {loading&&!datasets.length?<p role="status">Loading datasets…</p>:<div className="home-card-grid">{visible.map(d=>{
+ {loading&&(!datasets.length||!documents.length)?<div className="home-card-grid" aria-hidden="true">{[1,2,3].map(id=><div key={id} className="skeleton" style={{height:140,borderRadius:12}} />)}</div>:<div className="home-card-grid">{visible.map(d=>{
  const all=documents.filter(doc=>(doc.dataset_id||doc.kb_id)===d.id),ready=all.filter(doc=>doc.status==="ready"&&!doc.requires_reindex).length,active=all.filter(doc=>["queued","processing"].includes(doc.status)).length,failed=all.filter(doc=>["failed","cancelled"].includes(doc.status)).length,stale=all.filter(doc=>doc.status==="ready"&&doc.requires_reindex).length;
  const status=failed?`${failed} failed`:active?`${active} processing`:stale?`${stale} need reindex`:all.length?"Ready":"No documents";
  const state=failed?'failed':active||stale?'pending':all.length?'ready':'empty';

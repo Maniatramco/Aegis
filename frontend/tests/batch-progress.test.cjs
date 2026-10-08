@@ -124,3 +124,30 @@ test('parallel refresh lists each outstanding task once and keeps the final task
  assert.match(finishing,/<strong>Loading documents…<\/strong>/);
  assert.doesNotMatch(finishing,/<li>/);
 });
+
+
+test('workspace startup keeps one stable popup as requests finish and background jobs arrive',()=>{
+ const states=[[],[{id:'datasets',label:'Loading datasets…'},{id:'documents',label:'Loading documents…'}],[{id:'documents',label:'Loading documents…'}],[]];
+ const job={id:'background',kind:'extract',status:'running'};
+ for(const requests of states){
+  const html=renderToStaticMarkup(React.createElement(OperationProgress,{workspaceLoading:true,requests,jobs:[job]}));
+  assert.equal((html.match(/aria-label="Workspace progress"/g)||[]).length,1);
+  assert.match(html,/<strong>Loading your workspace…<\/strong>/);
+  assert.match(html,/Getting your datasets, documents, and models ready/);
+  assert.doesNotMatch(html,/Loading datasets…|Loading documents…|operation-request-list/);
+  assert.equal((html.match(/aria-label="Processing workflow"/g)||[]).length,1);
+ }
+ assert.equal(renderToStaticMarkup(React.createElement(OperationProgress,{workspaceLoading:false,requests:[],jobs:[]})),'');
+ const background=renderToStaticMarkup(React.createElement(OperationProgress,{workspaceLoading:false,requests:[],jobs:[job]}));
+ assert.match(background,/Processing workflow/);
+});
+const {DatasetHome}=load(path.resolve(__dirname,'../app/dataset-directory.tsx'));
+test('Home does not add another loading announcement or flash an empty dataset message during startup',()=>{
+ const html=renderToStaticMarkup(React.createElement(DatasetHome,{datasets:[],documents:[],loading:true,onBrowse:()=>{},onChat:()=>{}}));
+ assert.doesNotMatch(html,/Loading datasets|role="status"|No registered datasets yet/);
+ assert.match(html,/aria-hidden="true"/);
+ const partial=renderToStaticMarkup(React.createElement(DatasetHome,{datasets:[{id:'dataset',name:'Dataset arriving first'}],documents:[],loading:true,onBrowse:()=>{},onChat:()=>{}}));
+ assert.doesNotMatch(partial,/No documents|0 ready/);
+ const empty=renderToStaticMarkup(React.createElement(DatasetHome,{datasets:[],documents:[],loading:false,onBrowse:()=>{},onChat:()=>{}}));
+ assert.match(empty,/No registered datasets yet/);
+});

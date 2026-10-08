@@ -23,7 +23,7 @@ export function JobProgress({job}:{job:Entity}) {
   {job.error&&<p role="alert" className="review-error">{job.error}</p>}
  </div>;
 }
-export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false,visibleJobId=null}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean;visibleJobId?:string|null}) {
+export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false,visibleJobId=null,workspaceLoading=false}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean;visibleJobId?:string|null;workspaceLoading?:boolean}) {
  const active=jobs.filter(j=>['queued','running'].includes(j.status)&&j.id!==visibleJobId);
  const tracked=new Set(uploadItems.flatMap(item=>item.document?[item.id,item.document.id]:[]));
  const processingBatch=uploadItems.some(item=>item.status==='uploading'||item.processing);
@@ -35,10 +35,10 @@ export function OperationProgress({requests,jobs,uploadItems=[],documents=[],upl
  const otherJobs=active.filter(job=>job.kind!=='index');
  const requestLabels=Array.from(new Set(requests.map(request=>request.label)));
  const loadingTitle=requestLabels.length===1?requestLabels[0]:requestLabels.every(label=>label.startsWith('Loading '))?'Loading workspace…':'Updating workspace…';
- if(!requests.length&&!otherJobs.length&&(!batchItems.length||uploadWorkflowVisible))return null;
- return <aside className={`operation-popup${requests.length?' is-loading':''}`} aria-label="Workspace progress" role="status" aria-live="polite">
-  <div className="operation-popup-heading"><span className="operation-popup-icon"><Loader2 size={20} className="animate-spin" aria-hidden="true"/></span><div><strong>{requests.length?loadingTitle:'Processing in background'}</strong>{requests.length>0&&<p className="operation-popup-description">This will close automatically when complete.</p>}</div></div>
-  {requestLabels.length>1&&<ul className="operation-request-list">{requestLabels.map(label=><li key={label}>{label}</li>)}</ul>}
+ if(!workspaceLoading&&!requests.length&&!otherJobs.length&&(!batchItems.length||uploadWorkflowVisible))return null;
+ return <aside className={`operation-popup${workspaceLoading||requests.length?' is-loading':''}`} aria-label="Workspace progress" role="status" aria-live="polite">
+  <div className="operation-popup-heading"><span className="operation-popup-icon"><Loader2 size={20} className="animate-spin" aria-hidden="true"/></span><div><strong>{workspaceLoading?'Loading your workspace…':requests.length?loadingTitle:'Processing in background'}</strong>{(workspaceLoading||requests.length>0)&&<p className="operation-popup-description">{workspaceLoading?'Getting your datasets, documents, and models ready.':'This will close automatically when complete.'}</p>}</div></div>
+  {!workspaceLoading&&requestLabels.length>1&&<ul className="operation-request-list">{requestLabels.map(label=><li key={label}>{label}</li>)}</ul>}
   {!uploadWorkflowVisible&&batchItems.length>0&&<><BatchProgress items={batchItems} compact/><ul className="batch-popup-documents" aria-label="Background document statuses">{batchItems.map(item=>{const error=item.error||(item.failed&&(item.document?.error||item.job?.error));return <li key={item.id}><strong>{item.name}</strong><span>{currentUploadStep(item)}</span>{error&&<p className="batch-popup-error">{readableUploadError(error)}</p>}</li>;})}</ul></>}
   {otherJobs.map(job=><JobProgress key={job.id} job={job}/>)}
  </aside>;

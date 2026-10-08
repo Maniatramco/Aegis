@@ -439,7 +439,7 @@ export default function App() {
       ['/models',value=>setModels(list(value,'models'))],
     ];
     Promise.allSettled(tasks.map(async([path,update])=>{
-      try {const value=await api(path,'GET',undefined,controller.signal);if(active)update(value);}
+      try {const value=await api(path,'GET',undefined,controller.signal,true);if(active)update(value);}
       catch(error){if(active)setError(error instanceof Error?error.message:'Could not refresh workspace.');}
     })).finally(()=>{if(active)setLoading(false);});
     return () => {
@@ -2734,7 +2734,7 @@ export default function App() {
           </section>
         </div>
       )}
-      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
+      <OperationProgress workspaceLoading={loading} requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
     </>
   );
 }
