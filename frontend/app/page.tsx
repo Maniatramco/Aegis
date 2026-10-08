@@ -1163,7 +1163,7 @@ export default function App() {
                                     <br />
                                     <span
                                       className="muted"
-                                      style={{ fontSize: 10 }}
+                                      style={{ fontSize: "var(--text-small)" }}
                                     >
                                       {date(d.created_at)}
                                     </span>
@@ -1593,7 +1593,7 @@ export default function App() {
                   <div className="stat-card" key={s.label}>
                     <div className="stat-label">{s.label}</div>
                     <div
-                      style={{ fontSize: 20, fontWeight: 650, marginTop: 9 }}
+                      style={{ fontSize: "var(--text-section)", fontWeight: 600, marginTop: 9 }}
                     >
                       {s.value}
                     </div>
@@ -1788,7 +1788,7 @@ export default function App() {
                               <div
                                 style={{
                                   color: "#ae4a5b",
-                                  fontSize: 11,
+                                  fontSize: "var(--text-caption)",
                                   maxWidth: 360,
                                   marginTop: 6,
                                 }}

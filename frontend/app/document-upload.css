@@ -1,105 +1,105 @@
 .document-upload-panel { min-width:0; }
-.upload-destination { margin:0 0 8px; font-size:13px; overflow-wrap:anywhere; }
+.upload-destination { margin:0 0 8px; font-size:var(--text-body); overflow-wrap:anywhere; }
 .document-upload-panel>.small { line-height:1.6; }
 .shared-dropzone { display:flex; flex-direction:column; align-items:center; gap:12px; padding:22px 16px; margin:18px 0; }
-.shared-dropzone strong { font-size:14px; }
-.shared-dropzone input { max-width:100%; font-size:13px; }
+.shared-dropzone strong { font-size:var(--text-body); }
+.shared-dropzone input { max-width:100%; font-size:var(--text-input); }
 .upload-files { list-style:none; margin:16px 0; padding:0; max-height:240px; overflow:auto; }
 .upload-files > li { display:flex; gap:10px; align-items:flex-start; border:1px solid #dfe8f7; border-radius:10px; background:#f8faff; margin-bottom:8px; padding:12px; }
 .upload-file-icon { flex-shrink:0; color:#3668ba; padding-top:2px; }
 .upload-file-detail { min-width:0; flex:1; overflow-wrap:anywhere; }
-.upload-file-detail>strong { display:block; font-size:13px; font-weight:600; line-height:1.5; }
-.upload-file-status { display:block; color:#61708e; font-size:12px; margin-top:3px; }
+.upload-file-detail>strong { display:block; font-size:var(--text-body); font-weight:600; line-height:1.5; }
+.upload-file-status { display:block; color:#61708e; font-size:var(--text-caption); margin-top:3px; }
 .upload-file-status.is-ready { color:#167049; }
 .upload-file-detail progress { display:block; width:100%; height:7px; accent-color:#2463ff; margin-top:9px; }
-.upload-file-error { font-size:12px; color:#9c3e30; line-height:1.5; margin:6px 0; }
-.upload-file-detail .text-button { margin-top:8px; font-size:12px; }
+.upload-file-error { font-size:var(--text-caption); color:#9c3e30; line-height:1.5; margin:6px 0; }
+.upload-file-detail .text-button { margin-top:8px; font-size:var(--text-body); }
 .upload-files .btn.icon { min-width:36px; min-height:36px; padding:6px; }
 .document-upload-panel .batch-document-list { max-height:360px; }
 .batch-document-heading { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
-.batch-document-heading>strong { font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.batch-document-heading>strong { font-size:var(--text-body); font-weight:600; overflow-wrap:anywhere; }
 .batch-document-heading .upload-file-status { margin:0; text-align:right; flex-shrink:0; max-width:48%; }
-.batch-document-actions { font-size:11px; color:#536480; margin-top:5px; }
+.batch-document-actions { font-size:var(--text-small); color:#536480; margin-top:5px; }
 .batch-document-actions>summary { cursor:pointer; width:fit-content; padding:3px 0; }
 .batch-document-actions .workflow-actions { margin:8px 0 0; }
 .batch-document-actions .workflow-actions .btn { flex:none; }
 .batch-document-retry { margin-top:8px; }
-.batch-document-retry .btn { font-size:12px; }
+.batch-document-retry .btn { font-size:var(--text-body); }
 .batch-document-actions>summary:focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
-.upload-consent { align-items:flex-start; line-height:1.6; font-size:12px; margin:16px 0; }
+.upload-consent { align-items:flex-start; line-height:1.6; font-size:var(--text-caption); margin:16px 0; }
 .upload-consent input { flex-shrink:0; margin-top:3px; }
-.upload-notice { display:flex; gap:8px; align-items:flex-start; background:#fff7eb; color:#835417; padding:12px; border-radius:8px; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.upload-notice { display:flex; gap:8px; align-items:flex-start; background:#fff7eb; color:#835417; padding:12px; border-radius:8px; font-size:var(--text-body); line-height:1.6; overflow-wrap:anywhere; }
 .upload-notice svg { flex-shrink:0; margin-top:2px; }
 .upload-actions { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; }
-.upload-actions>.text-button { font-size:12px; }
-.upload-footnote { font-size:11px; line-height:1.6; color:#65748c; margin:14px 0 0; }
+.upload-actions>.text-button { font-size:var(--text-body); }
+.upload-footnote { font-size:var(--text-small); line-height:1.6; color:#65748c; margin:14px 0 0; }
 .chat-upload-dialog { width:min(580px,calc(100vw - 28px)); max-width:calc(100vw - 28px); max-height:calc(100dvh - 28px); margin:auto; padding:24px; border:1px solid #dbe6f7; border-radius:16px; color:#14234b; background:white; box-shadow:0 16px 70px #14234b30; }
 .chat-upload-dialog::backdrop { background:#15295155; }
 .chat-upload-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
-.chat-upload-heading h2 { margin:0; font-size:21px; }
+.chat-upload-heading h2 { margin:0; font-size:var(--text-section); }
 .chat-upload-heading .btn { flex-shrink:0; }
 .focused-chat .attach-documents { flex-shrink:0; min-width:44px; width:44px; height:48px; padding:8px; border:0; background:transparent; color:#3265b6; }
 .focused-chat .attach-documents:hover { background:#edf3ff; }
-.chat-upload-status { display:flex; gap:8px; align-items:center; margin:8px 0 0; font-size:12px; color:#527093; }
-.chat-upload-status .text-button { font-size:12px; min-width:0; max-width:100%; text-align:left; }
+.chat-upload-status { display:flex; gap:8px; align-items:center; margin:8px 0 0; font-size:var(--text-caption); color:#527093; }
+.chat-upload-status .text-button { font-size:var(--text-body); min-width:0; max-width:100%; text-align:left; }
 .chat-upload-status span { min-width:0; overflow-wrap:anywhere; }
 .chat-drop-overlay { position:absolute; inset:12px; z-index:5; border:2px dashed #2563eb; border-radius:18px; background:#f2f7fff5; color:#2459b2; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:14px; text-align:center; padding:24px; pointer-events:none; }
-.chat-drop-overlay strong { font-size:22px; }
+.chat-drop-overlay strong { font-size:var(--text-section); }
 .chat-drop-overlay span { overflow-wrap:anywhere; }
 .chat-upload-dialog button:focus-visible,.chat-upload-dialog input:focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
 @media(max-width:560px) {
   .batch-document-heading { flex-direction:column; gap:3px; }
   .batch-document-heading .upload-file-status { text-align:left; max-width:100%; }
   .chat-upload-dialog { padding:18px; }
-  .chat-upload-heading h2 { font-size:19px; }
+  .chat-upload-heading h2 { font-size:var(--text-section); }
   .shared-dropzone { padding:18px 10px; }
-  .shared-dropzone strong { font-size:12px; }
-  .shared-dropzone input { font-size:16px; }
+  .shared-dropzone strong { font-size:var(--text-caption); }
+  .shared-dropzone input { font-size:var(--text-input); }
   .upload-files { max-height:210px; }
   .upload-files .btn.icon { min-width:44px; min-height:44px; }
   .upload-actions>.btn { width:100%; justify-content:center; }
   .focused-chat .attach-documents { width:40px; min-width:40px; height:44px; }
-  .chat-upload-status { font-size:11px; }
+  .chat-upload-status { font-size:var(--text-small); }
 }
 @media(prefers-reduced-motion:reduce) { .document-upload-panel * { animation:none!important; transition:none!important; } }
 
 .upload-privacy-notice { display:flex; align-items:flex-start; gap:10px; padding:14px; margin:0 0 18px; border:1px solid #dce7fa; border-radius:10px; background:#f4f8ff; color:#42618c; }
 .upload-privacy-notice>svg { flex-shrink:0; margin-top:2px; color:#3769b1; }
-.upload-privacy-notice h3 { margin:0 0 5px; font-size:13px; font-weight:600; color:#183b70; }
-.upload-privacy-notice p { margin:0; font-size:12px; line-height:1.65; overflow-wrap:anywhere; }
+.upload-privacy-notice h3 { margin:0 0 5px; font-size:var(--text-subheading); font-weight:600; color:#183b70; }
+.upload-privacy-notice p { margin:0; font-size:var(--text-caption); line-height:1.65; overflow-wrap:anywhere; }
 
 /* Processing stays compact; the document list scrolls within the overview. */
 body .chat-upload-dialog.is-processing { width:min(560px,calc(100vw - 32px)); max-height:min(540px,calc(100dvh - 48px)); padding:16px 18px; border-radius:12px; overflow-y:auto; }
 body .chat-upload-dialog.is-processing .chat-upload-heading { gap:10px; margin-bottom:10px; }
-body .chat-upload-dialog.is-processing .chat-upload-heading h2 { font-size:18px; line-height:1.35; }
+body .chat-upload-dialog.is-processing .chat-upload-heading h2 { font-size:var(--text-section); line-height:1.35; }
 body .chat-upload-dialog.is-processing .chat-upload-heading .btn { min-height:36px; min-width:36px; padding:6px; }
-body .chat-upload-dialog.is-processing .upload-destination { font-size:12px; line-height:1.5; margin:0 0 8px; }
+body .chat-upload-dialog.is-processing .upload-destination { font-size:var(--text-caption); line-height:1.5; margin:0 0 8px; }
 body .chat-upload-dialog.is-processing .batch-progress { padding:10px 12px; margin:8px 0 10px; border-radius:10px; }
-body .chat-upload-dialog.is-processing .batch-progress-heading { gap:8px; font-size:12px; }
-body .chat-upload-dialog.is-processing .batch-progress-heading>span { font-size:11px; }
+body .chat-upload-dialog.is-processing .batch-progress-heading { gap:8px; font-size:var(--text-caption); }
+body .chat-upload-dialog.is-processing .batch-progress-heading>span { font-size:var(--text-small); }
 body .chat-upload-dialog.is-processing .batch-progress-track { height:5px; margin-top:8px; }
 body .chat-upload-dialog.is-processing .batch-stages { gap:4px; margin:12px 0 8px; }
-body .chat-upload-dialog.is-processing .batch-stages li { gap:4px; font-size:11px; }
+body .chat-upload-dialog.is-processing .batch-stages li { gap:4px; font-size:var(--text-small); }
 body .chat-upload-dialog.is-processing .stage-symbol { width:28px; height:28px; }
 body .chat-upload-dialog.is-processing .stage-symbol svg { width:18px; height:18px; }
 body .chat-upload-dialog.is-processing .batch-stages li:not(:last-child):after { top:13px; left:calc(50% + 15px); right:calc(-50% + 15px); }
-body .chat-upload-dialog.is-processing .batch-stages small { font-size:10px; line-height:1.4; }
-body .chat-upload-dialog.is-processing .batch-progress-summary { margin:0; font-size:12px; line-height:1.5; }
+body .chat-upload-dialog.is-processing .batch-stages small { font-size:var(--text-small); line-height:1.4; }
+body .chat-upload-dialog.is-processing .batch-progress-summary { margin:0; font-size:var(--text-caption); line-height:1.5; }
 body .chat-upload-dialog.is-processing .batch-document-list { max-height:220px; margin:10px 0; overscroll-behavior:contain; scrollbar-gutter:stable; }
 body .chat-upload-dialog.is-processing .batch-document-list>li { padding:8px 10px; gap:8px; margin-bottom:6px; border-radius:8px; }
 body .chat-upload-dialog.is-processing .batch-document-list>li:last-child { margin-bottom:0; }
 body .chat-upload-dialog.is-processing .batch-document-heading { gap:8px; }
-body .chat-upload-dialog.is-processing .batch-document-heading>strong { font-size:12px; font-weight:600; line-height:1.5; }
-body .chat-upload-dialog.is-processing .upload-file-status { font-size:11px; line-height:1.5; }
+body .chat-upload-dialog.is-processing .batch-document-heading>strong { font-size:var(--text-caption); font-weight:600; line-height:1.5; }
+body .chat-upload-dialog.is-processing .upload-file-status { font-size:var(--text-small); line-height:1.5; }
 body .chat-upload-dialog.is-processing .batch-document-actions { margin-top:2px; }
-body .chat-upload-dialog.is-processing .batch-document-actions>summary { padding:2px 0; font-size:11px; }
-body .chat-upload-dialog.is-processing .upload-file-error { font-size:12px; line-height:1.5; padding:8px; margin:5px 0; }
-body .chat-upload-dialog.is-processing .upload-footnote { font-size:11px; line-height:1.5; margin:8px 0 0; }
+body .chat-upload-dialog.is-processing .batch-document-actions>summary { padding:2px 0; font-size:var(--text-small); }
+body .chat-upload-dialog.is-processing .upload-file-error { font-size:var(--text-caption); line-height:1.5; padding:8px; margin:5px 0; }
+body .chat-upload-dialog.is-processing .upload-footnote { font-size:var(--text-small); line-height:1.5; margin:8px 0 0; }
 @media(max-width:560px) {
   body .chat-upload-dialog.is-processing { width:calc(100vw - 24px); max-height:calc(100dvh - 32px); padding:14px; }
   body .chat-upload-dialog.is-processing .chat-upload-heading .btn { min-height:44px; min-width:44px; }
   body .chat-upload-dialog.is-processing .batch-document-list { max-height:200px; }
   body .chat-upload-dialog.is-processing .batch-document-heading { gap:2px; }
   body .chat-upload-dialog.is-processing .batch-stages { gap:2px; }
-  body .chat-upload-dialog.is-processing .batch-stages strong { font-size:11px; }
+  body .chat-upload-dialog.is-processing .batch-stages strong { font-size:var(--text-small); }
 }
