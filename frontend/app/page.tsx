@@ -215,6 +215,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<{id:string;label:string}[]>([]);
   const [uploadWorkflowVisible,setUploadWorkflowVisible]=useState(false);
+  const [visibleExtractionJobId,setVisibleExtractionJobId]=useState<string|null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [mobile, setMobile] = useState(false);
@@ -1520,7 +1521,7 @@ export default function App() {
             </>
           )}
           {view === "Prompt templates" && <PromptTemplates templates={templates} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={d => { setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)]); chooseTemplate(d.id); notify("Prompt template saved."); }} onUse={id => { const saved=templates.find(t=>t.id===id); if(saved?.dataset_id&&saved.dataset_id!==kb)changeDataset(saved.dataset_id); chooseTemplate(id); setExtractionTab("Create"); navigate("Extract"); }} />}
-          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); }} />}
+          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); }} />}
           {view === "Index inspector" && (
             <>
               <section className="panel">
@@ -2718,7 +2719,7 @@ export default function App() {
           </section>
         </div>
       )}
-      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible}/>
+      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobId={visibleExtractionJobId}/>
     </>
   );
 }

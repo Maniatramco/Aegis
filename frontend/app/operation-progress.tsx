@@ -14,8 +14,8 @@ export function JobProgress({job}:{job:Entity}) {
   {job.error&&<p role="alert" className="review-error">{job.error}</p>}
  </div>;
 }
-export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean}) {
- const active=jobs.filter(j=>['queued','running'].includes(j.status));
+export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false,visibleJobId=null}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean;visibleJobId?:string|null}) {
+ const active=jobs.filter(j=>['queued','running'].includes(j.status)&&j.id!==visibleJobId);
  const tracked=new Set(uploadItems.flatMap(item=>item.document?[item.id,item.document.id]:[]));
  const processingBatch=uploadItems.some(item=>item.status==='uploading'||item.processing);
  const untracked=active.filter(job=>job.kind==='index'&&!tracked.has(job.document_id||job.target_id)).map(job=>{

@@ -41,6 +41,22 @@ test('an open upload panel suppresses duplicate background workflows without sup
 function uploadController(batchRows, extra={}) {
  return {dataset:{name:'Upload QA'},batchRows,pending:[],uploading:false,blocked:'',retrying:[],notice:'',pollError:false,externalRequired:false,consent:false,maxMb:25,...extra};
 }
+test('re-extraction dialog owns its workflow until it closes, when background progress resumes',()=>{
+ const job={id:'re-extract-1',kind:'extract',status:'running',workflow:{stages:{generate:{status:'running'}}}};
+ const foreground=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs:[job],visibleJobId:job.id}));
+ assert.equal(foreground,'');
+ const background=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs:[job],visibleJobId:null}));
+ assert.equal((background.match(/class="job-progress"/g)||[]).length,1);
+ assert.match(background,/Processing in background/);
+});
+test('a foreground extraction does not hide other jobs or unrelated loading activity',()=>{
+ const jobs=[{id:'foreground',kind:'extract',status:'queued'},{id:'other',kind:'extract',status:'running'}];
+ const html=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[{id:'refresh',label:'Loading documents…'}],jobs,visibleJobId:'foreground'}));
+ assert.equal((html.match(/class="job-progress"/g)||[]).length,1);
+ assert.match(html,/Loading documents/);
+ assert.match(html,/In progress/);
+ assert.doesNotMatch(html,/>queued</);
+});
 test('processing and completed views show one workflow without a file picker or upload button',()=>{
  for(const batchRows of [items,items.map(item=>({...item,processing:false,ready:true,document:{...item.document,status:'ready'}}))]) {
   const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController(batchRows),workflowOnly:true}));

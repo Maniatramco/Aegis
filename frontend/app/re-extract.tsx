@@ -5,7 +5,7 @@ import {eligibleModels} from "./dataset-workspace";
 import {JobProgress} from "./operation-progress";
 type Entity=Record<string,any>;
 type Api=(path:string,method?:string,body?:unknown)=>Promise<any>;
-export function ReExtract({documents,datasets,templates,extractions,jobs,api,onRefresh,onReview,onConfigure}:{documents:Entity[];datasets:Entity[];templates:Entity[];extractions:Entity[];jobs:Entity[];api:Api;onRefresh:()=>void;onReview:(e:Entity)=>void;onConfigure:(id:string)=>void}) {
+export function ReExtract({documents,datasets,templates,extractions,jobs,api,onRefresh,onReview,onConfigure,onProgressVisibilityChange}:{documents:Entity[];datasets:Entity[];templates:Entity[];extractions:Entity[];jobs:Entity[];api:Api;onRefresh:()=>void;onReview:(e:Entity)=>void;onConfigure:(id:string)=>void;onProgressVisibilityChange?:(jobId:string|null)=>void}) {
  const [search,setSearch]=useState(''),[filter,setFilter]=useState(''),[selected,setSelected]=useState(''),[template,setTemplate]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[external,setExternal]=useState(false),[run,setRun]=useState<Entity|null>(null);
  const submitting=useRef(false),dialog=useRef<HTMLDialogElement>(null);
  const doc=documents.find(d=>d.id===selected),dataset=datasets.find(d=>d.id===(doc?.dataset_id||doc?.kb_id)),models=eligibleModels(dataset,'extraction');
@@ -13,6 +13,7 @@ export function ReExtract({documents,datasets,templates,extractions,jobs,api,onR
  const needsConsent=!!chosen?.provider&&!['ollama','mock','sentence_transformers'].includes(chosen.provider);
  const job=jobs.find(j=>j.id===run?.job?.id)||run?.job,latest=extractions.find(e=>e.id===run?.id)||run;
  useEffect(()=>{if(selected)dialog.current?.showModal();},[selected]);
+ useEffect(()=>{onProgressVisibilityChange?.(selected&&job?.id?job.id:null);return()=>onProgressVisibilityChange?.(null);},[selected,job?.id,onProgressVisibilityChange]);
  const open=(d:Entity)=>{setSelected(d.id);setTemplate('');setError('');setExternal(false);setRun(null);};
  const submit=async()=>{
   if(submitting.current||!doc||!chosen||!template||run)return;
@@ -31,7 +32,7 @@ export function ReExtract({documents,datasets,templates,extractions,jobs,api,onR
    {!templates.length&&<p role="alert">Create a prompt template on the Prompt templates screen first.</p>}
    {needsConsent&&<label className="check"><input type="checkbox" checked={external} onChange={e=>setExternal(e.target.checked)} disabled={busy}/>I approve sending document content to {chosen.provider}. Provider charges may apply.</label>}</>}
    {job&&<JobProgress job={job}/>}
-   {job&&['queued','running'].includes(job.status)&&<p className="small muted">You can close this window. The progress popup will keep you informed.</p>}
+   {job&&['queued','running'].includes(job.status)&&<p className="small muted">If you close this window, the background progress popup will keep you informed.</p>}
    {error&&<p className="review-error" role="alert">{error}</p>}
    <div className="row wrap">{!run?<button className="btn primary" disabled={busy||!template||!chosen||(needsConsent&&!external)} onClick={submit}><FileSearch size={16}/>{busy?'Starting…':'Start extraction'}</button>:latest?.status==='ready'||job?.status==='completed'?<button className="btn primary" disabled={busy} onClick={async()=>{if(submitting.current)return;submitting.current=true;setBusy(true);try{const result=await api(`/extractions/${run.id}`);dialog.current?.close();onReview(result);}catch(e){setError((e as Error).message);}finally{submitting.current=false;setBusy(false);}}}>Review results</button>:null}<button className="btn" disabled={busy} onClick={()=>dialog.current?.close()}>{run?'Close':'Cancel'}</button></div>
   </dialog>
