@@ -874,7 +874,7 @@ export default function App() {
     );
   if (!user)
     return (
-      <main className="login-shell"><div className="login-layout"><section className="login-story" aria-label="Aegis document intelligence"><div className="login-brand"><img src="/aegis-logo.png" alt="Aegis logo" width={64} height={64}/><div className="login-brand-copy"><span>Aegis</span><span className="login-tagline">Data. Empowered.</span></div></div><figure className="login-illustration"><Image className="login-artwork" src="/aegis-login-data-platform-refined.png" alt="Aegis AI Data Platform with AI Agent, datasets, AI chat, prompt templates, upload, extraction, and review" width={1448} height={1086} sizes="(max-width: 760px) 380px, (max-height: 820px) 560px, 620px" priority /><span className="login-illustration-logo"><Image src="/aegis-logo.png" alt="Aegis emblem" width={96} height={96} sizes="96px" priority /></span></figure></section>
+      <main className="login-shell"><div className="login-layout"><section className="login-story" aria-label="Aegis AI Data Platform"><div className="login-brand"><img src="/aegis-logo.png" alt="Aegis logo" width={64} height={64}/><div className="login-brand-copy"><span>Aegis</span><span className="login-tagline">Data. Empowered.</span></div></div><figure className="login-illustration"><Image className="login-artwork" src="/aegis-login-data-platform-refined.png" alt="Aegis AI Data Platform with AI Agent, datasets, AI chat, prompt templates, upload, extraction, and review" width={1448} height={1086} sizes="(max-width: 760px) 380px, (max-height: 820px) 560px, 620px" priority /><span className="login-illustration-logo"><Image src="/aegis-logo.png" alt="Aegis emblem" width={96} height={96} sizes="96px" priority /></span></figure></section>
         <section className="login-card" aria-labelledby="login-heading">
           <div className="login-brand"><img src="/aegis-logo.png" alt="" width={38} height={38} /><span>Aegis</span></div>
           <h1 id="login-heading">{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
@@ -955,7 +955,7 @@ export default function App() {
           </span>
           <span className="brand-name">Aegis</span>
         </div>
-        <div className="brand-sub">Document intelligence</div>
+        <div className="brand-sub">AI Data Platform</div>
         <nav>
           {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => (
             <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{s.name}</span></button>

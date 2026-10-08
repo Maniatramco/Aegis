@@ -26,7 +26,7 @@ async def lifespan(app):
         cleanup.cancel()
         with suppress(asyncio.CancelledError):
             await cleanup
-app=FastAPI(title='Aegis storage-first document intelligence',version='0.1.0',lifespan=lifespan)
+app=FastAPI(title='Aegis AI Data Platform',version='0.1.0',lifespan=lifespan)
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv('ALLOWED_ORIGINS','http://localhost:3000,http://127.0.0.1:3000').split(','),allow_credentials=True,allow_methods=['*'],allow_headers=['Content-Type','X-CSRF-Token','Authorization'])
 @app.middleware('http')
 async def security_headers(request,call_next):

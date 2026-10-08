@@ -3,8 +3,8 @@ import "./globals.css";
 import "./responsive.css";
 import "./readability.css";
 export const metadata: Metadata = {
-  title: "Aegis · Document intelligence",
-  description: "Secure, evidence-led document intelligence workspace",
+  title: "Aegis · AI Data Platform",
+  description: "AI data workspace for datasets, agents, chat, extraction, and review.",
 };
 export default function RootLayout({
   children,
