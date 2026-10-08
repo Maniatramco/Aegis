@@ -251,7 +251,8 @@ def test_native_protocol_contracts(system, monkeypatch, protocol, category):
             import oci
             calls.append(('embed', oci.util.to_dict(payload))); return SimpleNamespace(data=SimpleNamespace(embeddings=[[1, 2, 3]]))
     monkeypatch.setattr(connections.ModelConnection, 'oci_client', lambda self: OCI())
-    m = register(s, body(category, protocol)); profile = routing.owned(m['connection_profile_id'], s.owner, 'config_profile')
+    extra = ({'encoding_format':'float'} if protocol in ('azure-openai','openai-compatible') else {'normalize':False} if protocol=='bedrock' else {}) if category=='embedding' else {'temperature':0.3}
+    m = register(s, body(category, protocol,context_limit=65536,max_output_tokens=None if category=='embedding' else 1234,extra_parameters=extra)); profile = routing.owned(m['connection_profile_id'], s.owner, 'config_profile')
     snapshot = routing.profile_snapshot(profile)
     with core.execution_context(snapshot):
         adapter = connections.ModelConnection(core.settings(), embedding=category == 'embedding')
@@ -262,6 +263,7 @@ def test_native_protocol_contracts(system, monkeypatch, protocol, category):
     else:
         assert result == ({'status': 'ready'} if category == 'extraction' else 'ready')
     operation, payload = calls[0]
+    assert m['context_limit']==65536 and m['extra_parameters']==extra
     if protocol == 'bedrock':
         assert operation == ('invoke_model' if category == 'embedding' else 'converse')
         assert payload.get('inputText', 'test') == 'test'
@@ -275,6 +277,12 @@ def test_native_protocol_contracts(system, monkeypatch, protocol, category):
     else:
         assert payload['model'] == 'deployed-model'
         if category == 'extraction': assert payload['response_format']['json_schema']['schema'] == schema
+    if category!='embedding':
+        params=payload['inferenceConfig'] if protocol=='bedrock' else payload['generationConfig'] if protocol=='vertex' else payload['chat_request'] if protocol=='oci' else payload
+        key='maxTokens' if protocol=='bedrock' else 'maxOutputTokens' if protocol=='vertex' else 'max_tokens' if protocol=='oci' else 'max_completion_tokens'
+        assert params[key]==1234 and params['temperature']==0.3
+    elif extra:
+        assert all(payload[key]==value for key,value in extra.items())
 
 
 def test_error_messages_do_not_expose_secrets_or_accept_bad_embeddings(system, monkeypatch):
@@ -312,19 +320,19 @@ def test_local_context_limit_applies_to_next_chat_without_reindex(system, monkey
     monkeypatch.setattr(providers,'search',lambda *args,**kwargs:[source])
     sent=[]
     def response(path,payload,timeout):
-        sent.append(payload['options']['num_ctx'])
+        sent.append(payload['options'])
         return {'done':True,'done_reason':'stop','message':{'content':'Alice [1].'}}
     monkeypatch.setattr(ollama,'request',response)
     failed=message(s,c)
     assert failed.status_code==502 and 'context budget' in failed.text and '32,768' in failed.text
     assert sent==[]
-    updated=s.api.put('/api/model-registrations/'+m['id'],json=body(protocol='ollama',provider_model='qwen3:4b',context_limit=65536))
+    updated=s.api.put('/api/model-registrations/'+m['id'],json=body(protocol='ollama',provider_model='qwen3:4b',context_limit=65536,max_output_tokens=2048,extra_parameters={'temperature':0.4,'seed':7}))
     assert updated.status_code==200 and updated.json()['context_limit']==65536
     assert not s.api.get('/api/documents/'+doc['id']).json()['requires_reindex']
     result=message(s,c)
     assert result.status_code==200,result.text
     assert result.json()['message']['model_selection']['context_limit']==65536
-    assert sent==[65536]
+    assert sent[0]['num_ctx']==65536 and sent[0]['num_predict']==2048 and sent[0]['temperature']==0.4 and sent[0]['seed']==7
     assert s.api.get('/api/models').json()[0]['context_limit']==65536
     assert core.settings().get('context_limit') is None
 
@@ -332,25 +340,65 @@ def test_local_context_limit_applies_to_next_chat_without_reindex(system, monkey
 def test_local_context_limits_are_per_role_and_queued_extraction_is_pinned(system):
     s=system;d=dataset(s);doc=upload(s,d)['documents'][0]
     chat_model=register(s,body(protocol='ollama',provider_model='qwen3:4b',context_limit=65536));select(s,d,chat_model,'chat')
-    extraction_model=register(s,body('extraction','ollama',provider_model='qwen3:4b',context_limit=48000));select(s,d,extraction_model,'extraction')
+    extraction_model=register(s,body('extraction','ollama',provider_model='qwen3:4b',context_limit=48000,max_output_tokens=2048,extra_parameters={'temperature':0.1}));select(s,d,extraction_model,'extraction')
     t=template(s)
     run=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':t['id']})
     queued=core.store.json('jobs/'+run['job']['id']+'.json')['execution']
     assert queued['settings']['context_limit']==48000
-    assert s.api.put('/api/model-registrations/'+extraction_model['id'],json=body('extraction','ollama',provider_model='qwen3:4b',context_limit=131072)).status_code==200
+    assert queued['settings']['max_output_tokens']==2048 and queued['settings']['extra_parameters']=={'temperature':0.1}
+    assert s.api.put('/api/model-registrations/'+extraction_model['id'],json=body('extraction','ollama',provider_model='qwen3:4b',context_limit=131072,max_output_tokens=512,extra_parameters={'temperature':0.5})).status_code==200
     dataset_record=routing.owned(d['id'],s.owner,'knowledge_base')
     assert routing.execution_snapshot(dataset_record,'chat')['settings']['context_limit']==65536
     assert routing.execution_snapshot(dataset_record,'extraction')['settings']['context_limit']==131072
+    assert routing.execution_snapshot(dataset_record,'extraction')['settings']['max_output_tokens']==512
+    assert routing.execution_snapshot(dataset_record,'extraction')['settings']['extra_parameters']=={'temperature':0.5}
     assert core.store.json('jobs/'+run['job']['id']+'.json')['execution']['settings']['context_limit']==48000
 
 
-@pytest.mark.parametrize('limit',[8191,262145,0,True,32768.5,'65536'])
+@pytest.mark.parametrize('limit',[2097153,0,True,32768.5,'65536'])
 def test_invalid_local_context_limits_rejected(system,limit):
     assert system.api.post('/api/model-registrations',json=body(protocol='ollama',context_limit=limit)).status_code==422
 
 
-def test_local_context_defaults_and_unsupported_categories(system):
+def test_token_defaults_and_embedding_has_no_generated_output(system):
     m=register(system,body(protocol='ollama'))
     assert m['context_limit']==32768
-    assert system.api.post('/api/model-registrations',json=body('embedding','ollama',context_limit=65536)).status_code==400
-    assert system.api.post('/api/model-registrations',json=body(context_limit=65536)).status_code==400
+    emb=register(system,body('embedding','ollama',context_limit=65536))
+    assert emb['context_limit']==65536 and emb['max_output_tokens'] is None
+    assert register(system,body(context_limit=65536))['context_limit']==65536
+    assert system.api.post('/api/model-registrations',json=body('embedding','ollama',max_output_tokens=512)).status_code==400
+
+
+@pytest.mark.parametrize('value',[{'model':'override'},{'stream':True},{'num_ctx':999999},{'num_predict':32},{'api_key':'secret'},{'temperature':True},{'temperature':3},{'seed':1.5},{'stop':['x'*257]}])
+def test_invalid_or_reserved_extra_parameters_rejected(system,value):
+    result=system.api.post('/api/model-registrations',json=body(protocol='ollama',extra_parameters=value))
+    assert result.status_code==400 and 'secret' not in result.text
+
+
+def test_output_budget_validation_and_omitted_edit_fields_preserved(system):
+    s=system
+    assert s.api.post('/api/model-registrations',json=body(context_limit=2048,max_output_tokens=1536)).status_code==400
+    m=register(s,body(context_limit=8192,max_output_tokens=1024,extra_parameters={'temperature':0.4}))
+    updated=s.api.put('/api/model-registrations/'+m['id'],json=body(name='Renamed'))
+    assert updated.status_code==200
+    assert updated.json()['context_limit']==8192 and updated.json()['max_output_tokens']==1024 and updated.json()['extra_parameters']=={'temperature':0.4}
+    cleared=s.api.put('/api/model-registrations/'+m['id'],json=body(extra_parameters={}))
+    assert cleared.json()['extra_parameters']=={}
+
+
+def test_embedding_parameters_change_requires_remapping_and_reindex(system,monkeypatch):
+    s=system;d=dataset(s)
+    monkeypatch.setattr(providers,'embed',lambda texts,**kwargs:[[1,0,0] for text in texts])
+    m=register(s,body('embedding',context_limit=4096,extra_parameters={'encoding_format':'float'}));select(s,d,m,'embedding')
+    doc=upload(s,d)['documents'][0]
+    cfg=routing.execution_snapshot(routing.owned(d['id'],s.owner,'knowledge_base'),'embedding')['settings']
+    assert cfg['embedding_context_limit']==4096 and cfg['embedding_extra_parameters']=={'encoding_format':'float'}
+    old_fingerprint=providers.fingerprint(cfg)
+    assert s.api.put('/api/model-registrations/'+m['id'],json=body('embedding',context_limit=8192,extra_parameters={})).status_code==200
+    with pytest.raises(Exception,match='Embedding model configuration changed'):
+        routing.execution_snapshot(routing.owned(d['id'],s.owner,'knowledge_base'),'embedding')
+    current=s.api.get('/api/datasets/'+d['id']+'/models').json()
+    mapping(s,d,**{k:current[k] for k in ('mappings','embedding_model_id','default_chat_model_id','default_extraction_model_id')})
+    new_cfg=routing.execution_snapshot(routing.owned(d['id'],s.owner,'knowledge_base'),'embedding')['settings']
+    assert providers.fingerprint(new_cfg)!=old_fingerprint
+    assert s.api.get('/api/documents/'+doc['id']).json()['requires_reindex']

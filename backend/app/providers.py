@@ -18,6 +18,8 @@ def fingerprint(cfg=None):
     if c['search_provider']=='oci':return hashlib.sha256(('oci:'+c.get('oci_region','')+':'+c.get('oci_project_id','')+':'+c.get('oci_vector_store_id','')+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
     name=c['embedding_model'] if c['embedding_provider'] in ('openai','ollama','registered') else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
     connection=':'+json.dumps(c['embedding_connection'],sort_keys=True) if c.get('embedding_connection') else ''
+    if c.get('embedding_context_limit') or c.get('embedding_extra_parameters'):
+        connection+=':'+json.dumps({key:c.get(key) for key in ('embedding_context_limit','embedding_extra_parameters')},sort_keys=True)
     return hashlib.sha256((c['embedding_provider']+':'+name+connection+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')+(':'+c['_embedding_digest'] if c.get('_embedding_digest') else '')).encode()).hexdigest()[:16]
 def openai_request(path,payload):
     key=api_key()

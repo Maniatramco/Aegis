@@ -13,6 +13,7 @@ from urllib.parse import urlsplit, quote
 import httpx
 from jsonschema import validate, ValidationError
 from . import core
+from .model_parameters import check_budget, validate_parameters, ParameterError
 
 
 class ConnectionError(RuntimeError):
@@ -242,8 +243,11 @@ class ModelConnection:
         if schema:
             instruction += '\nReturn only JSON matching this schema: ' + json.dumps(schema, ensure_ascii=False)
         try:
+            output_tokens=self.cfg.get('max_output_tokens') or 4096
+            check_budget(self.cfg,[instruction,text],output_tokens=output_tokens)
+            extra=validate_parameters(self.cfg.get('extra_parameters',{}),p,'extraction' if schema else 'chat',self.c)
             if p in ('openai-compatible', 'azure-openai'):
-                payload = {'model': self.model, 'messages': [{'role': 'system', 'content': instruction}, {'role': 'user', 'content': text}], 'max_completion_tokens': 4096}
+                payload = {'model': self.model, 'messages': [{'role': 'system', 'content': instruction}, {'role': 'user', 'content': text}], 'max_completion_tokens': output_tokens, **extra}
                 if schema and self.c.get('structured_output', True):
                     payload['response_format'] = {'type': 'json_schema', 'json_schema': {'name': 'extraction', 'schema': schema, 'strict': True}}
                 data = self.post('/chat/completions', payload)
@@ -252,12 +256,12 @@ class ModelConnection:
                     raise ConnectionError('Model returned an incomplete or refused response.')
                 result = choice['message']['content']
             elif p == 'bedrock':
-                data = self.bedrock().converse(modelId=self.model, system=[{'text': instruction}], messages=[{'role': 'user', 'content': [{'text': text}]}], inferenceConfig={'maxTokens': 4096})
+                data = self.bedrock().converse(modelId=self.model, system=[{'text': instruction}], messages=[{'role': 'user', 'content': [{'text': text}]}], inferenceConfig={'maxTokens': output_tokens, **extra})
                 if data.get('stopReason') != 'end_turn':
                     raise ConnectionError('Model returned an incomplete or refused response.')
                 result = '\n'.join(x['text'] for x in data['output']['message']['content'] if 'text' in x)
             elif p == 'vertex':
-                data = self.post(self.vertex_path('generateContent'), {'systemInstruction': {'parts': [{'text': instruction}]}, 'contents': [{'role': 'user', 'parts': [{'text': text}]}], 'generationConfig': {'maxOutputTokens': 4096, **({'responseMimeType': 'application/json'} if schema else {})}}, self.vertex_headers())
+                data = self.post(self.vertex_path('generateContent'), {'systemInstruction': {'parts': [{'text': instruction}]}, 'contents': [{'role': 'user', 'parts': [{'text': text}]}], 'generationConfig': {'maxOutputTokens': output_tokens, **extra, **({'responseMimeType': 'application/json'} if schema else {})}}, self.vertex_headers())
                 candidate = data['candidates'][0]
                 if candidate.get('finishReason') != 'STOP':
                     raise ConnectionError('Model returned an incomplete or refused response.')
@@ -265,9 +269,9 @@ class ModelConnection:
             elif p == 'oci':
                 from oci.generative_ai_inference import models
                 if self.c.get('chat_format') == 'cohere':
-                    request = models.CohereChatRequest(preamble=instruction, message=text, max_tokens=4096, is_stream=False)
+                    request = models.CohereChatRequest(preamble=instruction, message=text, max_tokens=output_tokens, is_stream=False, **extra)
                 else:
-                    request = models.GenericChatRequest(messages=[models.SystemMessage(content=[models.TextContent(text=instruction)]), models.UserMessage(content=[models.TextContent(text=text)])], max_tokens=4096, is_stream=False)
+                    request = models.GenericChatRequest(messages=[models.SystemMessage(content=[models.TextContent(text=instruction)]), models.UserMessage(content=[models.TextContent(text=text)])], max_tokens=output_tokens, is_stream=False, **extra)
                 data = self.oci_client().chat(models.ChatDetails(compartment_id=self.c['compartment_id'], serving_mode=self.oci_serving_mode(models), chat_request=request)).data.chat_response
                 if self.c.get('chat_format') == 'cohere':
                     if getattr(data, 'finish_reason', None) not in ('COMPLETE', 'STOP'):
@@ -291,7 +295,9 @@ class ModelConnection:
             raise
         except ImportError:
             raise ConnectionError('Install backend/requirements-models.txt for native cloud protocols.')
-        except (ValueError, ValidationError):
+        except ParameterError as exc:
+            raise ConnectionError(str(exc)) from exc
+        except (ValueError,ValidationError):
             raise ConnectionError('Model response did not match the requested JSON schema.')
         except Exception as exc:
             # SDK exceptions may contain credentials, prompts, URLs, or provider response bodies.
@@ -305,8 +311,10 @@ class ModelConnection:
         p = self.c['protocol']
         dim = self.c.get('dimensions')
         try:
+            for text in texts:check_budget(self.cfg,text,embedding=True)
+            extra=validate_parameters(self.cfg.get('embedding_extra_parameters',{}),p,'embedding',self.c)
             if p in ('openai-compatible', 'azure-openai'):
-                data = self.post('/embeddings', {'model': self.model, 'input': texts, **({'dimensions': dim} if dim else {})})
+                data = self.post('/embeddings', {'model': self.model, 'input': texts, **extra, **({'dimensions': dim} if dim else {})})
                 rows = sorted(data['data'], key=lambda x: x['index'])
                 if [x['index'] for x in rows] != list(range(len(texts))):
                     raise ConnectionError('Model returned an invalid embedding order.')
@@ -317,7 +325,7 @@ class ModelConnection:
                 if fmt == 'titan':
                     vectors = []
                     for text in texts:
-                        payload = {'inputText': text, **({'dimensions': dim} if dim else {})}
+                        payload = {'inputText': text, **extra, **({'dimensions': dim} if dim else {})}
                         data = json.loads(client.invoke_model(modelId=self.model, body=json.dumps(payload), contentType='application/json', accept='application/json')['body'].read())
                         vectors.append(data['embedding'])
                 else:
@@ -356,6 +364,8 @@ class ModelConnection:
             raise
         except ImportError:
             raise ConnectionError('Install backend/requirements-models.txt for native cloud protocols.')
+        except ParameterError as exc:
+            raise ConnectionError(str(exc)) from exc
         except Exception as exc:
             raise ConnectionError('Embedding request failed. Check authentication, model access, dimensions, and protocol.') from exc
 

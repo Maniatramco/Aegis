@@ -13,6 +13,45 @@ extraction test must produce JSON matching the requested schema. Testing does no
 save the supplied credentials. Save Model stores credentials encrypted with the
 deployment master key; they are not returned to the browser or safe exports.
 
+## Token limits and extra parameters
+
+Each registration stores its own inference settings:
+
+- **Chat and Extraction:** Context token limit (default 32,768) and Maximum
+  output tokens (default 4,096). The context must exceed the output reservation
+  by more than 512 tokens. Aegis estimates input from UTF-8 text conservatively;
+  this is not an exact provider tokenizer count. Oversized input fails clearly,
+  without silent truncation. Ollama receives `num_ctx` and `num_predict`; cloud
+  adapters send the corresponding native output-token field.
+- **Embedding:** Input token limit per chunk or query (default 8,192 for new
+  registrations), and optional output dimensions. Embeddings produce vectors,
+  so they have no generated-output-token setting. Their limits and parameters
+  stay separate from generation settings.
+- **Add extra parameters:** Enter a JSON object, for example
+  `{"temperature": 0.2, "top_p": 0.9, "seed": 42}` for Ollama. The screen lists
+  supported keys for the chosen protocol and role. Bedrock/Vertex use native
+  names such as `topP`; Ollama/OpenAI/OCI use `top_p`. Ollama also accepts
+  `keep_alive`, including for embeddings. Supported keys can still be rejected
+  by a particular deployed model, so use Test Connection before applying it.
+
+Extra parameters cannot override prompts, transport, authentication, response
+schemas, truncation, or the dedicated token fields. Unknown keys and invalid
+types/ranges are rejected. Leave the object empty to use existing defaults.
+These values are public configuration; credentials belong in Authentication.
+Saved limits and parameters are versioned with the model. Chat/extraction use
+them on the next run; queued work retains its submitted values. Embedding edits
+require applying the dataset mapping and reindexing.
+
+Set limits within the deployed model's actual capacity. The UI's validation
+ceiling is not a claim of model support. Larger limits can consume more memory,
+time, or cloud credits. Provider request formats follow the official
+[Ollama chat](https://docs.ollama.com/api/chat),
+[Ollama embeddings](https://docs.ollama.com/api/embed),
+[Bedrock inference configuration](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InferenceConfiguration.html),
+[Vertex inference](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference), and
+[OCI chat](https://docs.oracle.com/en-us/iaas/tools/python/latest/api/generative_ai_inference/models/oci.generative_ai_inference.models.GenericChatRequest.html)
+documentation.
+
 ## Connection protocols
 
 | Protocol | Endpoint and model | Authentication | Model roles |

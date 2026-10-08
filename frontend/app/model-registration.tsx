@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Check, Layers, Plus, Search, X } from "lucide-react";
 import "./model-configuration.css";
+import { parseModelParameters, supportedModelParameters } from "./model-parameters";
 
 type Entity = Record<string, any>;
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
@@ -35,7 +36,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   models: Entity[]; settings: Entity; api: Api; run: (fn: () => Promise<void>) => Promise<void>;
   busy: boolean; onSaved: (model: Entity) => void; onMapping: () => void;
 }) {
-  const blank = (): Entity => ({ name: "", category: "chat", provider_model: "", timeout: 60, context_limit: 32768, enabled: true,
+  const blank = (): Entity => ({ name: "", category: "chat", provider_model: "", timeout: 60, context_limit: 32768, max_output_tokens: 4096, enabled: true,
     credentials: {}, clear_credentials: false, allow_external: false,
     connection: { protocol: "ollama", endpoint: settings.ollama_endpoint || endpointHints.ollama, auth_mode: "none", region: "", project_id: "", compartment_id: "", profile: "DEFAULT", embedding_format: "titan", chat_format: "generic", dimensions: null, structured_output: true } });
   const [form, setForm] = useState<Entity>(blank);
@@ -44,30 +45,36 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   const [search, setSearch] = useState("");
   const [test, setTest] = useState<Entity | null>(null);
   const [testing, setTesting] = useState(false);
-  const change = (key: string, value: any) => { setForm(current => ({ ...current, [key]: value })); setTest(null); };
+  const [extraText, setExtraText] = useState("{}");
+  const [extraOpen, setExtraOpen] = useState(false);
+  const change = (key: string, value: any) => { setForm(current => ({ ...current, [key]: value, ...(key === "category" ? { context_limit: value === "embedding" ? 8192 : 32768 } : {}) })); if (key === "category") setExtraText("{}"); setTest(null); };
   const connectionChange = (key: string, value: any) => {
     setForm(current => ({ ...current, connection: { ...current.connection, [key]: value },
       ...(["protocol", "endpoint", "auth_mode"].includes(key) ? { credentials: {}, allow_external: false } : {}) }));
     setTest(null);
+    if (["protocol", "embedding_format", "chat_format"].includes(key)) setExtraText("{}");
   };
   const start = (model?: Entity) => {
     const initial = blank();
     if (model) {
       initial.name = model.name; initial.provider_model = model.provider_model;
-      initial.category = model.capabilities[0]; initial.enabled = model.enabled; initial.timeout = model.timeout || 60; initial.context_limit = model.context_limit || 32768;
+      initial.category = model.capabilities[0]; initial.enabled = model.enabled; initial.timeout = model.timeout || 60; initial.context_limit = model.context_limit || (initial.category === "embedding" ? 8192 : 32768); initial.max_output_tokens = model.max_output_tokens || 4096;
       if (model.connection) initial.connection = { ...initial.connection, ...model.connection };
       else if (model.provider !== "ollama") {
         initial.connection = { ...initial.connection, protocol: "openai-compatible", auth_mode: "api_key", endpoint: "" };
       }
     }
-    setEditing(model || null); setForm(initial); setTest(null); setOpen(true);
+    setEditing(model || null); setForm(initial); setExtraText(JSON.stringify(model?.extra_parameters || {}, null, 2)); setExtraOpen(!!Object.keys(model?.extra_parameters || {}).length); setTest(null); setOpen(true);
   };
   const close = () => { setOpen(false); setEditing(null); setForm(blank()); setTest(null); };
   const native = ["bedrock", "vertex", "oci"].includes(form.connection.protocol);
   const remote = form.connection.protocol !== "ollama";
   const visible = models.filter(m => `${m.name} ${m.provider_model} ${m.capabilities.join(" ")}`.toLowerCase().includes(search.toLowerCase()));
   const retainedCredentials = editing?.credential_configured && editing?.connection && ["endpoint", "protocol", "auth_mode"].every(key => editing.connection[key] === form.connection[key]);
-  const payload = () => ({ ...form, context_limit: form.connection.protocol === "ollama" && form.category !== "embedding" ? form.context_limit : null, existing_model_id: editing?.id || null });
+  const supported = supportedModelParameters(form.connection.protocol, form.category, form.connection);
+  let parameterError = "";
+  try { parseModelParameters(extraText, supported); } catch (error) { parameterError = (error as Error).message; }
+  const payload = () => ({ ...form, max_output_tokens: form.category === "embedding" ? null : form.max_output_tokens, extra_parameters: parseModelParameters(extraText, supported), existing_model_id: editing?.id || null });
 
   return <div className="model-registration">
     {settings.local_only && <div className="notice"><Layers size={17} /><div>This deployment runs in local-only mode. You can register cloud connections, but testing and applying them require cloud use to be enabled by the deployment administrator.</div></div>}
@@ -75,7 +82,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
       <div className="panel-head"><div><h2>Registered models</h2><p className="muted small">Register a model once, then use it across your datasets.</p></div><button className="btn primary" onClick={() => start()}><Plus size={15} />Register model</button></div>
       {!!models.length && <label className="registration-search"><Search size={16} /><input aria-label="Search registered models" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search models or categories" /></label>}
       <div className="registration-list">{visible.map(m => <div className="registration-row" key={m.id}>
-        <span className="file-icon"><Layers size={18} /></span><div className="registration-name"><strong>{m.name}</strong><small>{m.provider_model} · {protocols.find(([value]) => value === m.provider)?.[1] || m.provider}</small>{m.context_limit && <small>Context limit: {m.context_limit.toLocaleString()} tokens</small>}{m.connection && <small className="registration-endpoint">{m.connection.endpoint}</small>}</div>
+        <span className="file-icon"><Layers size={18} /></span><div className="registration-name"><strong>{m.name}</strong><small>{m.provider_model} · {protocols.find(([value]) => value === m.provider)?.[1] || m.provider}</small>{m.context_limit && <small>{m.capabilities[0] === "embedding" ? "Input" : "Context"}: {m.context_limit.toLocaleString()} tokens{m.max_output_tokens ? ` · Output: ${m.max_output_tokens.toLocaleString()}` : ""}{Object.keys(m.extra_parameters || {}).length ? ` · ${Object.keys(m.extra_parameters).length} extra parameters` : ""}</small>}{m.connection && <small className="registration-endpoint">{m.connection.endpoint}</small>}</div>
         <div className="model-chips">{m.capabilities.map((cap: string) => <span className="model-chip" key={cap}>{cap === "extraction" ? "Extraction" : cap === "embedding" ? "Embedding" : "Chat"}</span>)}<span className={`pill ${m.enabled ? "green" : "amber"}`}>{m.enabled ? "Enabled" : "Disabled"}</span></div>
         <button className="btn" disabled={busy} onClick={() => start(m)}>Edit <span className="sr-only">{m.name}</span></button>
       </div>)}</div>
@@ -97,7 +104,8 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
             {form.connection.protocol === "oci" && <div className="field"><label htmlFor="registration-compartment">Compartment OCID</label><input id="registration-compartment" value={form.connection.compartment_id} onChange={e => connectionChange("compartment_id", e.target.value)} required /></div>}
             <div className="field"><label htmlFor="registration-auth">Authentication</label><select id="registration-auth" value={form.connection.auth_mode} onChange={e => connectionChange("auth_mode", e.target.value)}>{authOptions[form.connection.protocol].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
             <div className="field"><label htmlFor="registration-timeout">Timeout (seconds)</label><input id="registration-timeout" type="number" min={5} max={600} value={form.timeout} onChange={e => change("timeout", Number(e.target.value))} required /></div>
-            {form.connection.protocol === "ollama" && form.category !== "embedding" && <div className="field registration-full"><label htmlFor="registration-context-limit">Local context limit (tokens)</label><input id="registration-context-limit" type="number" min={8192} max={262144} step={1} value={form.context_limit} onChange={e => change("context_limit", Number(e.target.value))} aria-describedby="registration-context-help" required /><small id="registration-context-help">Default: 32,768. Includes document text, instructions, chat history, and 4,096 tokens reserved for the answer. Use a value supported by your installed model; larger limits use more memory and may take longer. Applies to the next run without reindexing.</small></div>}
+            <div className="field"><label htmlFor="registration-context-limit">{form.category === "embedding" ? "Input token limit" : "Context token limit"}</label><input id="registration-context-limit" type="number" min={1} max={2097152} step={1} value={form.context_limit} onChange={e => change("context_limit", Number(e.target.value))} aria-describedby="registration-context-help" required /><small id="registration-context-help">{form.category === "embedding" ? "Maximum input per text chunk or query. No output tokens; embeddings return vectors." : "Total input and output budget, including instructions and history. Keep 512 tokens of headroom beyond the output limit."} Aegis uses a conservative text estimate. Set this within the model’s supported capacity.</small></div>
+            {form.category !== "embedding" && <div className="field"><label htmlFor="registration-output-limit">Maximum output tokens</label><input id="registration-output-limit" type="number" min={1} max={131072} step={1} value={form.max_output_tokens} onChange={e => change("max_output_tokens", Number(e.target.value))} required /><small>Maximum tokens generated per answer or extraction. Default: 4,096. Larger limits can take longer and use more memory or provider credits.</small></div>}
             {form.connection.auth_mode === "config_profile" && <div className="field"><label htmlFor="registration-profile">Server credential profile</label><input id="registration-profile" value={form.connection.profile} onChange={e => connectionChange("profile", e.target.value)} required /></div>}
           </div>
           {!!credentialFields[form.connection.auth_mode]?.length && <div className="registration-credentials"><h3>Credentials</h3><p className="muted small">{retainedCredentials ? "Leave all credential fields empty to retain the saved credentials. Enter the complete set to replace them." : "Enter credentials for this endpoint. They are never returned to the browser."}</p><div className="registration-fields">
@@ -105,16 +113,17 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
           </div>{!!editing && <label className="check"><input type="checkbox" checked={form.clear_credentials} onChange={e => change("clear_credentials", e.target.checked)} />Remove saved credentials (disable the model first)</label>}</div>}
           {form.connection.auth_mode === "server_identity" && <p className="muted small">The API and worker hosts must have an identity permitted to invoke this model.</p>}
           {form.category === "embedding" && <div className="registration-fields registration-options">
-            {remote && <div className="field"><label htmlFor="registration-dimensions">Output dimensions (optional)</label><input id="registration-dimensions" type="number" min={1} max={65536} value={form.connection.dimensions || ""} onChange={e => connectionChange("dimensions", e.target.value ? Number(e.target.value) : null)} /><small>Leave empty for the model’s default dimensions.</small></div>}
+            <div className="field"><label htmlFor="registration-dimensions">Output dimensions (optional)</label><input id="registration-dimensions" type="number" min={1} max={65536} value={form.connection.dimensions || ""} onChange={e => connectionChange("dimensions", e.target.value ? Number(e.target.value) : null)} /><small>Leave empty for the model’s default dimensions.</small></div>
             {form.connection.protocol === "bedrock" && <div className="field"><label htmlFor="registration-embedding-format">Embedding request format</label><select id="registration-embedding-format" value={form.connection.embedding_format} onChange={e => connectionChange("embedding_format", e.target.value)}><option value="titan">Titan Text</option><option value="cohere-v3">Cohere Embed v3</option><option value="cohere-v4">Cohere Embed v4</option></select></div>}
           </div>}
           {form.category !== "embedding" && form.connection.protocol === "oci" && <div className="field"><label htmlFor="registration-chat-format">Chat request format</label><select id="registration-chat-format" value={form.connection.chat_format} onChange={e => connectionChange("chat_format", e.target.value)}><option value="generic">Generic</option><option value="cohere">Cohere</option></select></div>}
           {form.category === "extraction" && ["openai-compatible", "azure-openai"].includes(form.connection.protocol) && <label className="check"><input type="checkbox" checked={form.connection.structured_output} onChange={e => connectionChange("structured_output", e.target.checked)} />Request native JSON schema output <span className="muted small">All extraction responses are validated against the template.</span></label>}
+          <details className="registration-options registration-extra" open={extraOpen} onToggle={e => setExtraOpen(e.currentTarget.open)}><summary>Add extra parameters</summary><div className="field"><label htmlFor="registration-extra-parameters">Extra parameters (JSON)</label><small id="registration-parameter-help">{supported.length ? `Supported keys: ${supported.join(", ")}.` : "This adapter has no additional parameters. Use the token limit and dimensions fields."} Leave empty to use defaults. Use only options supported by your deployed model. These values are visible to workspace users; keep credentials in Authentication.</small><textarea id="registration-extra-parameters" rows={4} spellCheck={false} value={extraText} onChange={e => { setExtraText(e.target.value); setTest(null); }} aria-invalid={!!parameterError} aria-describedby="registration-parameter-help registration-parameter-error" placeholder={form.category === "embedding" ? '{"keep_alive": "5m"}' : '{"temperature": 0.2}'} />{parameterError && <small id="registration-parameter-error" role="alert">{parameterError}</small>}</div></details>
           <div className="registration-options"><label className="check"><input type="checkbox" checked={form.enabled} onChange={e => change("enabled", e.target.checked)} />Enabled for dataset mapping</label></div>
           {remote && <label className="check registration-test-consent"><input type="checkbox" checked={form.allow_external} onChange={e => change("allow_external", e.target.checked)} />Allow a small synthetic test request to this external model. Provider usage may be billed.</label>}
         </fieldset>
         {test && <div className="notice" role="status"><Check size={17} /><div>Connection passed in {(test.elapsed_ms / 1000).toFixed(2)}s.{test.dimensions && ` Embedding dimensions: ${test.dimensions}.`}{test.schema_validated && " Extraction schema validated."}</div></div>}
-        <div className="registration-actions"><button className="btn" type="button" disabled={busy || !form.name.trim() || !form.provider_model.trim() || !form.connection.endpoint || remote && (!form.allow_external || settings.local_only)} onClick={() => { setTest(null); setTesting(true); run(async () => { try { setTest(await api("/model-registrations/test", "POST", payload())); } finally { setTesting(false); } }); }}>{testing ? "Testing connection…" : "Test Connection"}</button><div className="row wrap"><button className="btn" type="button" disabled={busy} onClick={close}>Cancel</button><button className="btn primary" disabled={busy}><Check size={15} />Save Model</button></div></div>
+        <div className="registration-actions"><button className="btn" type="button" disabled={busy || !!parameterError || !form.name.trim() || !form.provider_model.trim() || !form.connection.endpoint || remote && (!form.allow_external || settings.local_only)} onClick={e => { if (!e.currentTarget.form?.reportValidity()) return; setTest(null); setTesting(true); run(async () => { try { setTest(await api("/model-registrations/test", "POST", payload())); } finally { setTesting(false); } }); }}>{testing ? "Testing connection…" : "Test Connection"}</button><div className="row wrap"><button className="btn" type="button" disabled={busy} onClick={close}>Cancel</button><button className="btn primary" disabled={busy || !!parameterError}><Check size={15} />Save Model</button></div></div>
         <p className="muted small">New chat and extraction runs use the latest saved connection. Embedding changes require applying the dataset mapping and reindexing its documents. Work already queued keeps its saved version.</p>
       </form>
     </section>}

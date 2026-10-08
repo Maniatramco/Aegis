@@ -7,6 +7,12 @@
 .registration-credentials h3 { margin: 0; font-size:var(--text-subheading); }
 .registration-credentials textarea { width: 100%; resize: vertical; }
 .registration-options { margin: 18px 0; }
+.registration-extra { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.registration-extra summary { cursor: pointer; font-weight: 600; }
+.registration-extra .field { margin: 12px 0 0; }
+.registration-extra textarea { width: 100%; min-height: 100px; resize: vertical; margin-top: 8px; }
+.registration-extra small { overflow-wrap: anywhere; }
+.registration-extra [role="alert"] { color: #b42318; margin-top: 6px; }
 .registration-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin: 24px 0 18px; }
 .registration-search { display: flex; align-items: center; gap: 10px; max-width: 460px; color: var(--muted); margin-bottom: 18px; }
 .registration-list { display: grid; gap: 10px; }

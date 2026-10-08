@@ -182,3 +182,22 @@ def test_context_budget_includes_output_reservation_and_keeps_legacy_default(mon
     with pytest.raises(ollama.OllamaError,match='including the answer'):ollama.generation_options(messages,4096)
     monkeypatch.setattr(core,'settings',lambda:{})
     assert ollama.generation_options([{'role':'user','content':'Short question'}],4096)['num_ctx']==8192
+
+
+def test_per_model_output_and_extra_parameters_used_for_chat_extraction_and_embeddings(monkeypatch):
+    cfg={'context_limit':16384,'max_output_tokens':256,'extra_parameters':{'temperature':0.5,'top_p':0.6,'seed':7,'keep_alive':'2m'},'embedding_context_limit':32,'embedding_extra_parameters':{'keep_alive':'1m'}}
+    monkeypatch.setattr(core,'settings',lambda:cfg)
+    sent=[]
+    def response(path,payload,timeout):
+        sent.append((path,payload))
+        return {'embeddings':[[1,2,3]]} if path=='/api/embed' else {'done':True,'done_reason':'stop','message':{'content':'{"status":"ready"}'}}
+    monkeypatch.setattr(ollama,'request',response)
+    ollama.chat('qwen3:4b','Status?',[{'document_name':'test','text':'ready'}],[],60)
+    ollama.extract('qwen3:4b','ready',{'type':'object','properties':{'status':{'type':'string'}}},60)
+    ollama.embed('nomic-embed-text',['test'],60)
+    for _,payload in sent[:2]:
+        assert payload['options']['num_predict']==256 and payload['options']['temperature']==0.5 and payload['options']['seed']==7
+        assert payload['keep_alive']=='2m' and 'keep_alive' not in payload['options']
+    assert sent[2][1]['keep_alive']=='1m' and sent[2][1]['truncate'] is False
+    with pytest.raises(ollama.OllamaError,match='embedding input budget'):ollama.embed('nomic-embed-text',['x'*80],60)
+    assert len(sent)==3
