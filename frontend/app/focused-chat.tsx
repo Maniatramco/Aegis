@@ -10,6 +10,7 @@ type Props = {
   error: string; onDismissError: () => void; datasetName: string; localProcessing: boolean; reranker: Entity;
   temporary: boolean; temporaryUploadCount: number; onTemporary: () => void; onCleanup: () => void;
   upload: DocumentUploadController;
+  onUploadWorkflowVisible?: (visible:boolean)=>void;
   templateAttachment: string; templateFeedback: string; onTemplateAttach:(file:File)=>void; onTemplateRemove:()=>void;
   conversation: Entity | null; conversations: Entity[]; prompt: string; setPrompt: (value: string) => void;
   answering: boolean; lastPrompt: string; canSend: boolean; externalChat: boolean; setExternalChat: (value: boolean) => void;
@@ -21,6 +22,7 @@ type Props = {
 export function FocusedChat(p: Props) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadView, setUploadView] = useState<"attach" | "workflow">("attach");
+  useEffect(()=>{p.onUploadWorkflowVisible?.(uploadOpen&&uploadView==='workflow');return()=>p.onUploadWorkflowVisible?.(false);},[uploadOpen,uploadView,p.onUploadWorkflowVisible]);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const uploadDialog = useRef<HTMLDialogElement>(null);

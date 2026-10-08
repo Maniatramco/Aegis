@@ -15,6 +15,17 @@
 .upload-file-error { font-size:12px; color:#9c3e30; line-height:1.5; margin:6px 0; }
 .upload-file-detail .text-button { margin-top:8px; font-size:12px; }
 .upload-files .btn.icon { min-width:36px; min-height:36px; padding:6px; }
+.document-upload-panel .batch-document-list { max-height:360px; }
+.batch-document-heading { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+.batch-document-heading>strong { font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.batch-document-heading .upload-file-status { margin:0; text-align:right; flex-shrink:0; max-width:48%; }
+.batch-document-actions { font-size:11px; color:#536480; margin-top:5px; }
+.batch-document-actions>summary { cursor:pointer; width:fit-content; padding:3px 0; }
+.batch-document-actions .workflow-actions { margin:8px 0 0; }
+.batch-document-actions .workflow-actions .btn { flex:none; }
+.batch-document-retry { margin-top:8px; }
+.batch-document-retry .btn { font-size:12px; }
+.batch-document-actions>summary:focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
 .upload-consent { align-items:flex-start; line-height:1.6; font-size:12px; margin:16px 0; }
 .upload-consent input { flex-shrink:0; margin-top:3px; }
 .upload-notice { display:flex; gap:8px; align-items:flex-start; background:#fff7eb; color:#835417; padding:12px; border-radius:8px; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
@@ -37,6 +48,8 @@
 .chat-drop-overlay span { overflow-wrap:anywhere; }
 .chat-upload-dialog button:focus-visible,.chat-upload-dialog input:focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
 @media(max-width:560px) {
+  .batch-document-heading { flex-direction:column; gap:3px; }
+  .batch-document-heading .upload-file-status { text-align:left; max-width:100%; }
   .chat-upload-dialog { padding:18px; }
   .chat-upload-heading h2 { font-size:19px; }
   .shared-dropzone { padding:18px 10px; }

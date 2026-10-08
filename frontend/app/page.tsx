@@ -214,6 +214,7 @@ export default function App() {
   const operationLock=useRef(false);
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<{id:string;label:string}[]>([]);
+  const [uploadWorkflowVisible,setUploadWorkflowVisible]=useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [mobile, setMobile] = useState(false);
@@ -1284,7 +1285,7 @@ export default function App() {
           {view === "Home" && <DatasetHome datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis Agent"); }} />}
           {view === "Datasets" && (
             <>
-            <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}
+            <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus} onUploadWorkflowVisible={setUploadWorkflowVisible}
               onSelect={changeDataset} onCreated={d => { setKbs(current => [...current, d]); changeDataset(d.id); }}
               api={api} run={run} busy={busy || answering} reload={reload} notify={notify}
               onConnections={() => navigate("Model Registration")} onUse={navigate}
@@ -1407,7 +1408,7 @@ export default function App() {
             <FocusedChat temporary={temporary} temporaryUploadCount={docs.filter(d=>d.temporary_session_id===temporarySession).length}
               onTemporary={() => run(async () => { if (!temporary) { const session = await api("/temporary-chat/sessions", "POST", {}); setTemporarySession(session.id); } conversationRequest.current += 1; setTemporary(!temporary); setConversation(null); setPrompt(""); setLastPrompt(""); setError(""); })}
               onCleanup={() => setConfirm({ title: "Clean up temporary-only uploads?", body: "Delete this temporary session’s originals and indexes? Permanent dataset documents and uploads kept or used in saved chat/extraction are preserved.", action: async () => { const result = await api(`/temporary-chat/sessions/${temporarySession}`, "DELETE"); setTemporaryUploads(result.pending_document_ids || []); reload(); notify(result.pending_document_ids?.length ? "Some cleanup remains pending; check service health and retry." : "Temporary-only uploads cleaned up. Permanent documents preserved."); } })}
-              upload={documentUpload} templateAttachment={templateAttachment?.file.name||''} templateFeedback={templateFeedback} onTemplateRemove={()=>setTemplateAttachment(null)} onTemplateAttach={file=>{if(busy||answering){setError('Wait for the current operation before attaching a template.');return;}setTemplateAttachment({file,datasetId:kb});setTemplateFeedback('');setError('');}} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
+              upload={documentUpload} onUploadWorkflowVisible={setUploadWorkflowVisible} templateAttachment={templateAttachment?.file.name||''} templateFeedback={templateFeedback} onTemplateRemove={()=>setTemplateAttachment(null)} onTemplateAttach={file=>{if(busy||answering){setError('Wait for the current operation before attaching a template.');return;}setTemplateAttachment({file,datasetId:kb});setTemplateFeedback('');setError('');}} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
               error={error} onDismissError={() => setError("")} datasetName={selectedDataset?.name || "Choose a dataset"} localProcessing={settings.local_only || (selectedChatModel?.provider === "ollama" && !externalProvider)} reranker={settings.reranker || {}}
               answering={answering} lastPrompt={lastPrompt} canSend={!busy && (!!templateAttachment || ((selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length))}
               externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={settings.local_only ? "Questions and document content are processed locally through Ollama with a compatible dataset embedding index. Choose an installed mapped model to continue." : externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
@@ -2717,7 +2718,7 @@ export default function App() {
           </section>
         </div>
       )}
-      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs}/>
+      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible}/>
     </>
   );
 }

@@ -37,8 +37,8 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
   </div>;
 }
 
-export function DatasetWorkspace({ datasets, models, documents, selectedId, onSelect, onCreated, api, run, busy, reload, notify, onConnections, onUse, uploadPanel, documentsPanel, modelsFocus }: {
-  datasets: Entity[]; models: Entity[]; documents: Entity[]; selectedId: string; onSelect: (id: string) => void; onCreated: (dataset: Entity) => void; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void; onUse: (view: "Aegis Agent" | "Extract") => void; uploadPanel: React.ReactNode; documentsPanel: React.ReactNode; modelsFocus: boolean;
+export function DatasetWorkspace({ datasets, models, documents, selectedId, onSelect, onCreated, api, run, busy, reload, notify, onConnections, onUse, uploadPanel, documentsPanel, modelsFocus, onUploadWorkflowVisible }: {
+  datasets: Entity[]; models: Entity[]; documents: Entity[]; selectedId: string; onSelect: (id: string) => void; onCreated: (dataset: Entity) => void; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void; onUse: (view: "Aegis Agent" | "Extract") => void; uploadPanel: React.ReactNode; documentsPanel: React.ReactNode; modelsFocus: boolean; onUploadWorkflowVisible?: (visible:boolean)=>void;
 }) {
   const [creating, setCreating] = useState(false);
   const [showList, setShowList] = useState(!selectedId);
@@ -49,6 +49,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
   const [tab, setTab] = useState<"documents" | "models" | "settings">("documents");
   const newlyCreated = useRef("");
   const dataset = datasets.find(d => d.id === selectedId);
+  useEffect(()=>{onUploadWorkflowVisible?.(!creating&&!showList&&!!dataset&&tab==='documents'&&showUpload);return()=>onUploadWorkflowVisible?.(false);},[creating,showList,dataset?.id,tab,showUpload,onUploadWorkflowVisible]);
   const datasetDocs = documents.filter(d => (d.dataset_id || d.kb_id) === selectedId);
   const ready = datasetDocs.filter(d => d.status === "ready" && !d.requires_reindex).length;
   const mapped = dataset?.models?.filter((m: Entity) => m.mapping_enabled !== false && m.enabled !== false) || [];
