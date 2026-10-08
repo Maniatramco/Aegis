@@ -253,6 +253,8 @@ export default function App() {
   const [refresh, setRefresh] = useState(0);
   const [overview, setOverview] = useState<Entity>({});
   const [docs, setDocs] = useState<Entity[]>([]);
+  // A list response started before an upload must not erase its accepted result.
+  const uploadRevision = useRef(0);
   const [kbs, setKbs] = useState<Entity[]>([]);
   const [kb, setKb] = useState("");
   const [query, setQuery] = useState("");
@@ -407,10 +409,11 @@ export default function App() {
     let active = true;
     setLoading(true);
     const controller=new AbortController();
+    const revision=uploadRevision.current;
     const list=(value:Entity|Entity[],key:string)=>Array.isArray(value)?value:value[key]||[];
     const tasks:[string,(value:any)=>void][]=[
-      ['/overview',setOverview],['/documents',value=>{setDocs(list(value,'documents'));setDocumentPollError(false);}],
-      ['/datasets',value=>setKbs(list(value,'datasets'))],['/jobs',value=>setJobs(list(value,'jobs'))],
+      ['/overview',setOverview],['/documents',value=>{if(revision===uploadRevision.current)setDocs(list(value,'documents'));setDocumentPollError(false);}],
+      ['/datasets',value=>setKbs(list(value,'datasets'))],['/jobs',value=>{if(revision===uploadRevision.current)setJobs(list(value,'jobs'));}],
       ['/settings',value=>{setSettings(value);setSettingsForm(value);}],['/templates',value=>setTemplates(list(value,'templates'))],
       ['/conversations',value=>setConversations(list(value,'conversations'))],['/extractions',value=>setExtractions(list(value,'extractions'))],
       ['/models',value=>setModels(list(value,'models'))],
@@ -439,15 +442,16 @@ export default function App() {
     const timer = setInterval(async () => {
       if(inFlight)return;
       inFlight=true;
+      const revision=uploadRevision.current;
       try {
         const d=await api('/jobs','GET',undefined,controller.signal,true);
-        if(!active)return;
+        if(!active||revision!==uploadRevision.current)return;
         const next=Array.isArray(d)?d:d.jobs||[];
         const changed=next.some((j:Entity)=>!previousJobs.some(p=>p.id===j.id&&p.status===j.status));
         previousJobs=next;setJobs(next);
         if(changed||next.some((j:Entity)=>['queued','running'].includes(j.status))){
           const [documents,runs]=await Promise.all([api('/documents','GET',undefined,controller.signal,true),api('/extractions','GET',undefined,controller.signal,true)]);
-          if(active){setDocs(Array.isArray(documents)?documents:documents.documents||[]);setExtractions(Array.isArray(runs)?runs:runs.extractions||[]);setDocumentPollError(false);}
+          if(active&&revision===uploadRevision.current){setDocs(Array.isArray(documents)?documents:documents.documents||[]);setExtractions(Array.isArray(runs)?runs:runs.extractions||[]);setDocumentPollError(false);}
         }
       }catch{if(active)setDocumentPollError(true);}finally{inFlight=false;}
     }, 3000);
@@ -576,6 +580,7 @@ export default function App() {
     documents: docs, jobs, api, refresh: reload, pollError: documentPollError,
     onManage: () => navigate("Datasets"),
     onUploaded: data => {
+      uploadRevision.current+=1;
       if (temporary && data.newUpload) setTemporaryUploads(previous => [...new Set([...previous, ...(data.documents || []).map((d: Entity) => d.id)])]);
       setDocs(previous => [...(data.documents || []), ...previous.filter(d => !(data.documents || []).some((next: Entity) => next.id === d.id))]);
       setJobs(previous => [...(data.jobs || []), ...previous.filter(j => !(data.jobs || []).some((next: Entity) => next.id === j.id))]);
