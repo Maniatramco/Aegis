@@ -10,6 +10,7 @@ type Props = {
   error: string; onDismissError: () => void; datasetName: string; localProcessing: boolean; reranker: Entity;
   temporary: boolean; temporaryUploadCount: number; onTemporary: () => void; onCleanup: () => void;
   upload: DocumentUploadController;
+  templateAttachment: string; templateFeedback: string; onTemplateAttach:(file:File)=>void; onTemplateRemove:()=>void;
   conversation: Entity | null; conversations: Entity[]; prompt: string; setPrompt: (value: string) => void;
   answering: boolean; lastPrompt: string; canSend: boolean; externalChat: boolean; setExternalChat: (value: boolean) => void;
   providerNotice: string; modelName: string; scopeCount: number; readyCount: number;
@@ -33,6 +34,7 @@ export function FocusedChat(p: Props) {
   useEffect(() => { if (!p.answering) return; setElapsed(0); const started = Date.now(); const timer = setInterval(() => setElapsed(Math.floor((Date.now()-started)/1000)),1000); return () => clearInterval(timer); }, [p.answering]);
   const thread = useRef<HTMLDivElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const templateInput=useRef<HTMLInputElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const historyDialog = useRef<HTMLDialogElement>(null);
   const historyTrigger = useRef<HTMLButtonElement>(null);
@@ -113,11 +115,11 @@ export function FocusedChat(p: Props) {
       onDragEnter={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
       onDragOver={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = p.upload.blocked || p.upload.uploading ? "none" : "copy"; } }}
       onDragLeave={e => { if (e.dataTransfer.types.includes("Files")) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
-      onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); dragDepth.current = 0; setDragging(false); p.upload.choose(Array.from(e.dataTransfer.files)); openAttachments(); }}>
+      onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); dragDepth.current = 0; setDragging(false); const files=Array.from(e.dataTransfer.files),templates=files.filter(file=>/\.json$/i.test(file.name)),documents=files.filter(file=>!/\.json$/i.test(file.name));if(templates.length)p.onTemplateAttach(templates[0]);if(documents.length){p.upload.choose(documents);openAttachments();} }}>
       {dragging && <div className="chat-drop-overlay" role="status"><UploadCloud size={38} /><strong>Drop documents to attach</strong><span>{p.upload.blocked || `Upload to ${p.upload.dataset?.name}`}</span><span>Review files before uploading</span></div>}
       <header className="chat-heading">
         <div className="chat-heading-row">
-          <div className="chat-title"><button ref={historyTrigger} className="btn icon history-trigger" aria-label="Conversations" aria-expanded={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}><History size={20} /></button><div><h1>Ask Aegis</h1><p>Answers grounded in your documents</p></div></div>
+          <div className="chat-title"><button ref={historyTrigger} className="btn icon history-trigger" aria-label="Conversations" aria-expanded={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}><History size={20} /></button><div><h2>Chat</h2><p>Answers grounded in your documents</p></div></div>
           <div className="chat-header-actions"><button className="btn icon chat-refresh" aria-label="Refresh workspace" title="Refresh workspace" disabled={p.loading || p.answering} onClick={p.onRefresh}><RefreshCw size={16}/></button><button className="btn sources-toggle" onClick={() => showSource(null)}><FileText size={16} />Sources <span>{sources.length}</span></button><button className="btn compact-new" aria-label="New conversation" disabled={p.answering} onClick={p.onNew}><Plus size={17} /><span>New chat</span></button></div>
         </div>
         <div className="chat-context-row">
@@ -149,10 +151,13 @@ export function FocusedChat(p: Props) {
       <div className="chat-compose-area">
         <div className="composer-heading"><span className="model-status"><span className="status-dot" />{p.localProcessing ? "Local model" : "Selected model"}<strong>{p.modelName}</strong></span>{p.reranker?.enabled && <span className="retrieval-status" title={`${p.reranker.model} · up to ${p.reranker.candidate_limit} candidates, then the configured number of source chunks`}>{p.reranker.ready ? "Local reranking" : "Reranker unavailable"}</span>}</div>
         {p.error && !messages.at(-1)?.error && <div className="chat-error" role="alert"><AlertCircle size={17} aria-hidden="true" /><span>{p.error}</span><button className="btn icon" aria-label="Dismiss error" onClick={p.onDismissError}><X size={15} /></button></div>}
+        <div className="template-import-control"><input type="file" ref={templateInput} accept=".json,application/json" hidden aria-label="JSON prompt template attachment" onChange={e=>{const file=e.target.files?.[0];if(file)p.onTemplateAttach(file);e.target.value='';}}/><button type="button" className="text-button" disabled={p.answering} onClick={()=>templateInput.current?.click()}>Attach JSON template</button><span className="small muted">or drop it into this chat, then send</span></div>
+        {p.templateFeedback&&<p role="status" className="template-feedback">{p.templateFeedback}</p>}
+        {p.templateAttachment&&<div className="template-attachment"><FileText size={18}/><span>{p.templateAttachment} · JSON template for {p.datasetName}</span><button type="button" className="btn icon" aria-label="Remove template attachment" disabled={p.answering} onClick={p.onTemplateRemove}><X size={16}/></button></div>}
         <form className="composer" onSubmit={e => { e.preventDefault(); p.onSend(); }}>
           <button ref={attachTrigger} type="button" className="btn attach-documents" aria-label="Attach documents" title="Attach documents to the selected dataset" aria-haspopup="dialog" onClick={openAttachments}><Paperclip size={22} /></button>
           <textarea ref={textarea} aria-label="Ask a question" placeholder={messages.length ? "Ask a follow-up about your documents…" : "Ask a question about your documents…"} rows={1} value={p.prompt} onChange={e => p.setPrompt(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); if (!p.answering) p.onSend(); } }} />
-          {p.answering ? <button key="stop" type="button" className="btn primary send-message" aria-label="Stop" title="Stop generating" onClick={event => { event.preventDefault(); p.onStop(); }}><Square size={19} /></button> : <button key="send" type="submit" className="btn primary send-message" aria-label="Send" title="Send message" disabled={!p.prompt.trim() || !p.canSend}><Send size={22} /></button>}
+          {p.answering ? <button key="stop" type="button" className="btn primary send-message" aria-label="Stop" title="Stop generating" onClick={event => { event.preventDefault(); p.onStop(); }}><Square size={19} /></button> : <button key="send" type="submit" className="btn primary send-message" aria-label="Send" title="Send message" disabled={(!p.prompt.trim()&&!p.templateAttachment) || !p.canSend}><Send size={22} /></button>}
         </form>
         {p.upload.summary && <div className="chat-upload-status"><button type="button" className="text-button" aria-label="View document workflows" onClick={openWorkflow}><FileText size={13} /><span role="status">{p.upload.summary}</span></button></div>}
         <div className="composer-meta">{!p.localProcessing&&<label className="check"><input type="checkbox" aria-label={p.providerNotice} checked={p.externalChat} disabled={p.answering} onChange={e => p.setExternalChat(e.target.checked)} /><span>Allow selected documents to be sent to this model</span></label>}<details className="provider-details"><summary>{p.localProcessing ? "Privacy" : "Provider details"}</summary><p>{p.providerNotice}</p></details><span className="composer-hint">{p.localProcessing ? "Local · Ollama · compatible dataset embeddings" : "Review sources before use"}</span></div>

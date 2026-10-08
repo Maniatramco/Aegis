@@ -5,16 +5,17 @@ import { checked, seedMockCatalog, seedDataset, uploadReady, seedTemplate } from
 
 test.use({ actionTimeout: 15000 });
 const output = path.join(process.cwd(), "screenshots", "responsive");
-const screens = ["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates", "Dashboard", "Index inspector", "Jobs & activity", "Connections", "Services & migration", "Setup"];
+const screens = ["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Dashboard", "Index inspector", "Jobs & activity", "Connections", "Services & migration", "Setup"];
 async function navigate(page: Page, name: string) {
   await expect(page.locator("main h1")).toBeVisible();
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
   const nav = page.getByRole("navigation");
-  const target = nav.getByRole("button", { name, exact: true });
+  const target = nav.getByRole("button", { name: name === "Extract" ? "Aegis Agent" : name, exact: true });
   if (!await target.isVisible()) await nav.getByRole("button", { name: "Manage workspace", exact: true }).click();
   await target.click();
-  await expect(page.locator("main h1")).toHaveText(name === "Dashboard" ? "Workspace overview" : name);
+  if (name === "Extract") await page.getByRole("tab", { name: "Extract & review", exact: true }).click();
+  await expect(page.locator("main h1")).toHaveText(name === "Dashboard" ? "Workspace overview" : name === "Extract" ? "Aegis Agent" : name);
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
 }
 async function geometry(page: Page) {
@@ -49,7 +50,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
     await page.goto("/#Home");
     for (const name of screens) {
       await navigate(page, name);
-      if (name === "Ask Aegis") {
+      if (name === "Aegis Agent") {
         await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
         await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
         await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveValue(models.careful.id);
@@ -63,7 +64,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
       report.push({ screen: name, height, ...dimensions });
       expect.soft(dimensions.scrollWidth, `${name} body at ${width}`).toBeLessThanOrEqual(width + 1);
       expect.soft(dimensions.overflow, `${name} controls at ${width}`).toEqual([]);
-      if (["Home", "Ask Aegis", "Extract", "Connections"].includes(name)) {
+      if (["Home", "Aegis Agent", "Extract", "Connections"].includes(name)) {
         await page.evaluate(async () => { await document.fonts.ready; window.scrollTo(0, 0); });
         await page.screenshot({ path: path.join(output, `${width}x${height}-${name.toLowerCase().replaceAll(" ", "-")}.png`), fullPage: true, animations: "disabled" });
       }
@@ -100,7 +101,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => table.evaluate(el => el.scrollWidth <= el.clientWidth || el.scrollLeft > 0)).toBe(true);
 
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
@@ -132,13 +133,13 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   // 1440px browser at 200% zoom has a 720 CSS-pixel layout viewport.
   // This checks that reflow equivalence; it is not native browser-chrome zoom automation.
   await page.setViewportSize({ width: 720, height: 500 });
-  for (const name of ["Home", "Ask Aegis", "Extract", "Re-extract", "Prompt templates", "Connections", "Setup"]) {
+  for (const name of ["Home", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Connections", "Setup"]) {
     await navigate(page, name);
     expect.soft((await geometry(page)).overflow, `${name} 200% reflow equivalent`).toEqual([]);
   }
   // Independently enlarge rendered text to 200%, including fixed-pixel declarations.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const name of ["Home", "Ask Aegis", "Extract", "Re-extract", "Prompt templates", "Connections", "Setup"]) {
+  for (const name of ["Home", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Connections", "Setup"]) {
     await page.reload();
     await navigate(page, name);
     await page.evaluate(() => {
@@ -147,7 +148,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
     });
     expect.soft((await geometry(page)).overflow, `${name} 200% text`).toEqual([]);
     expect.soft((await geometry(page)).scrollWidth, `${name} 200% text body`).toBeLessThanOrEqual(391);
-    if (name === "Ask Aegis") await page.screenshot({ path: path.join(output, "390-ask-200-percent-text.png"), fullPage: true });
+    if (name === "Aegis Agent") await page.screenshot({ path: path.join(output, "390-ask-200-percent-text.png"), fullPage: true });
   }
 });
 

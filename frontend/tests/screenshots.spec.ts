@@ -56,17 +56,18 @@ async function navigate(page: Page, name: string) {
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
   const nav = page.getByRole("navigation");
-  const target = nav.getByRole("button", { name, exact: true });
+  const target = nav.getByRole("button", { name: name === "Extract" ? "Aegis Agent" : name, exact: true });
   if (!await target.isVisible()) await nav.getByRole("button", { name: "Manage workspace", exact: true }).click();
   await target.click();
-  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
+  if (name === "Extract") await page.getByRole("tab", { name: "Extract & review", exact: true }).click();
+  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name === "Extract" ? "Aegis Agent" : name, exact: true }).first()).toBeVisible();
 }
 async function capture(page: Page, filename: string) {
   expect(await page.locator(".page-head .btn.primary").evaluateAll(buttons => buttons.every(button => !["transparent", "rgba(0, 0, 0, 0)"].includes(getComputedStyle(button).backgroundColor)))).toBe(true);
   await expect.poll(() => page.locator('img[src="/aegis-logo.png"]').evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   const manage = page.getByRole("button", { name: "Manage workspace", exact: true });
   const primary = await page.locator("main h1").textContent();
-  if (["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(primary || "") && await manage.isVisible() && await manage.getAttribute("aria-expanded") === "true") await manage.click();
+  if (["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(primary || "") && await manage.isVisible() && await manage.getAttribute("aria-expanded") === "true") await manage.click();
   // Native Sources dialog makes the background inert, so use the DOM control.
   await expect(page.locator('button[aria-label="Refresh workspace"]')).toBeEnabled();
   const dismiss = page.getByRole("button", { name: "Dismiss notification" });
@@ -138,7 +139,7 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await expect(page.getByLabel("Default chat model", { exact: true })).toHaveValue(models.fast.id);
   await capture(page, "11-dataset-models.png");
 
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(kb.id);
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
   await page.setViewportSize({ width: 1487, height: 1058 });

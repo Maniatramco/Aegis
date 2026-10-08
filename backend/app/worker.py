@@ -152,6 +152,7 @@ def _process(jid,token,snapshot):
         workflow.transition(jid,'index','completed')
         workflow.transition(jid,'ready','completed')
     elif kind=='extract':
+        workflow.transition(jid,'prepare','running')
         data=store.json(ref)
         if cfg['model_provider'] in ('openai','oci') and not data.get('allow_external'):raise ValueError('External extraction requires explicit external data transmission consent')
         sources=[]
@@ -163,11 +164,18 @@ def _process(jid,token,snapshot):
                 for c in store.json('documents/'+doc_id+'/chunks.json')['chunks']:sources.append({'document_id':doc_id,'document_name':d.name,**c})
         text='\n\n'.join(f'Document: {c["document_name"]}; chunk {c["id"]}; page {c["page"]}\n{c["text"]}' for c in sources)
         if len(text)>200000:raise ValueError('Extraction exceeds 200,000 character context limit; choose fewer documents')
+        checkpoint(jid,token,20)
+        workflow.transition(jid,'prepare','completed')
+        workflow.transition(jid,'generate','running')
         result,evidence=providers.extract_with_evidence(text,data['schema'],sources)
+        workflow.transition(jid,'generate','completed')
+        workflow.transition(jid,'validate','running')
         from jsonschema import validate
         validate(result,data['schema']);checkpoint(jid,token,90)
         data.update(result=result,evidence=evidence,evidence_notice='Review all values. Evidence contains only validated verbatim source quotes; fields without evidence are unverified.',sources=[{'document_id':c['document_id'],'document_name':c['document_name'],'chunk_id':c['id'],'page':c['page'],'excerpt':c['text'][:1000]} for c in sources],review_status='unreviewed',completed_at=time.time(),mock=cfg['model_provider']=='mock')
         store.put_json(ref,data)
+        workflow.transition(jid,'validate','completed')
+        workflow.transition(jid,'ready','completed')
     else:raise ValueError('Unknown job type')
     with Session.begin() as s:
         j=s.get(Job,jid)

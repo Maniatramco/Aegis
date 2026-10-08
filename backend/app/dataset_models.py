@@ -141,12 +141,23 @@ def index_matches(d,snapshot):
 def require_indexes(docs,snapshot):
     if any(d.status=='ready' and not index_matches(d,snapshot) for d in docs):raise HTTPException(409,'Dataset index configuration changed. Reindex the selected documents before retrieval or extraction.')
 
-def document_public(d):
+def document_public(d,snapshots=None):
     result=core.representation(d)|{'dataset_id':d.parent_id or None,'requires_reindex':True}
     from .temporary_files import marker
     result.update(marker(d.id))
     if not d.parent_id:return result
-    try:result['requires_reindex']=not index_matches(d,embedding_snapshot(owned(d.parent_id,d.owner,'knowledge_base')))
+    try:
+        # Share snapshots only within this listing request. Recheck the live
+        # model digest on every new request and before executing any work.
+        key=(d.owner,d.parent_id)
+        if snapshots is None:snapshot=embedding_snapshot(owned(d.parent_id,d.owner,'knowledge_base'))
+        else:
+            if key not in snapshots:
+                try:snapshots[key]=embedding_snapshot(owned(d.parent_id,d.owner,'knowledge_base'))
+                except HTTPException as error:snapshots[key]=error
+            snapshot=snapshots[key]
+            if isinstance(snapshot,HTTPException):raise snapshot
+        result['requires_reindex']=not index_matches(d,snapshot)
     except HTTPException:pass
     if result['requires_reindex'] and d.status=='ready':result['index_notice']='Reindex required: embedding configuration or installed model digest differs, or this older index has no verified model digest. Original retained.'
     return result

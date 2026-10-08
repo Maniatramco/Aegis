@@ -8,7 +8,12 @@ def read(jid):
     try:return core.store.json('jobs/'+jid+'/workflow.json')
     except FileNotFoundError:return {'stages':{},'current':None,'notice':'Stage details unavailable for this older job.'}
 
-def initialize(jid):
+def initialize(jid,kind='index'):
+    if kind=='extract':
+        core.store.put_json('jobs/'+jid+'/workflow.json',{'current':'prepare','stages':{
+            'prepare':{'status':'queued'},'generate':{'status':'blocked'},
+            'validate':{'status':'blocked'},'ready':{'status':'blocked'}}})
+        return
     core.store.put_json('jobs/'+jid+'/workflow.json',{'current':'extract','stages':{
         'upload':{'status':'completed','completed_at':time.time()},
         'extract':{'status':'queued'},'index':{'status':'blocked'},'ready':{'status':'blocked'}}})

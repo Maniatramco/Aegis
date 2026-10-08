@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { DocumentUploadPanel, useDocumentUpload } from "./document-upload";
 import { FocusedChat } from "./focused-chat";
 import { readChatStream } from "./chat-stream";
@@ -7,6 +8,7 @@ import { DatasetHome } from "./dataset-directory";
 import { ExtractionReview } from "./extraction-review";
 import { PromptTemplates } from "./prompt-templates";
 import { ReExtract } from "./re-extract";
+import { OperationProgress } from "./operation-progress";
 import "./workspace-flow.css";
 import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import {
@@ -55,7 +57,7 @@ type View =
   | "Home"
   | "Dashboard"
   | "Datasets"
-  | "Ask Aegis"
+  | "Aegis Agent"
   | "Extract"
   | "Re-extract"
   | "Prompt templates"
@@ -68,8 +70,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Home", icon: Database, group: "WORKSPACE" },
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Datasets", icon: BookOpen },
-  { name: "Ask Aegis", icon: MessageSquare },
-  { name: "Extract", icon: FileSearch },
+  { name: "Aegis Agent", icon: MessageSquare },
   { name: "Re-extract", icon: RefreshCw },
   { name: "Prompt templates", icon: FileText },
   { name: "Index inspector", icon: Layers, group: "OPERATIONS" },
@@ -84,7 +85,7 @@ const descriptions: Record<View, string> = {
     "Your documents, processing activity, and connected services at a glance.",
   "Datasets":
     "Onboard your data, map its models, and put a trusted source to work.",
-  "Ask Aegis": "Ask across your knowledge, with evidence you can inspect.",
+  "Aegis Agent": "Ask across your knowledge, with evidence you can inspect.",
   Extract: "Turn document content into structured, reviewable data.",
   "Prompt templates": "Describe what to find and choose the fields you need.",
   "Re-extract": "Find a document and choose how to extract it again.",
@@ -191,7 +192,8 @@ function Download({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("Ask Aegis");
+  const [view, setView] = useState<View>("Aegis Agent");
+  const [agentTab,setAgentTab]=useState("Chat");
   const [user, setUser] = useState<Entity | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [csrf, setCsrf] = useState("");
@@ -202,7 +204,9 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [signInErrors, setSignInErrors] = useState<{ username?: string; password?: string; code?: string }>({});
   const [busy, setBusy] = useState(false);
+  const operationLock=useRef(false);
   const [loading, setLoading] = useState(false);
+  const [requests, setRequests] = useState<{id:string;label:string}[]>([]);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [mobile, setMobile] = useState(false);
@@ -286,6 +290,8 @@ export default function App() {
   const openingConversation = useRef(false);
   const [templates, setTemplates] = useState<Entity[]>([]);
   const [templateId, setTemplateId] = useState("");
+  const [templateAttachment,setTemplateAttachment]=useState<{file:File;datasetId:string}|null>(null);
+  const [templateFeedback,setTemplateFeedback]=useState('');
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
   const [resultText, setResultText] = useState("");
@@ -312,7 +318,13 @@ export default function App() {
       method = "GET",
       body?: unknown,
       signal?: AbortSignal,
+      quiet = false,
     ) => {
+      const requestId=crypto.randomUUID();
+      const section=path.split('/')[1]?.replaceAll('-',' ')||'workspace';
+      if(!quiet)setRequests(previous=>[...previous,{id:requestId,label:`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`}]);
+      const timeout=AbortSignal.timeout(method==='GET'?30000:120000);
+      try {
       const headers: Record<string, string> = {};
       if (body && !(body instanceof FormData))
         headers["Content-Type"] = "application/json";
@@ -327,7 +339,7 @@ export default function App() {
             : body
               ? JSON.stringify(body)
               : undefined,
-        signal,
+        signal: signal ? AbortSignal.any([signal,timeout]) : timeout,
       });
       let data;
       try {
@@ -345,10 +357,18 @@ export default function App() {
         ), { status: r.status });
       }
       return data;
+      } catch(error) {
+        if(error instanceof Error&&error.name==='TimeoutError')throw new Error('The request timed out. Check the service and refresh to confirm whether your operation completed before retrying.');
+        throw error;
+      } finally {
+        if(!quiet)setRequests(previous=>previous.filter(r=>r.id!==requestId));
+      }
     },
     [csrf],
   );
   const run = async (fn: () => Promise<void>) => {
+    if(operationLock.current)return;
+    operationLock.current=true;
     setBusy(true);
     setError("");
     try {
@@ -356,6 +376,7 @@ export default function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
+      operationLock.current=false;
       setBusy(false);
     }
   };
@@ -364,7 +385,7 @@ export default function App() {
     setTimeout(() => setToast(""), 5500);
   };
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
+    fetch("/api/auth/me", { credentials: "include",signal:AbortSignal.timeout(15000) })
       .then(async (r) => {
         const d = await r.json();
         if (r.ok) {
@@ -372,9 +393,9 @@ export default function App() {
           setCsrf(d.csrf_token || "");
         }
       })
-      .catch(() => {})
+      .catch(() => setError('Could not reach Aegis. Check the API service, then reload this page.'))
       .finally(() => setAuthChecked(true));
-    fetch("/api/auth/status")
+    fetch("/api/auth/status",{signal:AbortSignal.timeout(15000)})
       .then((r) => (r.ok ? r.json() : {}))
       .then((d: Entity) =>
         setBootstrap(!!(d.setup_required || d.bootstrap_required)),
@@ -385,62 +406,62 @@ export default function App() {
     if (!user) return;
     let active = true;
     setLoading(true);
-    Promise.all([
-      api("/overview"),
-      api("/documents"),
-      api("/datasets"),
-      api("/jobs"),
-      api("/capabilities"),
-      api("/settings"),
-      api("/templates"),
-      api("/conversations"),
-      api("/extractions"),
-      api("/models"),
-      api("/settings/profiles"),
-    ])
-      .then(([o, d, k, j, c, s, t, co, e, m, p]) => {
-        if (!active) return;
-        setOverview(o);
-        setDocs(Array.isArray(d) ? d : d.documents || []);
-        setDocumentPollError(false);
-        setKbs(Array.isArray(k) ? k : k.datasets || []);
-        setJobs(Array.isArray(j) ? j : j.jobs || []);
-        setCaps(c);
-        setSettings(s);
-        setSettingsForm(s);
-        setTemplates(Array.isArray(t) ? t : t.templates || []);
-        setConversations(Array.isArray(co) ? co : co.conversations || []);
-        setExtractions(Array.isArray(e) ? e : e.extractions || []);
-        setModels(Array.isArray(m) ? m : m.models || []);
-        setProfiles(Array.isArray(p) ? p : p.profiles || []);
-      })
-      .catch((e) => active && setError(e.message))
-      .finally(() => active && setLoading(false));
+    const controller=new AbortController();
+    const list=(value:Entity|Entity[],key:string)=>Array.isArray(value)?value:value[key]||[];
+    const tasks:[string,(value:any)=>void][]=[
+      ['/overview',setOverview],['/documents',value=>{setDocs(list(value,'documents'));setDocumentPollError(false);}],
+      ['/datasets',value=>setKbs(list(value,'datasets'))],['/jobs',value=>setJobs(list(value,'jobs'))],
+      ['/settings',value=>{setSettings(value);setSettingsForm(value);}],['/templates',value=>setTemplates(list(value,'templates'))],
+      ['/conversations',value=>setConversations(list(value,'conversations'))],['/extractions',value=>setExtractions(list(value,'extractions'))],
+      ['/models',value=>setModels(list(value,'models'))],
+    ];
+    Promise.allSettled(tasks.map(async([path,update])=>{
+      try {const value=await api(path,'GET',undefined,controller.signal);if(active)update(value);}
+      catch(error){if(active)setError(error instanceof Error?error.message:'Could not refresh workspace.');}
+    })).finally(()=>{if(active)setLoading(false);});
     return () => {
       active = false;
+      controller.abort();
     };
   }, [user, refresh, api]);
+  useEffect(()=>{
+    if(!user||!['Connections','Services & migration','Setup','Dashboard'].includes(view))return;
+    let active=true;
+    api('/capabilities').then(value=>{if(active)setCaps(value);}).catch(error=>{if(active)setError(error.message);});
+    api('/settings/profiles').then(value=>{if(active)setProfiles(Array.isArray(value)?value:value.profiles||[]);}).catch(error=>{if(active)setError(error.message);});
+    return()=>{active=false;};
+  },[user,view,refresh,api]);
   useEffect(() => {
     if (!user) return;
-    const timer = setInterval(() => {
-      api("/jobs")
-        .then((d) => {
-          const next = Array.isArray(d) ? d : d.jobs || [];
-          setJobs(next);
-          api("/documents")
-            .then((d) => { setDocs(Array.isArray(d) ? d : d.documents || []); setDocumentPollError(false); })
-            .catch(() => setDocumentPollError(true));
-        })
-        .catch(() => setDocumentPollError(true));
-    }, 6000);
-    return () => clearInterval(timer);
+    let active=true, inFlight=false;
+    let previousJobs=jobs;
+    const controller=new AbortController();
+    const timer = setInterval(async () => {
+      if(inFlight)return;
+      inFlight=true;
+      try {
+        const d=await api('/jobs','GET',undefined,controller.signal,true);
+        if(!active)return;
+        const next=Array.isArray(d)?d:d.jobs||[];
+        const changed=next.some((j:Entity)=>!previousJobs.some(p=>p.id===j.id&&p.status===j.status));
+        previousJobs=next;setJobs(next);
+        if(changed||next.some((j:Entity)=>['queued','running'].includes(j.status))){
+          const [documents,runs]=await Promise.all([api('/documents','GET',undefined,controller.signal,true),api('/extractions','GET',undefined,controller.signal,true)]);
+          if(active){setDocs(Array.isArray(documents)?documents:documents.documents||[]);setExtractions(Array.isArray(runs)?runs:runs.extractions||[]);setDocumentPollError(false);}
+        }
+      }catch{if(active)setDocumentPollError(true);}finally{inFlight=false;}
+    }, 3000);
+    return () => {active=false;controller.abort();clearInterval(timer);};
   }, [user, api]);
   const navigate = (name: View) => {
     if ((reviewDirty.current || templateDirty.current) && !window.confirm("Discard unsaved changes before leaving?")) return;
     reviewDirty.current = false; templateDirty.current = false;
-    window.location.hash = encodeURIComponent(name);
-    setView(name);
-    if (!["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(name)) setAdminNavigation(true);
+    const destination=name==="Extract"?"Aegis Agent":name;
+    if(name==="Extract")setAgentTab("Extract");
+    else if(name==="Aegis Agent")setAgentTab("Chat");
+    window.location.hash = encodeURIComponent(name==="Extract"?"Aegis Agent/extract":destination);
+    setView(destination);
+    if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(name)) setAdminNavigation(true);
     setDatasetModelsFocus(false);
     setError("");
     setMobile(false);
@@ -450,6 +471,7 @@ export default function App() {
   const extractionModels = eligibleModels(selectedDataset, "extraction");
   const selectedChatModel = chatModels.find(m => m.id === chatModelId);
   const selectedExtractModel = extractionModels.find(m => m.id === extractModelId);
+  const extractionNeedsConsent=!!selectedExtractModel&&!['ollama','mock'].includes(selectedExtractModel.provider);
   const datasetEmbedding = selectedDataset?.active === false ? undefined : (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
   const datasetDocs = docs.filter(d => (d.dataset_id || d.kb_id) === kb);
   const readyDatasetDocs = datasetDocs.filter(d => d.status === "ready" && !d.requires_reindex);
@@ -459,6 +481,7 @@ export default function App() {
     conversationRequest.current += 1;
     openingConversation.current = false;
     setKb(id);
+    setTemplateAttachment(null);setTemplateFeedback('');setTemplateId('');
     setDatasetModelsFocus(false);
     setScope([]);
     setChatModelId("");
@@ -476,14 +499,18 @@ export default function App() {
     if ((reviewDirty.current || templateDirty.current) && !window.confirm("Discard unsaved changes before leaving?")) { window.history.replaceState(null, "", "#" + encodeURIComponent(view)); return; }
     reviewDirty.current = false; templateDirty.current = false;
     let route: string;
-    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Ask Aegis"; }
-    if (route.startsWith("dataset/")) {
+    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Aegis Agent"; }
+    if (["extract","aegis agent/extract"].includes(route.toLowerCase())) {
+      setAgentTab("Extract");setView("Aegis Agent");
+    } else if (route.startsWith("dataset/")) {
       changeDataset(route.slice(8));
       setView("Datasets");
     } else {
-      const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Ask Aegis";
+      if(route.toLowerCase()==="ask aegis")route="Aegis Agent";
+      if(route==="Aegis Agent")setAgentTab("Chat");
+      const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Aegis Agent";
       setView(next);
-      if (!["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(next)) setAdminNavigation(true);
+      if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(next)) setAdminNavigation(true);
     }
     setMobile(false);
     setError("");
@@ -535,7 +562,7 @@ export default function App() {
         setBootstrap(false);
       }
       const d = await api("/auth/login", "POST", { username, password });
-      navigate("Ask Aegis");
+      navigate("Aegis Agent");
       setUser(d.user);
       setCsrf(d.csrf_token || "");
       setPassword("");
@@ -602,6 +629,35 @@ export default function App() {
     finally { if (request === conversationRequest.current) openingConversation.current = false; }
   };
   const sendMessage = async (text = prompt) => {
+    if(templateAttachment){
+      if(sending.current||busy||answering)return;
+      if(!kb){setError('Choose a dataset before sending this prompt template.');return;}
+      if(templateAttachment.datasetId&&templateAttachment.datasetId!==kb){setError('Attach the template again for the selected dataset.');return;}
+      sending.current=true;setBusy(true);setError('');setTemplateFeedback('');
+      try {
+        const file=templateAttachment.file;
+        if(file.size>1024*1024)throw new Error('Prompt template JSON must be smaller than 1 MB.');
+        let payload:Entity;try{payload=JSON.parse(await file.text());}catch{throw new Error('Invalid JSON. Attach a JSON Schema object or a JSON file containing name and schema.');}
+        if(!payload||Array.isArray(payload)||typeof payload!=='object')throw new Error('The template must be a JSON object.');
+        const schema=payload.schema||payload;
+        const imported:Entity=await api('/templates','POST',{name:typeof payload.name==='string'?payload.name:file.name.replace(/\.json$/i,''),schema,dataset_id:kb});
+        setTemplates(previous=>[imported!,...previous.filter(t=>t.id!==imported!.id)]);setTemplateId(imported.id);setTemplateAttachment(null);setPrompt('');
+        setTemplateFeedback(`Saved “${imported.name}” for ${selectedDataset?.name}. This template is selected for extraction.`);
+        const wantsExtraction=/\b(?:run|start|perform)\s+(?:an?\s+)?(?:extraction|re-extraction)\b|\b(?:extract|re-extract|reextract)\b.*\b(?:documents?|files?|fields?|data)\b|\buse\b.*\btemplate\b.*\b(?:extract|extraction|re-extract|re-extraction)\b/i.test(text);
+        if(wantsExtraction){
+          const documents=scope.length?readyDatasetDocs.filter(d=>scope.includes(d.id)):readyDatasetDocs;
+          if(!documents.length)throw new Error('Template saved. Upload documents and wait for indexing before extracting.');
+          if(!selectedExtractModel)throw new Error('Template saved. Set the dataset default extraction model before extracting.');
+          const external=!['ollama','mock'].includes(selectedExtractModel.provider);
+          if(external&&!externalExtract)throw new Error('Template saved. Approve the external provider in Extract & review before running extraction.');
+          const result=await api('/extractions','POST',{dataset_id:kb,model_id:selectedExtractModel.id,document_ids:documents.map(d=>d.id),template_id:imported.id,allow_external:externalExtract});
+          setExtraction(result);setExtractions(previous=>[result,...previous]);setJobs(previous=>[result.job,...previous.filter(j=>j.id!==result.job.id)]);setExtractionTab('Review');setAgentTab('Extract');
+          setTemplateFeedback(`Saved “${imported.name}”. Extraction started with this template; results will appear when ready.`);
+        }
+      }catch(error){setError(error instanceof Error?error.message:'Template import failed.');}
+      finally{sending.current=false;setBusy(false);}
+      return;
+    }
     if (!text.trim() || answering || sending.current || openingConversation.current) return;
     if (!kb || !selectedChatModel || !readyDatasetDocs.length) {
       setError("Choose a dataset with ready documents and an eligible chat model.");
@@ -718,14 +774,14 @@ export default function App() {
       if (!kb || !selectedExtractModel) throw new Error("Choose a dataset and an eligible extraction model.");
       if (!scope.length || !templateId)
         throw new Error("Select at least one document and a template.");
-      if (!externalExtract)
+      if (extractionNeedsConsent && !externalExtract)
         throw new Error("Approve the external processing notice first.");
       const d = await api("/extractions", "POST", {
         dataset_id: kb,
         model_id: extractModelId,
         document_ids: scope,
         template_id: templateId,
-        allow_external: true,
+        allow_external: externalExtract,
       });
       setExtraction(d);
       setExtractionTab("Review");
@@ -790,7 +846,7 @@ export default function App() {
     );
   if (!user)
     return (
-      <main className="login-shell">
+      <main className="login-shell"><div className="login-layout"><section className="login-story" aria-label="Aegis document intelligence"><div className="login-brand"><img src="/aegis-logo.png" alt="Aegis logo" width={64} height={64}/><span>Aegis</span></div><h1>Data. Empowered.</h1><p>A simple workspace for turning documents into knowledge you can inspect.</p><figure className="login-illustration"><Image className="login-artwork" src="/aegis-login-data-platform-refined.png" alt="Aegis AI Data Platform with AI Agent, datasets, AI chat, prompt templates, upload, extraction, and review" width={1448} height={1086} sizes="(max-width: 760px) 320px, (max-height: 820px) 440px, 500px" priority /><span className="login-illustration-logo"><Image src="/aegis-logo.png" alt="Aegis emblem" width={84} height={84} sizes="84px" priority /></span></figure></section>
         <section className="login-card" aria-labelledby="login-heading">
           <div className="login-brand"><img src="/aegis-logo.png" alt="" width={38} height={38} /><span>Aegis</span></div>
           <h1 id="login-heading">{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
@@ -850,14 +906,14 @@ export default function App() {
           {bootstrap && <button className="login-switch" type="button" onClick={() => {
             setBootstrap(false); setPassword(""); setShowPassword(false); setSignInErrors({}); setError("");
           }}>Already configured? Sign in</button>}
-        </section>
+        </section></div>
       </main>
     );
 
   return (
     <>
       {drawerOpen && <div className="navigation-backdrop" aria-hidden="true" onClick={() => setMobile(false)} />}
-      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === "Ask Aegis" ? "chat-rail" : ""} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={compactNavigation && !drawerOpen}>
+      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === "Aegis Agent" ? "chat-rail" : ""} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={compactNavigation && !drawerOpen}>
         <button
           className="btn icon mobile-close"
           onClick={() => setMobile(false)}
@@ -873,12 +929,12 @@ export default function App() {
         </div>
         <div className="brand-sub">Document intelligence</div>
         <nav>
-          {sections.filter(s => ["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => (
+          {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => (
             <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{s.name}</span></button>
           ))}
           <button className="nav-item nav-more" aria-label="Manage workspace" title="Manage workspace" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} /><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
           {adminNavigation && <div id="admin-navigation" className="admin-navigation">
-            {sections.filter(s => !["Home", "Datasets", "Ask Aegis", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
+            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
           </div>}
         </nav>
         <div className="nav-footer">
@@ -889,7 +945,7 @@ export default function App() {
           Originals protected. Insights grounded.
         </div>
       </aside>
-      <div className={`shell ${view === "Ask Aegis" ? "chat-shell" : ""}`} inert={drawerOpen}>
+      <div className={`shell ${view === "Aegis Agent" ? "chat-shell" : ""}`} inert={drawerOpen}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -931,7 +987,7 @@ export default function App() {
           </div>
         </header>
         <main className="workspace">
-          {view !== "Ask Aegis" && <div className="page-head">
+          {view !== "Aegis Agent" && <div className="page-head">
             <div>
               <div className="eyebrow">
                 {view === "Connections" || view === "Services & migration"
@@ -965,7 +1021,7 @@ export default function App() {
               )}
             </div>
           </div>}
-          {error && view !== "Home" && view !== "Ask Aegis" && (
+          {error && view !== "Home" && view !== "Aegis Agent" && (
             <Notice tone="error">
               {error}
               <button
@@ -1168,7 +1224,7 @@ export default function App() {
                     {
                       name: "Ask your knowledge",
                       text: "Get answers grounded in your selected documents.",
-                      view: "Ask Aegis" as View,
+                      view: "Aegis Agent" as View,
                       icon: MessageSquare,
                     },
                     {
@@ -1211,7 +1267,7 @@ export default function App() {
               </section>
             </>
           )}
-          {view === "Home" && <DatasetHome api={api} refresh={refresh} onLoaded={setKbs} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Ask Aegis"); }} onCreated={d => { changeDataset(d.id); navigate("Datasets"); setDatasetModelsFocus(true); reload(); }} />}
+          {view === "Home" && <DatasetHome datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis Agent"); }} />}
           {view === "Datasets" && (
             <>
             <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}
@@ -1332,13 +1388,14 @@ export default function App() {
             </section>}
             </>
           )}
-          {view === "Ask Aegis" && (
+          {view === "Aegis Agent" && <section className="agent-header"><div><h1>Aegis Agent</h1><p>Upload documents, ask questions, and extract fields in one workspace.</p></div><div className="tabs" role="tablist" aria-label="Agent task">{["Chat","Extract"].map(tab=><button key={tab} role="tab" aria-selected={agentTab===tab} className={agentTab===tab?"active":""} onClick={()=>{if((reviewDirty.current||templateDirty.current)&&!window.confirm("Discard unsaved changes before switching tasks?"))return;setAgentTab(tab);}}>{tab==="Chat"?"Chat":"Extract & review"}</button>)}</div></section>}
+          {view === "Aegis Agent" && agentTab === "Chat" && (
             <FocusedChat temporary={temporary} temporaryUploadCount={docs.filter(d=>d.temporary_session_id===temporarySession).length}
               onTemporary={() => run(async () => { if (!temporary) { const session = await api("/temporary-chat/sessions", "POST", {}); setTemporarySession(session.id); } conversationRequest.current += 1; setTemporary(!temporary); setConversation(null); setPrompt(""); setLastPrompt(""); setError(""); })}
               onCleanup={() => setConfirm({ title: "Clean up temporary-only uploads?", body: "Delete this temporary session’s originals and indexes? Permanent dataset documents and uploads kept or used in saved chat/extraction are preserved.", action: async () => { const result = await api(`/temporary-chat/sessions/${temporarySession}`, "DELETE"); setTemporaryUploads(result.pending_document_ids || []); reload(); notify(result.pending_document_ids?.length ? "Some cleanup remains pending; check service health and retry." : "Temporary-only uploads cleaned up. Permanent documents preserved."); } })}
-              upload={documentUpload} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
+              upload={documentUpload} templateAttachment={templateAttachment?.file.name||''} templateFeedback={templateFeedback} onTemplateRemove={()=>setTemplateAttachment(null)} onTemplateAttach={file=>{if(busy||answering){setError('Wait for the current operation before attaching a template.');return;}setTemplateAttachment({file,datasetId:kb});setTemplateFeedback('');setError('');}} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
               error={error} onDismissError={() => setError("")} datasetName={selectedDataset?.name || "Choose a dataset"} localProcessing={settings.local_only || (selectedChatModel?.provider === "ollama" && !externalProvider)} reranker={settings.reranker || {}}
-              answering={answering} lastPrompt={lastPrompt} canSend={!busy && (selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length}
+              answering={answering} lastPrompt={lastPrompt} canSend={!busy && (!!templateAttachment || ((selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length))}
               externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={settings.local_only ? "Questions and document content are processed locally through Ollama with a compatible dataset embedding index. Choose an installed mapped model to continue." : externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
               scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}
               datasetControl={datasetSelect("Chat dataset")} modelControl={<ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />}
@@ -1349,7 +1406,7 @@ export default function App() {
               onFeedback={(id, rating) => run(async () => { await api(`/messages/${id}/feedback`, "POST", { rating }); notify("Feedback saved."); })}
             />
           )}
-          {view === "Extract" && (
+          {view === "Aegis Agent" && agentTab === "Extract" && (
             <>
               <div className="section-tabs" aria-label="Extraction sections">
                 {["Create", "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => { if (reviewDirty.current && !window.confirm("Discard unsaved changes before changing sections?")) return; setExtractionTab(tab); }}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
@@ -1370,7 +1427,7 @@ export default function App() {
                       onChange={(e) => chooseTemplate(e.target.value)}
                     >
                       <option value="">Select a prompt template</option>
-                      {templates.map((t) => (
+                      {templates.filter(t=>!t.dataset_id||t.dataset_id===kb).map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name} · v{t.version || 1}
                         </option>
@@ -1378,18 +1435,18 @@ export default function App() {
                     </select>
                   </Field>
                   <Field label="Source documents">{docSelection}</Field>
-                  <label className="check" style={{ marginBottom: 20 }}>
+                  {extractionNeedsConsent && <label className="check" style={{ marginBottom: 20 }}>
                     <input
                       type="checkbox"
                       checked={externalExtract}
                       onChange={(e) => setExternalExtract(e.target.checked)}
                     />
                     <span className="muted small">{externalNotice(selectedExtractModel)}</span>
-                  </label>
+                  </label>}
                   <button
                     className="btn primary"
                     disabled={
-                      busy || !externalExtract || !templateId || !scope.length || !selectedExtractModel
+                      busy || (extractionNeedsConsent && !externalExtract) || !templateId || !scope.length || !selectedExtractModel
                     }
                     onClick={extract}
                   >
@@ -1444,11 +1501,11 @@ export default function App() {
                   )}
                 </section>
               </div>
-              {extraction && extractionTab === "Review" && <ExtractionReview extraction={extraction} documents={docs} api={api} onDirty={onReviewDirty} onSaved={d => { setExtraction(d); setResultText(json(d.result || {})); reload(); }} />}
+              {extraction && extractionTab === "Review" && <ExtractionReview extraction={extraction} documents={docs} jobs={jobs} api={api} onDirty={onReviewDirty} onSaved={d => { setExtraction(d); setResultText(json(d.result || {})); setExtractions(previous=>[d,...previous.filter(e=>e.id!==d.id)]); }} />}
             </>
           )}
-          {view === "Prompt templates" && <PromptTemplates templates={templates} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={() => { notify("Prompt template saved."); reload(); }} onUse={id => { chooseTemplate(id); setExtractionTab("Create"); navigate("Extract"); }} />}
-          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} api={api} onRefresh={reload} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); reload(); }} />}
+          {view === "Prompt templates" && <PromptTemplates templates={templates} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={d => { setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)]); chooseTemplate(d.id); notify("Prompt template saved."); }} onUse={id => { const saved=templates.find(t=>t.id===id); if(saved?.dataset_id&&saved.dataset_id!==kb)changeDataset(saved.dataset_id); chooseTemplate(id); setExtractionTab("Create"); navigate("Extract"); }} />}
+          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); }} />}
           {view === "Index inspector" && (
             <>
               <section className="panel">
@@ -2504,8 +2561,8 @@ export default function App() {
                   {
                     title: "Verify your first answer",
                     text: settings.local_only ? "Ask a focused question locally and inspect its clickable source evidence." : "Approve external processing, ask a focused question, and inspect the cited excerpts.",
-                    action: "Ask Aegis",
-                    to: "Ask Aegis" as View,
+                    action: "Aegis Agent",
+                    to: "Aegis Agent" as View,
                   },
                   {
                     title: "Protect your workspace",
@@ -2638,6 +2695,7 @@ export default function App() {
           </section>
         </div>
       )}
+      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs}/>
     </>
   );
 }

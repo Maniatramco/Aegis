@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Ask Aegis", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Aegis Agent", exact: true }).first()).toBeVisible();
   await page.goto("/#Home");
   await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
 });
@@ -21,7 +21,7 @@ test("navigates all workspace screens and preserves an authenticated refresh", a
 }) => {
   for (const name of [
     "Datasets",
-    "Ask Aegis",
+    "Aegis Agent",
     "Extract",
     "Re-extract",
     "Prompt templates",
@@ -37,7 +37,7 @@ test("navigates all workspace screens and preserves an authenticated refresh", a
     await expect(
       page
         .getByRole("heading", {
-          name: name === "Dashboard" ? "Workspace overview" : name,
+          name: name === "Dashboard" ? "Workspace overview" : name === "Extract" ? "Aegis Agent" : name,
           exact: true,
         })
         .first(),
@@ -140,10 +140,11 @@ async function navigate(page: Page, name: string) {
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
   const nav = page.getByRole("navigation");
-  const target = nav.getByRole("button", { name, exact: true });
+  const target = nav.getByRole("button", { name: name === "Extract" ? "Aegis Agent" : name, exact: true });
   if (!await target.isVisible()) await nav.getByRole("button", { name: "Manage workspace", exact: true }).click();
   await target.click();
-  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
+  if (name === "Extract") await page.getByRole("tab", { name: "Extract & review", exact: true }).click();
+  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name === "Extract" ? "Aegis Agent" : name, exact: true }).first()).toBeVisible();
 }
 
 async function openDocumentScope(page: Page) {
@@ -199,7 +200,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   const template = await seedTemplate(page.request, headers, `${prefix} · extraction schema`);
   await page.reload();
 
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(unavailable.id);
   await page.getByLabel("Ask a question").fill("This must not be sent without a mapped model.");
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
@@ -212,7 +213,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   await page.getByRole("button", { name: "All datasets", exact: true }).click();
   await expect(page.getByRole("link", { name: `Open dataset ${unavailable.name}`, exact: true })).toBeVisible();
   await expect(page.getByRole("button", {name:"Open chat",exact:true})).not.toHaveCount(0);
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
 
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(multiple.id);
   const chatModel = page.getByRole("combobox", { name: "Chat model", exact: true });
@@ -366,7 +367,7 @@ test("mobile dataset and model selection fit the screen and sign out removes the
   await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
   const models = dataset.models.filter((model: { enabled: boolean; mapping_enabled: boolean; capabilities: string[] }) => model.enabled !== false && model.mapping_enabled !== false && model.capabilities.includes("chat"));
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models[1].id);
@@ -489,7 +490,7 @@ test("focused screens reveal secondary controls only when requested", async ({ p
   await page.getByRole("button", { name: "All datasets", exact: true }).click();
   await expect(cards.first()).toBeVisible();
 
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   const scope = page.locator(".chat-scope");
   const history = page.getByRole("button", { name: "Conversations", exact: true });
   await expect(scope).not.toHaveAttribute("open", "");
@@ -534,7 +535,7 @@ async function focusedChat(page: Page) {
   const source = await uploadReady(page.request, headers, dataset, `${prefix}-evidence.txt`,
     "SYNTHETIC QA SOURCE. The project reference is FOCUS-2042. The review owner is the fictional Northstar team. Delivery is 23 October 2026.");
   await page.reload();
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();

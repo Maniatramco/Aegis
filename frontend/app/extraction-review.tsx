@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronDown, Download, RefreshCw } from "lucide-react";
 import "./workspace-flow.css";
+import {JobProgress} from "./operation-progress";
 type Entity=Record<string,any>;
-type Api=(path:string,method?:string,body?:unknown)=>Promise<any>;
+type Api=(path:string,method?:string,body?:unknown,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;
 function fields(value:any,path=""): {path:string;value:any}[] {
   if(value && typeof value==="object" && Object.keys(value).length) return Object.entries(value).flatMap(([key,item])=>fields(item,path+"/"+key.replace(/~/g,"~0").replace(/\//g,"~1")));
   return [{path:path||"/",value}];
@@ -13,10 +14,18 @@ function replace(value:any,path:string,next:any) {
   const copy=structuredClone(value),parts=path.slice(1).split("/").map(p=>p.replace(/~1/g,"/").replace(/~0/g,"~"));
   let parent=copy;for(const p of parts.slice(0,-1))parent=parent[p];parent[parts.at(-1)!]=next;return copy;
 }
-export function ExtractionReview({extraction:e,documents,api,onSaved,onDirty}:{extraction:Entity;documents:Entity[];api:Api;onSaved:(value:Entity)=>void;onDirty:(dirty:boolean)=>void}) {
+export function ExtractionReview({extraction:e,documents,jobs,api,onSaved,onDirty}:{extraction:Entity;documents:Entity[];jobs:Entity[];api:Api;onSaved:(value:Entity)=>void;onDirty:(dirty:boolean)=>void}) {
   const [draft,setDraft]=useState(JSON.stringify(e.result??{},null,2)),[selected,setSelected]=useState("");
   const [saving,setSaving]=useState(false),[error,setError]=useState(""),[preview,setPreview]=useState<Entity|null>(null);
   const generation=useRef(0);
+  const savedCallback=useRef(onSaved);savedCallback.current=onSaved;
+  const job=jobs.find(j=>j.target_id===e.id)||e.job;
+  useEffect(()=>{
+    if(!['queued','processing'].includes(e.status))return;
+    let active=true,inFlight=false;
+    const timer=setInterval(async()=>{if(inFlight)return;inFlight=true;try{const value=await api(`/extractions/${e.id}`,'GET',undefined,undefined,true);if(active)savedCallback.current(value);}catch(error){if(active)setError((error as Error).message);}finally{inFlight=false;}},3000);
+    return()=>{active=false;clearInterval(timer);};
+  },[e.id,e.status,api]);
   const dirty=draft!==JSON.stringify(e.result??{},null,2);
   let parsed:any;try{parsed=JSON.parse(draft);}catch{}
   const entries=parsed===undefined?[]:fields(parsed);
@@ -29,7 +38,7 @@ export function ExtractionReview({extraction:e,documents,api,onSaved,onDirty}:{e
   useEffect(()=>{setDraft(JSON.stringify(e.result??{},null,2));setError("");},[e.id,e.version,e.status]);
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
   useEffect(()=>{if(!dirty)return;const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();};window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[dirty]);
-  useEffect(()=>{const current=++generation.current;setPreview(null);if(document)api(`/documents/${document.id}/preview`).then(value=>{if(current===generation.current)setPreview(value);}).catch(err=>{if(current===generation.current)setPreview({error:err.message});});},[document?.id,api]);
+  useEffect(()=>{const current=++generation.current;setPreview(null);if(document&&e.status==='ready')api(`/documents/${document.id}/preview`).then(value=>{if(current===generation.current)setPreview(value);}).catch(err=>{if(current===generation.current)setPreview({error:err.message});});return()=>{generation.current++;};},[document?.id,e.status,api]);
   const reload=async()=>{if(dirty&&!window.confirm("Discard unsaved changes and reload the latest saved values?"))return;setError("");try{onSaved(await api(`/extractions/${e.id}`));}catch(err){setError((err as Error).message);}};
   const save=async()=>{if(saving)return;setSaving(true);setError("");try{const result=JSON.parse(draft);onSaved(await api(`/extractions/${e.id}`,"PATCH",{result,version:e.version}));}catch(err){setError((err as Error).message);}finally{setSaving(false);}};
   const reextract=async()=>{if(saving)return;if(!window.confirm("Re-extract using the recorded template and current mapped model? Saved edits are preserved as a previous version. Unsaved changes will be discarded."))return;setSaving(true);try{onSaved(await api(`/extractions/${e.id}/reextract`,"POST",{version:e.version,confirm_reviewed:true,allow_external:false}));}catch(err){setError((err as Error).message);}finally{setSaving(false);}};
@@ -41,7 +50,7 @@ export function ExtractionReview({extraction:e,documents,api,onSaved,onDirty}:{e
     </div></div>
     {e.mock&&<p className="upload-notice">MOCK TEST OUTPUT · Synthetic development data. Review against the original.</p>}
     {(error||e.error)&&<p className="review-error" role="alert"><AlertCircle size={18}/>{error||e.error}</p>}
-    {e.status!=="ready" ? <div role="status"><p>Extraction {e.status}. Document indexing and structured extraction are separate operations.</p><button className="btn" onClick={reload}>Check status</button></div> : <div className="review-split">
+    {e.status!=="ready" ? <div role="status">{job&&<JobProgress job={job}/>}<p>Extraction {e.status}. Results appear here automatically when processing completes.</p><button className="btn" onClick={reload}>Check status</button></div> : <div className="review-split">
       <section className="review-values"><h3>Extracted results</h3><p className="muted small">Select a field to inspect its source. Edits change results, never the original.</p>
         {entries.map(({path,value})=><div className={`review-field ${selected===path?"selected":""}`} key={path}>
           <button className="field-source" onClick={()=>setSelected(path)} aria-label={`Show source for ${path}`} aria-pressed={selected===path}>{path.slice(1).replace(/_/g," ").replace(/\//g," › ")||"Result"}</button>

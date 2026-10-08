@@ -51,7 +51,7 @@ def new_record(kind,owner,name='',parent='',data=None,status='ready'):
 def enqueue(owner,kind,target,allow_external=False,snapshot=None):
     j=Job(id=uid(),owner=owner,kind=kind,target_id=target,status='queued',created_at=time.time(),updated_at=time.time())
     store.put_json('jobs/'+j.id+'.json',{'allow_external':allow_external,**({'execution':snapshot} if snapshot else {})})
-    if kind=='index':workflow.initialize(j.id)
+    workflow.initialize(j.id,kind)
     with Session.begin() as s:s.add(j)
     from .queue_transport import get_transport
     get_transport(settings()['queue_provider']).notify(j.id)
@@ -134,7 +134,8 @@ def create_kb(body:KBInput,owner=Depends(auth)):return routing.dataset_public(ne
 def documents(kb_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
     scope=dataset_id or kb_id
     if scope:get_record(scope,owner,'knowledge_base')
-    return [routing.document_public(d) for d in records(owner,'document') if not scope or d.parent_id==scope]
+    snapshots={}
+    return [routing.document_public(d,snapshots) for d in records(owner,'document') if not scope or d.parent_id==scope]
 @app.post('/api/documents/upload')
 async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:str=Form(''),allow_external:bool=Form(False),temporary_session_id:str=Form(''),owner=Depends(auth)):
     if kb_id and dataset_id and kb_id!=dataset_id:raise HTTPException(400,'Conflicting dataset identifiers')
@@ -309,7 +310,7 @@ def feedback(id:str,body:Feedback,owner=Depends(auth)):
 @app.get('/api/conversations/{id}/export')
 def export_conversation(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');return Response(store.get(r.ref),media_type='application/json',headers={'Content-Disposition':'attachment; filename="conversation.json"'})
-class TemplateInput(BaseModel):name:str=Field(min_length=1,max_length=200);schema_:dict=Field(alias='schema')
+class TemplateInput(BaseModel):name:str=Field(min_length=1,max_length=200);schema_:dict=Field(alias='schema');dataset_id:str|None=None
 def check_schema(schema):
     try:Draft202012Validator.check_schema(schema)
     except Exception:raise HTTPException(400,'Invalid JSON Schema')
@@ -338,11 +339,13 @@ def check_schema(schema):
 def templates(owner=Depends(auth)):return [representation(r)|store.json(r.ref) for r in records(owner,'template')]
 @app.post('/api/templates')
 def create_template(body:TemplateInput,owner=Depends(auth)):
-    check_schema(body.schema_);r=new_record('template',owner,body.name,data={'name':body.name,'schema':body.schema_,'version':1});return representation(r)|store.json(r.ref)
+    if body.dataset_id:get_record(body.dataset_id,owner,'knowledge_base')
+    check_schema(body.schema_);r=new_record('template',owner,body.name,parent=body.dataset_id or '',data={'name':body.name,'schema':body.schema_,'version':1,'dataset_id':body.dataset_id});return representation(r)|store.json(r.ref)
 @app.put('/api/templates/{id}')
 def update_template(id:str,body:TemplateInput,owner=Depends(auth)):
     check_schema(body.schema_);r=get_record(id,owner,'template');version=r.version+1;ref=f'template/{id}/v{version}.json'
-    store.put_json(ref,{'name':body.name,'schema':body.schema_,'version':version})
+    if body.dataset_id and body.dataset_id!=r.parent_id:raise HTTPException(400,'Template dataset association cannot be changed. Import a new template for the destination dataset.')
+    store.put_json(ref,{'name':body.name,'schema':body.schema_,'version':version,'dataset_id':r.parent_id or None})
     with Session.begin() as s:r=s.get(Record,id);r.version=version;r.ref=ref;r.name=body.name;r.updated_at=time.time()
     return representation(r)|store.json(ref)
 @app.get('/api/templates/{id}/versions')
@@ -359,6 +362,7 @@ def extractions(owner=Depends(auth)):
 @app.post('/api/extractions')
 def create_extraction(body:ExtractInput,owner=Depends(auth)):
     t=get_record(body.template_id,owner,'template');dataset,docs=routing.documents_scope(owner,body.dataset_id,body.document_ids)
+    if t.parent_id and t.parent_id!=dataset.id:raise HTTPException(400,'Choose a prompt template belonging to the selected dataset.')
     snapshot=routing.execution_snapshot(dataset,'extraction',body.model_id);routing.require_indexes(docs,snapshot)
     external_check(body.allow_external,cfg=snapshot['settings'])
     if any(d.status!='ready' for d in docs):raise HTTPException(409,'Documents must be ready before extraction')

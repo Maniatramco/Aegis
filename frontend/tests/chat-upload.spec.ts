@@ -33,6 +33,32 @@ const chatConsent = (page: Page) => page.getByRole("checkbox", { name: /I approv
 const row = (page: Page, name: string) => dialog(page).locator(".upload-files > li").filter({ has: page.getByText(name, { exact: true }) });
 const isUpload = (request: Request) => new URL(request.url()).pathname === "/api/documents/upload" && request.method() === "POST";
 const isChatWrite = (request: Request) => /^\/api\/conversations(?:\/|$)/.test(new URL(request.url()).pathname) && request.method() === "POST";
+
+test("chat JSON imports are scoped, save-only stays idle, and explicit extraction uses the imported template", async ({ page, workspace: w }) => {
+  await uploadReady(page.request,w.headers,w.dataset,'JSON-template-safe.txt',synthetic);
+  await openChat(page,w.dataset);
+  const posts: string[]=[];
+  page.on('request',r=>{if(r.method()==='POST')posts.push(new URL(r.url()).pathname);});
+  const attachment=page.getByLabel('JSON prompt template attachment',{exact:true});
+  await attachment.setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{invalid')});
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.getByText(/Invalid JSON\. Attach a JSON Schema/)).toBeVisible();
+  expect(posts).toEqual([]);
+  const payload={name:'Chat JSON '+Date.now(),schema:{type:'object',properties:{reference:{type:'string'}},required:['reference']}};
+  const json={name:'template.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(payload))};
+  await attachment.setInputFiles(json);
+  const saving=page.waitForResponse(r=>r.url().endsWith('/api/templates')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  const saved=await checked(await saving);expect(saved.dataset_id).toBe(w.dataset.id);
+  await expect(page.getByText(`Saved “${payload.name}”`,{exact:false})).toBeVisible();
+  expect(posts).toEqual(['/api/templates']);
+  await attachment.setInputFiles(json);await page.getByLabel('Ask a question',{exact:true}).fill('Use this template to extract the documents');
+  const extracting=page.waitForResponse(r=>r.url().endsWith('/api/extractions')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Send',exact:true}).click();const result=await checked(await extracting);
+  expect(result.dataset_id).toBe(w.dataset.id);expect(result.template_id).not.toBe(saved.id);
+  const imported=await checked(await page.request.get(`/api/templates/${result.template_id}`));expect(imported.schema).toEqual(payload.schema);expect(imported.dataset_id).toBe(w.dataset.id);
+  await expect(page.getByLabel('Value /reference',{exact:true})).toHaveValue('MOCK TEST VALUE',{timeout:90000});
+});
 async function navigate(page: Page, name: string) {
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
@@ -44,7 +70,7 @@ async function openChat(page: Page, dataset: Entity) {
   await page.goto("/#Home");
   await expect(page.locator("main h1")).toHaveText("Home");
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
 }
 async function openUploads(page: Page) {
@@ -301,7 +327,7 @@ test("lost response never resubmits an accepted original or the remaining batch"
   await page.getByLabel("Refresh workspace", { exact: true }).click();
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   await navigate(page, "Home");
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await openUploads(page);
   await expect(row(page, "Response-lost-original.txt").filter({ hasText: "Upload not confirmed" })).toBeVisible();
   expect(attempts).toBe(1);
@@ -321,7 +347,7 @@ test("failed indexing retries the same stored original after a page reload", asy
   const original = result.documents[0];
   await expect.poll(async () => (await checked(await page.request.get(`/api/documents/${original.id}`))).status, { timeout: 90000 }).toBe("failed");
   await page.reload();
-  await expect(page.locator("main h1")).toHaveText("Ask Aegis");
+  await expect(page.locator("main h1")).toHaveText("Aegis Agent");
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
   await openUploads(page);
@@ -372,7 +398,7 @@ test("close, navigation and dataset change during delayed upload preserve destin
     await expect(row(page, "Original-destination.txt").filter({ hasText: "Uploading original" })).toBeVisible();
     await dialog(page).getByRole("button", { name: "Close uploads", exact: true }).click();
     await navigate(page, "Home");
-    await navigate(page, "Ask Aegis");
+    await navigate(page, "Aegis Agent");
     await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.other.id);
     await openUploads(page);
     await expect(dialog(page)).toContainText(w.other.name);
@@ -468,7 +494,7 @@ test("an explicitly sent question retrieves and cites the original uploaded from
   const chats: Request[] = [];
   page.on("request", request => { if (isChatWrite(request)) chats.push(request); });
   await openUploads(page);
-  await choose(page, [file(filename, "SYNTHETIC UPLOAD-TO-ANSWER EVIDENCE. The review reference is FRESH-ORIGINAL-2026. This document is newly uploaded from Ask Aegis and retained as the original source.")]);
+  await choose(page, [file(filename, "SYNTHETIC UPLOAD-TO-ANSWER EVIDENCE. The review reference is FRESH-ORIGINAL-2026. This document is newly uploaded from Aegis Agent and retained as the original source.")]);
   const accepted = page.waitForResponse(response => isUpload(response.request()));
   await dialog(page).getByRole("button", { name: "Upload 1", exact: true }).click();
   const uploaded = await checked(await accepted);
@@ -527,7 +553,7 @@ test("temporary chat does not save history and deletes only this session's uploa
   const permanent = await uploadReady(page.request, w.headers, w.dataset, "Dottie-permanent-public-fixture.txt", synthetic);
   const before = await checked(await page.request.get("/api/conversations"));
   await page.goto("/");
-  await expect(page.locator("main h1")).toHaveText("Ask Aegis");
+  await expect(page.locator("main h1")).toHaveText("Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
   await page.getByRole("button", { name: "Temporary chat", exact: true }).click();
   await expect(page.getByText(/Messages are not saved and clear on reload/).first()).toBeVisible();
