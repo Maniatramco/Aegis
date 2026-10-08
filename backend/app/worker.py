@@ -48,8 +48,11 @@ def parse_document(name,raw):
         return pages
     if ext=='docx':
         from docx import Document
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        try:archive=zipfile.ZipFile(io.BytesIO(raw))
+        except zipfile.BadZipFile:raise ValueError('This DOCX file is invalid or damaged. Upload a valid DOCX copy.') from None
+        with archive:
             entries=archive.infolist();names=[e.filename for e in entries]
+            if '[Content_Types].xml' not in names or 'word/document.xml' not in names:raise ValueError('This file is not a valid DOCX document. Export it as DOCX and upload it again.')
             if len(names)!=len(set(names)) or any(n.startswith('/') or '..' in n.replace('\\','/').split('/') for n in names):raise ValueError('Unsafe DOCX archive entries')
             if sum(e.file_size for e in entries)>100*1024*1024 or any(e.file_size>25*1024*1024 for e in entries):raise ValueError('DOCX decompressed content exceeds safety limits')
         doc=Document(io.BytesIO(raw));lines=[p.text for p in doc.paragraphs]

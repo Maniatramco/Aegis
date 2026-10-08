@@ -739,3 +739,6 @@ temporary_chat.install(app,auth)
 
 from . import api_documentation
 api_documentation.install(app,auth)
+
+from . import agent_workspace
+agent_workspace.install(app, auth, __import__(__name__, fromlist=['app']))

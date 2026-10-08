@@ -20,6 +20,7 @@ function load(filename){
 }
 const {OperationProgress,extractionProgressJob}=load(path.resolve(__dirname,'../app/operation-progress.tsx'));
 const {DocumentUploadPanel}=load(path.resolve(__dirname,'../app/document-upload.tsx'));
+const {explainPlan}=load(path.resolve(__dirname,'../app/agent-v2.tsx'));
 const items=Array.from({length:10},(_,i)=>({id:'row-'+i,name:'invoice-'+i+'.txt',status:'submitted',processing:true,document:{id:'doc-'+i,status:'processing'},job:{status:'running',workflow:{current:'extract',stages:{extract:{status:'running'}}}}}));
 const jobs=items.map((item,i)=>({...item.job,id:'job-'+i,kind:'index',document_id:item.document.id}));
 test('closing the upload panel gives ten documents one background workflow',()=>{
@@ -28,6 +29,26 @@ test('closing the upload panel gives ten documents one background workflow',()=>
  assert.equal((html.match(/invoice-\d+\.txt/g)||[]).length,10);
  assert.equal((html.match(/class="job-progress"/g)||[]).length,0);
  assert.match(html,/stage-running/);
+});
+
+test('V2 owns all its visible jobs while unrelated progress remains available',()=>{
+ const owned=jobs.map(job=>job.id);
+ const hidden=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs,visibleJobIds:owned}));
+ assert.equal(hidden,'');
+ const other={id:'unrelated-extraction',kind:'extract',status:'running',workflow:{stages:{generate:{status:'running'}}}};
+ const html=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs:[...jobs,other],visibleJobIds:owned}));
+ assert.equal((html.match(/class="job-progress"/g)||[]).length,1);
+ assert.equal((html.match(/aria-label="Batch upload workflow"/g)||[]).length,0);
+ assert.match(html,/Extraction/);
+});
+
+test('V2 describes selected tools without repeating invented pre-execution results',()=>{
+ const text=explainPlan({explanation:'All files are valid and extraction completed!',calls:[{tool:'upload'},{tool:'extract'}]});
+ assert.match(text,/Upload documents → Extract fields/);
+ assert.match(text,/confirm each tool/);
+ assert.match(text,/after indexing finishes/);
+ assert.doesNotMatch(text,/are valid|completed!/);
+ assert.match(explainPlan({calls:[],explanation:'I changed all model settings.'}),/No document action is queued/);
 });
 test('an open upload panel suppresses duplicate background workflows without suppressing extraction jobs',()=>{
  const hidden=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs,uploadItems:items,uploadWorkflowVisible:true}));

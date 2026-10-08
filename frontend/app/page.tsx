@@ -12,11 +12,13 @@ import { OperationProgress, extractionProgressJob } from "./operation-progress";
 import "./workspace-flow.css";
 import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
+import { AgentV2 } from "./agent-v2";
 import { ApiDocumentation } from "./api-documentation";
 import { TemporaryDocumentChat } from "./temporary-document-chat";
 import { readPromptUpload, type PromptUpload } from "./prompt-upload";
 import {
   Activity,
+  Bot,
   ArrowDownToLine,
   ArrowRight,
   BookOpen,
@@ -62,6 +64,7 @@ type View =
   | "Dashboard"
   | "Datasets"
   | "Aegis Agent"
+  | "Aegis agent V2"
   | "Extract"
   | "Re-extract"
   | "Prompt templates"
@@ -78,6 +81,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Datasets", icon: BookOpen },
   { name: "Aegis Agent", icon: MessageSquare },
+  { name: "Aegis agent V2", icon: Bot },
   { name: "Re-extract", icon: RefreshCw },
   { name: "Prompt templates", icon: FileText },
   { name: "Index inspector", icon: Layers, group: "OPERATIONS" },
@@ -96,6 +100,7 @@ const descriptions: Record<View, string> = {
   "Datasets":
     "Onboard your data, map its models, and put a trusted source to work.",
   "Aegis Agent": "Ask across your knowledge, with evidence you can inspect.",
+  "Aegis agent V2": "Describe your document task. The agent connects upload, extraction, and re-extraction.",
   Extract: "Turn document content into structured, reviewable data.",
   "Prompt templates": "Describe what to find and choose the fields you need.",
   "Re-extract": "Find a document and choose how to extract it again.",
@@ -274,6 +279,8 @@ export default function App() {
   const [kb, setKb] = useState("");
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<Entity[]>([]);
+  const [agentVisibleJobIds, setAgentVisibleJobIds] = useState<string[]>([]);
+  const onAgentJobs = useCallback((updates: Entity[]) => setJobs(previous => [...updates, ...previous.filter(job => !updates.some(update => update.id === job.id))]), []);
   const [caps, setCaps] = useState<Entity>({});
   const [settings, setSettings] = useState<Entity>({});
   const [modal, setModal] = useState<{
@@ -343,9 +350,10 @@ export default function App() {
       const resource=path.split('/')[1]||'workspace';
       const section=({overview:'workspace summary',jobs:'workflow status',settings:'workspace settings',conversations:'chats',models:'available models',templates:'prompt templates'} as Record<string,string>)[resource]||resource.replaceAll('-',' ');
       const testingModel=path==='/model-registrations/test';
+      const planningAgent=path==='/agent-v2/plans'&&method==='POST';
       const label=path==='/templates/validate'?'Validating prompt JSON…':path.startsWith('/temporary-chat/')?(path==='/temporary-chat/messages'?'Answering from the temporary document…':method==='DELETE'?'Clearing temporary document…':body instanceof FormData?'Reading temporary document…':'Loading temporary document…'):testingModel?'Testing model connection…':path.startsWith('/datasets/')&&path.endsWith('/models')&&method==='PUT'?'Applying dataset model mappings…':`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`;
       if(!quiet)setRequests(previous=>[...previous,{id:requestId,label}]);
-      const timeout=AbortSignal.timeout(testingModel?Math.min(630000,(Number((body as Entity)?.timeout)||60)*1000+30000):method==='GET'?30000:120000);
+      const timeout=AbortSignal.timeout(planningAgent?630000:testingModel?Math.min(630000,(Number((body as Entity)?.timeout)||60)*1000+30000):method==='GET'?30000:120000);
       try {
       const headers: Record<string, string> = {};
       if (body && !(body instanceof FormData))
@@ -959,12 +967,12 @@ export default function App() {
         </div>
         <div className="brand-sub">AI Data Platform</div>
         <nav>
-          {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => (
+          {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => (
             <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{s.name}</span></button>
           ))}
           <button className="nav-item nav-more" aria-label="Manage workspace" title="Manage workspace" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} /><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
           {adminNavigation && <div id="admin-navigation" className="admin-navigation">
-            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
+            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
           </div>}
         </nav>
         <div className="nav-footer">
@@ -1299,6 +1307,7 @@ export default function App() {
           )}
           {view === "Home" && <DatasetHome datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis Agent"); }} />}
           {view === "API Documentation" && <ApiDocumentation api={api} />}
+          {view === "Aegis agent V2" && <AgentV2 api={api} username={user.username} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onReview={id => run(async () => { const result = await api(`/extractions/${id}`); changeDataset(result.dataset_id || result.parent_id); setExtraction(result); setExtractionTab('Review'); navigate('Extract'); })} />}
           {view === "Datasets" && (
             <>
             <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus} onUploadWorkflowVisible={setUploadWorkflowVisible}
@@ -2734,7 +2743,7 @@ export default function App() {
           </section>
         </div>
       )}
-      <OperationProgress workspaceLoading={loading} requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
+      <OperationProgress workspaceLoading={loading} requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobIds={view === "Aegis agent V2" ? agentVisibleJobIds : []} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
     </>
   );
 }
