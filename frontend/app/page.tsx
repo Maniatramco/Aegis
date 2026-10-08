@@ -8,7 +8,7 @@ import { DatasetHome } from "./dataset-directory";
 import { ExtractionReview } from "./extraction-review";
 import { PromptTemplates } from "./prompt-templates";
 import { ReExtract } from "./re-extract";
-import { OperationProgress } from "./operation-progress";
+import { OperationProgress, extractionProgressJob } from "./operation-progress";
 import "./workspace-flow.css";
 import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
@@ -313,6 +313,7 @@ export default function App() {
   const [templateFeedback,setTemplateFeedback]=useState('');
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
+  const reviewProgressJob = view === "Aegis Agent" && agentTab === "Extract" && extractionTab === "Review" && extraction?.status !== "ready" ? extractionProgressJob(extraction, jobs) : undefined;
   const [resultText, setResultText] = useState("");
   const reviewDirty = useRef(false);
   const templateDirty = useRef(false);
@@ -2732,7 +2733,7 @@ export default function App() {
           </section>
         </div>
       )}
-      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobId={visibleExtractionJobId}/>
+      <OperationProgress requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
     </>
   );
 }

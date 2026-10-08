@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronDown, Download, RefreshCw } from "lucide-react";
 import "./workspace-flow.css";
-import {JobProgress} from "./operation-progress";
+import {JobProgress,extractionProgressJob} from "./operation-progress";
 type Entity=Record<string,any>;
 type Api=(path:string,method?:string,body?:unknown,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;
 function fields(value:any,path=""): {path:string;value:any}[] {
@@ -19,7 +19,7 @@ export function ExtractionReview({extraction:e,documents,jobs,api,onSaved,onDirt
   const [saving,setSaving]=useState(false),[error,setError]=useState(""),[preview,setPreview]=useState<Entity|null>(null);
   const generation=useRef(0);
   const savedCallback=useRef(onSaved);savedCallback.current=onSaved;
-  const job=jobs.find(j=>j.target_id===e.id)||e.job;
+  const job=extractionProgressJob(e,jobs);
   useEffect(()=>{
     if(!['queued','processing'].includes(e.status))return;
     let active=true,inFlight=false;

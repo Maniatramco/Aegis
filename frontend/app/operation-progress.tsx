@@ -4,6 +4,15 @@ import { BatchProgress } from "./batch-progress";
 import { currentUploadStep, readableUploadError, type UploadProgressItem } from "./batch-workflow";
 type Entity=Record<string,any>;
 const labels:Record<string,string>={upload:'Upload',extract:'Read document',index:'Build index',prepare:'Prepare sources',generate:'Extract fields',validate:'Validate and save',ready:'Ready'};
+export function extractionProgressJob(extraction:Entity|null,jobs:Entity[]):Entity|undefined {
+ if(!extraction)return undefined;
+ const recorded=extraction.job;
+ const live=recorded?.id&&jobs.find(job=>job.id===recorded.id);
+ if(live)return live;
+ const matching=jobs.filter(job=>job.kind==='extract'&&job.target_id===extraction.id);
+ matching.sort((a,b)=>Number(b.created_at||0)-Number(a.created_at||0));
+ return matching[0]||recorded;
+}
 export function JobProgress({job}:{job:Entity}) {
  const stages=Object.entries(job.workflow?.stages||{}) as [string,Entity][];
  return <div className="job-progress" aria-label="Processing workflow">

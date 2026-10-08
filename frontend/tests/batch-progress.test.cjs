@@ -18,7 +18,7 @@ function load(filename){
  compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
  return compiled.exports;
 }
-const {OperationProgress}=load(path.resolve(__dirname,'../app/operation-progress.tsx'));
+const {OperationProgress,extractionProgressJob}=load(path.resolve(__dirname,'../app/operation-progress.tsx'));
 const {DocumentUploadPanel}=load(path.resolve(__dirname,'../app/document-upload.tsx'));
 const items=Array.from({length:10},(_,i)=>({id:'row-'+i,name:'invoice-'+i+'.txt',status:'submitted',processing:true,document:{id:'doc-'+i,status:'processing'},job:{status:'running',workflow:{current:'extract',stages:{extract:{status:'running'}}}}}));
 const jobs=items.map((item,i)=>({...item.job,id:'job-'+i,kind:'index',document_id:item.document.id}));
@@ -81,4 +81,27 @@ test('workflow-only failures retain their reasons and retry actions without file
  const uploadFailure=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([rejected],{pending:[rejected]}),workflowOnly:true}));
  assert.match(uploadFailure,/Retry upload/);
  assert.doesNotMatch(uploadFailure,/type="file"/);
+});
+
+const {ExtractionReview}=load(path.resolve(__dirname,'../app/extraction-review.tsx'));
+test('review and background progress render an extraction workflow only once while refresh remains visible',()=>{
+ const extraction={id:'review-extraction',status:'queued',version:1,document_ids:['review-doc'],job:{id:'review-job',kind:'extract',status:'queued'}};
+ const jobs=[{id:'review-job',kind:'extract',target_id:extraction.id,status:'running',progress:20,workflow:{current:'generate',stages:{prepare:{status:'completed'},generate:{status:'running'}}}}];
+ const foreground=extractionProgressJob(extraction,jobs);
+ const html=renderToStaticMarkup(React.createElement(React.Fragment,null,
+  React.createElement(ExtractionReview,{extraction,documents:[{id:'review-doc',name:'invoice.txt'}],jobs,api:async()=>{},onSaved:()=>{},onDirty:()=>{}}),
+  React.createElement(OperationProgress,{requests:[{id:'refresh',label:'Loading documents…'}],jobs,visibleJobId:foreground.id})
+ ));
+ assert.equal((html.match(/aria-label="Processing workflow"/g)||[]).length,1);
+ assert.match(html,/Loading documents/);
+ assert.match(html,/Extract fields/);
+ const background=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs,visibleJobId:null}));
+ assert.equal((background.match(/aria-label="Processing workflow"/g)||[]).length,1);
+});
+test('review resolves the current extraction job after a result refresh removes the embedded job',()=>{
+ const jobs=[{id:'old',kind:'extract',target_id:'result',created_at:10,status:'completed'},{id:'unrelated',kind:'extract',target_id:'other',created_at:30,status:'running'},{id:'current',kind:'extract',target_id:'result',created_at:20,status:'running'}];
+ assert.equal(extractionProgressJob({id:'result'},jobs).id,'current');
+ assert.equal(extractionProgressJob({id:'result',job:{id:'current',status:'queued'}},jobs).status,'running');
+ assert.equal(extractionProgressJob({id:'new',job:{id:'accepted',status:'queued'}},jobs).id,'accepted');
+ assert.equal(extractionProgressJob(null,jobs),undefined);
 });
