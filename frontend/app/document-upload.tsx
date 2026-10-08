@@ -149,7 +149,7 @@ export function DocumentUploadPanel({ upload: u, attachmentOnly = false, workflo
       <UploadCloud size={28} /><strong>Drop documents here, or choose files</strong>
       <input aria-label="Choose documents" disabled={!!u.blocked || u.uploading} type="file" accept=".pdf,.docx,.txt" multiple onChange={e => { u.choose(Array.from(e.target.files || [])); e.target.value = ""; }} />
     </div>}
-    {!attachmentOnly && rows.length > 0 && <BatchProgress items={rows}/>}
+    {!attachmentOnly && rows.length > 0 && <BatchProgress items={rows} compact={workflowOnly}/>}
     {rows.length > 0 && <ul className="upload-files batch-document-list" aria-label="Selected and processing documents">{rows.map(row => <li key={row.id}>
       <div className="upload-file-icon">{row.ready ? <CheckCircle2 size={19} /> : row.status === "uploading" || row.processing ? <Loader2 className="animate-spin" size={19} /> : <FileText size={19} />}</div>
       <div className="upload-file-detail"><div className="batch-document-heading"><strong>{row.name}</strong><span className={`upload-file-status ${row.ready ? "is-ready" : ""}`} role="status">{currentUploadStep(row)}</span></div>
@@ -168,6 +168,6 @@ export function DocumentUploadPanel({ upload: u, attachmentOnly = false, workflo
     {u.pollError && <p className="upload-notice" role="status">Could not refresh processing status. <button type="button" className="text-button" onClick={u.refresh}>Check again</button></p>}
     {attachmentOnly && storedCount > 0 && onWorkflow && <button type="button" className="text-button" onClick={onWorkflow}>View processing status</button>}
     {(!workflowOnly || retryUpload) && <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={() => { onStart?.(); void u.start(); }}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>}
-    <p className="upload-footnote">Only ready, compatible-index documents are available for questions. Hiding this popup does not cancel accepted processing. The original is retained.</p>
+    <p className="upload-footnote">{workflowOnly ? "Closing this popup does not stop processing." : "Only ready, compatible-index documents are available for questions. Hiding this popup does not cancel accepted processing. The original is retained."}</p>
   </section>;
 }
