@@ -13,10 +13,6 @@ body .sidebar .nav-item.selected{background:#edf2ff;color:var(--blue);box-shadow
 body .sidebar .nav-item:hover{background:#f2f5ff;color:var(--blue)}
 body .sidebar .brandmark{background:white}
 body .sidebar :is(.sidebar-foot,.sidebar-foot p,.sidebar-foot small,.brand-sub){color:#53647d;opacity:1}body .sidebar .admin-navigation{background:white;border-color:var(--line)}
-body .home-card-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));align-items:stretch;gap:20px}
-body .home-dataset-card{min-height:285px;padding:22px;gap:12px;box-shadow:0 3px 12px #315de708}
-body .home-dataset-card h3{min-height:26px}
-body .home-dataset-card .directory-actions{margin-top:auto}
 .operation-popup{position:fixed;right:24px;bottom:24px;z-index:100;width:min(380px,calc(100vw - 32px));max-height:45vh;overflow:auto;padding:18px;background:#fff;border:1px solid #b9c9f6;border-top:4px solid var(--blue);border-radius:12px;box-shadow:0 10px 36px #17386b20;color:var(--ink)}
 .operation-popup>ul{padding-left:20px;margin:10px 0;font-size:14px}.operation-popup>.job-progress{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .job-progress progress{width:100%;height:8px;accent-color:var(--blue);margin:12px 0}
