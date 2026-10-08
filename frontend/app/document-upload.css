@@ -62,3 +62,8 @@
   .chat-upload-status { font-size:11px; }
 }
 @media(prefers-reduced-motion:reduce) { .document-upload-panel * { animation:none!important; transition:none!important; } }
+
+.upload-privacy-notice { display:flex; align-items:flex-start; gap:10px; padding:14px; margin:0 0 18px; border:1px solid #dce7fa; border-radius:10px; background:#f4f8ff; color:#42618c; }
+.upload-privacy-notice>svg { flex-shrink:0; margin-top:2px; color:#3769b1; }
+.upload-privacy-notice h3 { margin:0 0 5px; font-size:13px; font-weight:600; color:#183b70; }
+.upload-privacy-notice p { margin:0; font-size:12px; line-height:1.65; overflow-wrap:anywhere; }

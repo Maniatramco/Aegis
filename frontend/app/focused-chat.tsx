@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, ArrowDown, ChevronDown, ChevronsLeft, Copy, FileText, History, Loader2, Plus, Paperclip, UploadCloud, RefreshCw, Send, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ChevronDown, ChevronsLeft, Copy, FileText, History, Loader2, Plus, Paperclip, UploadCloud, RefreshCw, Send, Shield, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { DocumentUploadPanel, type DocumentUploadController } from "./document-upload";
 import { recordedModel } from "./dataset-workspace";
 import "./focused-chat.css";
@@ -163,7 +163,7 @@ export function FocusedChat(p: Props) {
           {p.answering ? <button key="stop" type="button" className="btn primary send-message" aria-label="Stop" title="Stop generating" onClick={event => { event.preventDefault(); p.onStop(); }}><Square size={19} /></button> : <button key="send" type="submit" className="btn primary send-message" aria-label="Send" title="Send message" disabled={(!p.prompt.trim()&&!p.templateAttachment) || !p.canSend}><Send size={22} /></button>}
         </form>
         {p.upload.summary && <div className="chat-upload-status"><button type="button" className="text-button" aria-label="View document workflows" onClick={openWorkflow}><FileText size={13} /><span role="status">{p.upload.summary}</span></button></div>}
-        <div className="composer-meta">{!p.localProcessing&&<label className="check"><input type="checkbox" aria-label={p.providerNotice} checked={p.externalChat} disabled={p.answering} onChange={e => p.setExternalChat(e.target.checked)} /><span>Allow selected documents to be sent to this model</span></label>}<details className="provider-details"><summary>{p.localProcessing ? "Privacy" : "Provider details"}</summary><p>{p.providerNotice}</p></details><span className="composer-hint">{p.localProcessing ? "Local · Ollama · compatible dataset embeddings" : "Review sources before use"}</span></div>
+        <div className="composer-meta">{!p.localProcessing&&<label className="check"><input type="checkbox" aria-label={p.providerNotice} checked={p.externalChat} disabled={p.answering} onChange={e => p.setExternalChat(e.target.checked)} /><span>Allow selected documents to be sent to this model</span></label>}<span className="composer-hint">{p.localProcessing ? "Local · Ollama · compatible dataset embeddings" : "Review sources before use"}</span></div>
 
       </div>
     </section>
@@ -177,6 +177,7 @@ export function FocusedChat(p: Props) {
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }} onCancel={closeUpload} onClose={closeUpload} onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) closeUpload(); } }}>
       <div className="chat-upload-heading"><h2>{uploadView === "attach" ? "Add documents" : "Document processing"}</h2><button type="button" className="btn icon" aria-label="Close uploads" onClick={closeUpload}><X size={19} /></button></div>
+      {uploadView === "attach" && <section className="upload-privacy-notice" aria-label="Upload privacy"><Shield size={19} aria-hidden="true" /><div><h3>Privacy before upload</h3><p>{p.upload.externalRequired ? "Originals are retained in the dataset’s configured storage. Document text may be sent to configured external embedding or search providers. Review and approve external processing below before uploading." : "Originals are stored in your workspace. Document text is read and indexed locally using this dataset’s configured embedding model. Documents remain in the dataset until you delete them."}</p></div></section>}
       <DocumentUploadPanel upload={p.upload} attachmentOnly={uploadView === "attach"} workflowOnly={uploadView === "workflow"} onStart={() => setUploadView("workflow")} onWorkflow={openWorkflow} />
       <p className="upload-footnote">You can close this panel and keep writing. Accepted uploads continue indexing in your dataset.</p>
     </dialog>
