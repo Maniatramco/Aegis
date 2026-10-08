@@ -306,3 +306,64 @@ body .sidebar.chat-rail .admin-navigation { background:#0c274b; }
   .chat-welcome { padding:8px 0; }
   .chat-welcome img { display:none; }
 }
+
+/* Compact chat controls: keep dataset/model context above the conversation. */
+body .chat-shell .agent-header { min-height:54px; gap:12px; margin-bottom:0; padding:8px 20px; }
+body .chat-shell .agent-header h1 { font-size:24px; }
+body .chat-shell .agent-header .tabs { margin:0; gap:3px; padding:3px; border:1px solid #e0e8f5; border-radius:9px; background:#edf3fc; }
+body .chat-shell .agent-header .tabs button { min-height:34px; padding:5px 12px; border:0; border-radius:6px; background:transparent; color:#586d8c; font-size:13px; cursor:pointer; }
+body .chat-shell .agent-header .tabs button.active { background:#fff; color:#2458b6; box-shadow:0 1px 4px #17386b12; }
+body .focused-chat .chat-heading { padding:12px 20px; }
+body .focused-chat .chat-title { gap:8px; }
+body .focused-chat .chat-title h2 { margin:0; font-size:20px; line-height:1.35; }
+body .focused-chat .chat-heading-row { flex-wrap:nowrap; gap:12px; }
+body .focused-chat .chat-header-actions { gap:6px; }
+body .focused-chat .chat-header-actions .btn { min-height:36px; padding:6px 10px; font-size:12px; }
+body .focused-chat .history-trigger { min-height:36px; min-width:36px; padding:6px; }
+body .focused-chat .chat-context-row { display:grid; grid-template-columns:minmax(180px,1.4fr) minmax(150px,1fr) auto auto; align-items:center; gap:8px; margin-top:10px; }
+body .focused-chat .chat-dataset-control,body .focused-chat .chat-model-control { min-width:0; max-width:none; margin:0; }
+body .focused-chat .chat-dataset-control select,body .focused-chat .chat-model-control select { min-height:40px; height:40px; padding:6px 10px; font-size:13px; }
+body .focused-chat .chat-model-control .model-readonly { min-height:40px; padding:6px 10px; font-size:12px; }
+body .focused-chat .chat-model-control .model-readonly>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+body .focused-chat .chat-scope { margin:0; }
+body .focused-chat .chat-scope summary { min-height:40px; padding:6px 9px; font-size:12px; white-space:nowrap; }
+body .focused-chat .chat-mode-toggle { min-height:40px; font-size:11px; padding:6px 9px; white-space:nowrap; }
+body .focused-chat .thread-actions { grid-column:1 / -1; justify-content:flex-end; }
+body .focused-chat .chat-compose-area { width:calc(100% - 40px); margin:0 auto 12px; padding:8px 12px; border-radius:12px; }
+body .focused-chat .template-import-control { gap:8px; margin:0 0 4px; }
+body .focused-chat .template-import-control .text-button { min-height:30px; padding:3px 0; font-size:13px; }
+body .focused-chat .template-import-control .small { font-size:12px; }
+body .focused-chat .composer { align-items:flex-end; gap:7px; }
+body .focused-chat .composer textarea { min-height:44px; padding:10px 4px; font-size:15px; line-height:24px; }
+body .focused-chat .send-message,body .focused-chat .attach-documents { min-height:40px; height:40px; margin:0 0 2px; }
+body .focused-chat .send-message { width:40px; min-width:40px; }
+body .focused-chat .attach-documents { width:36px; min-width:36px; }
+body .focused-chat .composer-meta { margin-top:6px; padding-top:6px; }
+body .focused-chat .answer-status:empty { display:none; }
+body .focused-chat .chat-welcome { min-height:100%; padding:10px 0; }
+body .focused-chat .chat-welcome h2 { font-size:22px; }
+@media(max-width:760px) {
+  body .focused-chat .chat-context-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  body .focused-chat .chat-mode-toggle { justify-self:end; }
+  body .focused-chat .chat-scope>.scope-content { width:min(420px,calc(100vw - 40px)); max-width:calc(100vw - 40px); }
+}
+@media(max-width:560px) {
+  body .chat-shell .agent-header { padding:8px 12px; flex-wrap:nowrap; min-height:52px; }
+  body .chat-shell .agent-header h1 { font-size:20px; white-space:nowrap; }
+  body .chat-shell .agent-header .tabs { width:auto; margin:0; }
+  body .chat-shell .agent-header .tabs button { padding:6px 9px; min-height:36px; font-size:12px; white-space:nowrap; }
+  body .focused-chat .chat-heading { padding:10px 12px; }
+  body .focused-chat .chat-title { gap:4px; }
+  body .focused-chat .chat-title h2 { font-size:18px; }
+  body .focused-chat .chat-header-actions .btn,body .focused-chat .history-trigger { min-height:44px; }
+  body .focused-chat .history-trigger,body .focused-chat .chat-header-actions .btn.icon,body .focused-chat .chat-header-actions .compact-new { min-width:44px; }
+  body .focused-chat .chat-dataset-control select,body .focused-chat .chat-model-control select,body .focused-chat .chat-model-control .model-readonly { min-height:44px; height:44px; }
+  body .focused-chat .chat-context-row { margin-top:8px; gap:6px; }
+  body .focused-chat .chat-scope summary,body .focused-chat .chat-mode-toggle { min-height:44px; }
+  body .focused-chat .chat-dataset-control select,body .focused-chat .chat-model-control select { font-size:16px; }
+  body .focused-chat .chat-compose-area { width:calc(100% - 24px); margin-bottom:10px; padding:7px 10px; }
+  body .focused-chat .template-import-control { column-gap:8px; row-gap:0; }
+  body .focused-chat .template-import-control .small { font-size:11px; }
+  body .focused-chat .composer textarea { font-size:16px; }
+  body .focused-chat .attach-documents,body .focused-chat .send-message { min-height:44px; height:44px; min-width:44px; width:44px; }
+}
