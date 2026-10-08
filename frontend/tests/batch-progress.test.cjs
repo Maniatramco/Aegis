@@ -19,6 +19,7 @@ function load(filename){
  return compiled.exports;
 }
 const {OperationProgress}=load(path.resolve(__dirname,'../app/operation-progress.tsx'));
+const {DocumentUploadPanel}=load(path.resolve(__dirname,'../app/document-upload.tsx'));
 const items=Array.from({length:10},(_,i)=>({id:'row-'+i,name:'invoice-'+i+'.txt',status:'submitted',processing:true,document:{id:'doc-'+i,status:'processing'},job:{status:'running',workflow:{current:'extract',stages:{extract:{status:'running'}}}}}));
 const jobs=items.map((item,i)=>({...item.job,id:'job-'+i,kind:'index',document_id:item.document.id}));
 test('closing the upload panel gives ten documents one background workflow',()=>{
@@ -35,4 +36,33 @@ test('an open upload panel suppresses duplicate background workflows without sup
  assert.equal((html.match(/aria-label="Batch upload workflow"/g)||[]).length,0);
  assert.equal((html.match(/class="job-progress"/g)||[]).length,1);
  assert.match(html,/Extraction/);
+});
+
+function uploadController(batchRows, extra={}) {
+ return {dataset:{name:'Upload QA'},batchRows,pending:[],uploading:false,blocked:'',retrying:[],notice:'',pollError:false,externalRequired:false,consent:false,maxMb:25,...extra};
+}
+test('processing and completed views show one workflow without a file picker or upload button',()=>{
+ for(const batchRows of [items,items.map(item=>({...item,processing:false,ready:true,document:{...item.document,status:'ready'}}))]) {
+  const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController(batchRows),workflowOnly:true}));
+  assert.equal((html.match(/aria-label="Batch upload workflow"/g)||[]).length,1);
+  assert.doesNotMatch(html,/type="file"|Drop documents here|Choose documents|class="upload-actions"/);
+  assert.match(html,/invoice-0\.txt/);
+ }
+});
+test('the attachment view retains file selection before starting processing',()=>{
+ const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([]),attachmentOnly:true}));
+ assert.match(html,/type="file"/);
+ assert.match(html,/Choose documents/);
+ assert.doesNotMatch(html,/aria-label="Batch upload workflow"/);
+});
+test('workflow-only failures retain their reasons and retry actions without file selection',()=>{
+ const failed={...items[0],processing:false,failed:true,document:{...items[0].document,status:'failed',error:'Embedding provider timed out'},job:{status:'failed',workflow:{current:'index'}}};
+ const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([failed]),workflowOnly:true}));
+ assert.match(html,/Embedding provider timed out/);
+ assert.match(html,/Retry failed step/);
+ assert.doesNotMatch(html,/type="file"/);
+ const rejected={id:'rejected',name:'rejected.txt',status:'failed',error:'Upload rejected'};
+ const uploadFailure=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([rejected],{pending:[rejected]}),workflowOnly:true}));
+ assert.match(uploadFailure,/Retry upload/);
+ assert.doesNotMatch(uploadFailure,/type="file"/);
 });

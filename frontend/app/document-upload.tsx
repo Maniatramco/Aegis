@@ -136,18 +136,19 @@ export function useDocumentUpload(options: Options) {
 }
 export type DocumentUploadController = ReturnType<typeof useDocumentUpload>;
 
-export function DocumentUploadPanel({ upload: u, attachmentOnly = false, onStart, onWorkflow }: { upload: DocumentUploadController; attachmentOnly?: boolean; onStart?: () => void; onWorkflow?: () => void }) {
+export function DocumentUploadPanel({ upload: u, attachmentOnly = false, workflowOnly = false, onStart, onWorkflow }: { upload: DocumentUploadController; attachmentOnly?: boolean; workflowOnly?: boolean; onStart?: () => void; onWorkflow?: () => void }) {
   const rows = attachmentOnly ? u.batchRows.filter(row => !row.document) : u.batchRows;
   const storedCount = u.batchRows.filter(row => row.document).length;
+  const retryUpload = workflowOnly && !u.uploading && u.pending.some(entry => entry.status === "failed");
   return <section className="document-upload-panel" aria-label="Document uploads">
     <p className="upload-destination">Destination: <strong>{u.dataset?.name || "No dataset selected"}</strong></p>
-    <p className="muted small">PDF, DOCX or UTF-8 TXT · up to {u.maxMb} MB per file · 20 files at a time. Originals are stored, then indexed using this dataset’s configuration.</p>
+    {!workflowOnly && <p className="muted small">PDF, DOCX or UTF-8 TXT · up to {u.maxMb} MB per file · 20 files at a time. Originals are stored, then indexed using this dataset’s configuration.</p>}
     {u.uploading && u.uploadDestination !== u.dataset?.name && <p className="upload-notice" role="status">Finishing the current upload to {u.uploadDestination}. Remaining files will stay with that dataset.</p>}
     {u.blocked && <p className="upload-notice" role="status"><AlertCircle size={16} />{u.blocked}</p>}
-    <div className="dropzone shared-dropzone" onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); e.stopPropagation(); u.choose(Array.from(e.dataTransfer.files)); }}>
+    {!workflowOnly && <div className="dropzone shared-dropzone" onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); e.stopPropagation(); u.choose(Array.from(e.dataTransfer.files)); }}>
       <UploadCloud size={28} /><strong>Drop documents here, or choose files</strong>
       <input aria-label="Choose documents" disabled={!!u.blocked || u.uploading} type="file" accept=".pdf,.docx,.txt" multiple onChange={e => { u.choose(Array.from(e.target.files || [])); e.target.value = ""; }} />
-    </div>
+    </div>}
     {!attachmentOnly && rows.length > 0 && <BatchProgress items={rows}/>}
     {rows.length > 0 && <ul className="upload-files batch-document-list" aria-label="Selected and processing documents">{rows.map(row => <li key={row.id}>
       <div className="upload-file-icon">{row.ready ? <CheckCircle2 size={19} /> : row.status === "uploading" || row.processing ? <Loader2 className="animate-spin" size={19} /> : <FileText size={19} />}</div>
@@ -162,11 +163,11 @@ export function DocumentUploadPanel({ upload: u, attachmentOnly = false, onStart
       </div>
       {!row.document && row.status !== "uploading" && <button type="button" className="btn icon" aria-label={`Remove ${row.name}`} disabled={u.uploading} onClick={() => u.remove(row.id)}><X size={16} /></button>}
     </li>)}</ul>}
-    {u.externalRequired && <label className="check upload-consent"><input type="checkbox" checked={u.consent} disabled={u.uploading} onChange={e => u.setConsent(e.target.checked)} /><span>I approve sending original files to the configured external storage, and document text to external search or embedding providers. API usage may be billed separately.</span></label>}
+    {u.externalRequired && (!workflowOnly || retryUpload || rows.some(row => row.failed || row.document?.requires_reindex && !row.processing)) && <label className="check upload-consent"><input type="checkbox" checked={u.consent} disabled={u.uploading} onChange={e => u.setConsent(e.target.checked)} /><span>I approve sending original files to the configured external storage, and document text to external search or embedding providers. API usage may be billed separately.</span></label>}
     {u.notice && <p className="upload-notice" role="alert"><AlertCircle size={16} />{u.notice}</p>}
     {u.pollError && <p className="upload-notice" role="status">Could not refresh processing status. <button type="button" className="text-button" onClick={u.refresh}>Check again</button></p>}
     {attachmentOnly && storedCount > 0 && onWorkflow && <button type="button" className="text-button" onClick={onWorkflow}>View processing status</button>}
-    <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={() => { onStart?.(); void u.start(); }}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>
+    {(!workflowOnly || retryUpload) && <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={() => { onStart?.(); void u.start(); }}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>}
     <p className="upload-footnote">Only ready, compatible-index documents are available for questions. Hiding this popup does not cancel accepted processing. The original is retained.</p>
   </section>;
 }
