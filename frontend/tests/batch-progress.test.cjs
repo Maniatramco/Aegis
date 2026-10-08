@@ -105,3 +105,22 @@ test('review resolves the current extraction job after a result refresh removes 
  assert.equal(extractionProgressJob({id:'new',job:{id:'accepted',status:'queued'}},jobs).id,'accepted');
  assert.equal(extractionProgressJob(null,jobs),undefined);
 });
+
+
+test('loading progress names the current task and closes after all requests finish',()=>{
+ const html=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[{id:'datasets',label:'Loading datasets…'}],jobs:[]}));
+ assert.match(html,/operation-popup is-loading/);
+ assert.match(html,/<strong>Loading datasets…<\/strong>/);
+ assert.doesNotMatch(html,/Working…|<li>/);
+ assert.match(html,/close automatically when complete/);
+ assert.equal(renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs:[]})),'');
+});
+test('parallel refresh lists each outstanding task once and keeps the final task specific',()=>{
+ const requests=[{id:'datasets',label:'Loading datasets…'},{id:'documents',label:'Loading documents…'},{id:'duplicate',label:'Loading documents…'}];
+ const html=renderToStaticMarkup(React.createElement(OperationProgress,{requests,jobs:[]}));
+ assert.match(html,/<strong>Loading workspace…<\/strong>/);
+ assert.equal((html.match(/<li>/g)||[]).length,2);
+ const finishing=renderToStaticMarkup(React.createElement(OperationProgress,{requests:requests.slice(1),jobs:[]}));
+ assert.match(finishing,/<strong>Loading documents…<\/strong>/);
+ assert.doesNotMatch(finishing,/<li>/);
+});

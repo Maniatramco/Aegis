@@ -340,7 +340,8 @@ export default function App() {
       quiet = false,
     ) => {
       const requestId=crypto.randomUUID();
-      const section=path.split('/')[1]?.replaceAll('-',' ')||'workspace';
+      const resource=path.split('/')[1]||'workspace';
+      const section=({overview:'workspace summary',jobs:'workflow status',settings:'workspace settings',conversations:'chats',models:'available models',templates:'prompt templates'} as Record<string,string>)[resource]||resource.replaceAll('-',' ');
       const testingModel=path==='/model-registrations/test';
       const label=path==='/templates/validate'?'Validating prompt JSON…':path.startsWith('/temporary-chat/')?(path==='/temporary-chat/messages'?'Answering from the temporary document…':method==='DELETE'?'Clearing temporary document…':body instanceof FormData?'Reading temporary document…':'Loading temporary document…'):testingModel?'Testing model connection…':path.startsWith('/datasets/')&&path.endsWith('/models')&&method==='PUT'?'Applying dataset model mappings…':`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`;
       if(!quiet)setRequests(previous=>[...previous,{id:requestId,label}]);

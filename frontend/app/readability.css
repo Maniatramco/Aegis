@@ -14,6 +14,13 @@ body .sidebar .nav-item:hover{background:#f2f5ff;color:var(--blue)}
 body .sidebar .brandmark{background:white}
 body .sidebar :is(.sidebar-foot,.sidebar-foot p,.sidebar-foot small,.brand-sub){color:#53647d;opacity:1}body .sidebar .admin-navigation{background:white;border-color:var(--line)}
 .operation-popup{position:fixed;right:24px;bottom:24px;z-index:100;width:min(380px,calc(100vw - 32px));max-height:45vh;overflow:auto;padding:18px;background:#fff;border:1px solid #b9c9f6;border-top:4px solid var(--blue);border-radius:12px;box-shadow:0 10px 36px #17386b20;color:var(--ink)}
+/* Foreground requests use one centered, non-blocking status card. */
+.operation-popup.is-loading{top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:20px;border:1px solid #d9e5fa;border-radius:16px;box-shadow:0 12px 48px #17386b30}
+.operation-popup-heading{display:flex;align-items:center;gap:12px}
+.operation-popup-heading strong{display:block;font-size:15px;line-height:1.4}
+.operation-popup-icon{display:grid;place-items:center;flex:0 0 40px;height:40px;border-radius:12px;background:#edf4ff;color:var(--blue)}
+.operation-popup-description{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.operation-popup>.operation-request-list{list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;padding:12px 0 0;margin:14px 0 0;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .operation-popup>ul{padding-left:20px;margin:10px 0;font-size:14px}.operation-popup>.job-progress{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .job-progress progress{width:100%;height:8px;accent-color:var(--blue);margin:12px 0}
 .job-stage-list{list-style:none;padding:0;display:grid;gap:8px;margin:10px 0}.job-stage-list li{display:flex;gap:10px;font-size:14px;align-items:center;color:#53647d}.job-stage-list small{margin-left:auto;text-transform:capitalize}.job-stage-list [data-status=completed],.job-stage-list [data-status=running]{color:var(--blue)}
