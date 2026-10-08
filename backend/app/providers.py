@@ -16,8 +16,9 @@ def local_model(name):
 def fingerprint(cfg=None):
     c=cfg or settings()
     if c['search_provider']=='oci':return hashlib.sha256(('oci:'+c.get('oci_region','')+':'+c.get('oci_project_id','')+':'+c.get('oci_vector_store_id','')+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
-    name=c['embedding_model'] if c['embedding_provider'] in ('openai','ollama') else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
-    return hashlib.sha256((c['embedding_provider']+':'+name+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')+(':'+c['_embedding_digest'] if c.get('_embedding_digest') else '')).encode()).hexdigest()[:16]
+    name=c['embedding_model'] if c['embedding_provider'] in ('openai','ollama','registered') else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
+    connection=':'+json.dumps(c['embedding_connection'],sort_keys=True) if c.get('embedding_connection') else ''
+    return hashlib.sha256((c['embedding_provider']+':'+name+connection+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')+(':'+c['_embedding_digest'] if c.get('_embedding_digest') else '')).encode()).hexdigest()[:16]
 def openai_request(path,payload):
     key=api_key()
     if not key:raise ProviderError('Configure an OpenAI API key in Settings before using this provider')
@@ -45,8 +46,12 @@ def split_utf8_bounded(text,max_bytes=OPENAI_EMBEDDING_MAX_BYTES):
         size+=count
     if start<len(text):yield start,text[start:]
 
-def embed(texts):
+def embed(texts,query=False):
     cfg=settings();p=cfg['embedding_provider']
+    if p=='registered':
+        from .model_connections import ModelConnection,ConnectionError
+        try:return ModelConnection(cfg,embedding=True).embed(texts,query=query)
+        except ConnectionError as exc:raise ProviderError(str(exc)) from exc
     if p=='ollama':
         expected=cfg.get('_embedding_digest')
         if expected and ollama_call('model_digest',cfg['embedding_model'])!=expected:raise ProviderError('Installed embedding weights changed. Reindex with the current model before retrieval; indexes are not mixed.')
@@ -118,7 +123,7 @@ def search(query,owner,documents,top_k,diagnostics=None):
 def _retrieve(query,owner,documents,top_k):
     if not documents:return []
     if settings()['search_provider']=='oci':return oci_vector().search(query,owner,documents,top_k,store)
-    v=embed([query])[0];allowed={d.id:d for d in documents};found=[]
+    v=(embed([query],query=True) if settings()['embedding_provider']=='registered' else embed([query]))[0];allowed={d.id:d for d in documents};found=[]
     if settings()['search_provider']=='local':
         for d in documents:
             try:data=store.json('vectors/'+d.id+'.json')
@@ -145,6 +150,10 @@ def response_text(data):
 def answer(question,sources,history=None):
     if not sources:return "I couldn't find evidence in your selected, ready documents. Upload or reindex documents, or change the scope."
     if settings()['model_provider']=='ollama':return ollama_call('chat',settings()['model'],question,sources,history,settings()['timeout'])
+    if settings()['model_provider']=='registered':
+        from .model_connections import chat,ConnectionError
+        try:return chat(question,sources,history)
+        except ConnectionError as exc:raise ProviderError(str(exc)) from exc
     if settings()['model_provider']=='oci':return oci_model().chat(question,sources,history)
     if settings()['model_provider']=='mock':return '[MOCK TEST RESPONSE] '+sources[0]['text']+' [1]'
     if settings()['model_provider']!='openai':raise ProviderError('Model provider is disabled or unsupported')
@@ -154,6 +163,10 @@ def answer(question,sources,history=None):
     return response_text(out)
 def extract(text,schema):
     if settings()['model_provider']=='ollama':return ollama_call('extract',settings()['model'],text,schema,settings()['timeout'])
+    if settings()['model_provider']=='registered':
+        from .model_connections import extract,ConnectionError
+        try:return extract(text,schema)
+        except ConnectionError as exc:raise ProviderError(str(exc)) from exc
     if settings()['model_provider']=='oci':return oci_model().extract(text,schema)
     if settings()['model_provider']=='mock':
         def sample(s):

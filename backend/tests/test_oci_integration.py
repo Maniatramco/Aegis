@@ -171,7 +171,7 @@ def test_index_cleanup_keeps_original_destination_after_global_and_mapping_chang
     mapping=system.api.get('/api/datasets/'+system.dataset+'/models').json()
     body={key:mapping[key] for key in ('mappings','default_chat_model_id','default_extraction_model_id','embedding_model_id')}
     body['mappings'].append({'model_id':model['id'],'enabled':True});body['embedding_model_id']=model['id']
-    assert system.api.put('/api/datasets/'+system.dataset+'/models',json=body).status_code==200
+    assert system.api.put('/api/datasets/'+system.dataset+'/models',json=body|{'acknowledge_reindex':True}).status_code==200
     before=len(system.calls)
     assert system.api.post('/api/documents/'+did+'/reindex',json={'allow_external':True}).status_code==200
     assert worker.run_once();assert system.api.get('/api/documents/'+did).json()['status']=='ready'

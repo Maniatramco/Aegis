@@ -133,10 +133,10 @@ test("capture all real Aegis screens and dataset model configuration with synthe
   await page.getByRole("button", { name: "Documents", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: invoiceName }).getByText("ready", { exact: true })).toBeVisible();
   await capture(page, "02-datasets.png");
-  await page.getByRole("button", { name: "Map models", exact: true }).click();
-  await expect(page.getByLabel(`Mapped model ${models.fast.name}`, { exact: true })).toBeChecked();
-  await expect(page.getByLabel(`Mapped model ${models.careful.name}`, { exact: true })).toBeChecked();
-  await expect(page.getByLabel("Default chat model", { exact: true })).toHaveValue(models.fast.id);
+  await page.getByRole("button", { name: "Model Mapping", exact: true }).click();
+  await expect(page.getByLabel("Embedding model", { exact: true })).toHaveValue(models.embedding.id);
+  await expect(page.getByLabel("Extraction model", { exact: true })).toHaveValue(models.fast.id);
+  await expect(page.getByLabel("Chat model", { exact: true })).toHaveValue(models.fast.id);
   await capture(page, "11-dataset-models.png");
 
   await navigate(page, "Aegis Agent");

@@ -10,7 +10,8 @@ import { PromptTemplates } from "./prompt-templates";
 import { ReExtract } from "./re-extract";
 import { OperationProgress } from "./operation-progress";
 import "./workspace-flow.css";
-import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
+import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
+import { ModelRegistration } from "./model-registration";
 import {
   Activity,
   ArrowDownToLine,
@@ -64,6 +65,8 @@ type View =
   | "Index inspector"
   | "Jobs & activity"
   | "Connections"
+  | "Model Registration"
+  | "Model Mapping"
   | "Services & migration"
   | "Setup";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
@@ -76,6 +79,8 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Index inspector", icon: Layers, group: "OPERATIONS" },
   { name: "Jobs & activity", icon: Activity },
   { name: "Connections", icon: Settings2 },
+  { name: "Model Registration", icon: Layers },
+  { name: "Model Mapping", icon: BookOpen },
   { name: "Services & migration", icon: Cloud },
   { name: "Setup", icon: Cog },
 ];
@@ -93,6 +98,8 @@ const descriptions: Record<View, string> = {
     "Inspect document chunks and the retrieval layer behind your answers.",
   "Jobs & activity": "Follow processing work and resolve what needs attention.",
   Connections: "Manage shared model connections and deployment infrastructure.",
+  "Model Registration": "Register model connections for Embedding, Chat, and Extraction.",
+  "Model Mapping": "Choose the three required models for each dataset.",
   "Services & migration":
     "A clear path from local deployment to your cloud environment.",
   Setup: "Get your workspace ready, one deliberate step at a time.",
@@ -248,7 +255,7 @@ export default function App() {
     };
   }, [drawerOpen, user]);
   const [adminNavigation, setAdminNavigation] = useState(false);
-  const [connectionTab, setConnectionTab] = useState("Models");
+  const [connectionTab, setConnectionTab] = useState("Profiles");
   const [extractionTab, setExtractionTab] = useState("Create");
   const [refresh, setRefresh] = useState(0);
   const [overview, setOverview] = useState<Entity>({});
@@ -324,8 +331,10 @@ export default function App() {
     ) => {
       const requestId=crypto.randomUUID();
       const section=path.split('/')[1]?.replaceAll('-',' ')||'workspace';
-      if(!quiet)setRequests(previous=>[...previous,{id:requestId,label:`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`}]);
-      const timeout=AbortSignal.timeout(method==='GET'?30000:120000);
+      const testingModel=path==='/model-registrations/test';
+      const label=testingModel?'Testing model connection…':path.startsWith('/datasets/')&&path.endsWith('/models')&&method==='PUT'?'Applying dataset model mappings…':`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`;
+      if(!quiet)setRequests(previous=>[...previous,{id:requestId,label}]);
+      const timeout=AbortSignal.timeout(testingModel?Math.min(630000,(Number((body as Entity)?.timeout)||60)*1000+30000):method==='GET'?30000:120000);
       try {
       const headers: Record<string, string> = {};
       if (body && !(body instanceof FormData))
@@ -428,7 +437,7 @@ export default function App() {
     };
   }, [user, refresh, api]);
   useEffect(()=>{
-    if(!user||!['Connections','Services & migration','Setup','Dashboard'].includes(view))return;
+    if(!user||!['Connections','Model Registration','Services & migration','Setup','Dashboard'].includes(view))return;
     let active=true;
     api('/capabilities').then(value=>{if(active)setCaps(value);}).catch(error=>{if(active)setError(error.message);});
     api('/settings/profiles').then(value=>{if(active)setProfiles(Array.isArray(value)?value:value.profiles||[]);}).catch(error=>{if(active)setError(error.message);});
@@ -465,7 +474,7 @@ export default function App() {
     else if(name==="Aegis Agent")setAgentTab("Chat");
     window.location.hash = encodeURIComponent(name==="Extract"?"Aegis Agent/extract":destination);
     setView(destination);
-    if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(name)) setAdminNavigation(true);
+    if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(name)) setAdminNavigation(true);
     setDatasetModelsFocus(false);
     setError("");
     setMobile(false);
@@ -514,7 +523,7 @@ export default function App() {
       if(route==="Aegis Agent")setAgentTab("Chat");
       const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Aegis Agent";
       setView(next);
-      if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(next)) setAdminNavigation(true);
+      if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(next)) setAdminNavigation(true);
     }
     setMobile(false);
     setError("");
@@ -546,7 +555,7 @@ export default function App() {
   ]);
   useEffect(() => { setExternalUpload(false); }, [uploadContextKey, csrf]);
   const externalProvider =
-    ["openai", "oci"].includes(selectedDataset?.embedding_selection?.embedding_provider || datasetEmbedding?.provider) ||
+    !["ollama", "mock", "sentence_transformers"].includes(selectedDataset?.embedding_selection?.embedding_provider || datasetEmbedding?.provider || "mock") ||
     selectedDataset?.embedding_selection?.search_provider === "oci" ||
     settings.search_provider === "oci" ||
     settings.storage_provider === "oci";
@@ -934,12 +943,12 @@ export default function App() {
         </div>
         <div className="brand-sub">Document intelligence</div>
         <nav>
-          {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => (
+          {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => (
             <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{s.name}</span></button>
           ))}
           <button className="nav-item nav-more" aria-label="Manage workspace" title="Manage workspace" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} /><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
           {adminNavigation && <div id="admin-navigation" className="admin-navigation">
-            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
+            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
           </div>}
         </nav>
         <div className="nav-footer">
@@ -1278,7 +1287,7 @@ export default function App() {
             <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}
               onSelect={changeDataset} onCreated={d => { setKbs(current => [...current, d]); changeDataset(d.id); }}
               api={api} run={run} busy={busy || answering} reload={reload} notify={notify}
-              onConnections={() => navigate("Connections")} onUse={navigate}
+              onConnections={() => navigate("Model Registration")} onUse={navigate}
               uploadPanel={<DocumentUploadPanel upload={documentUpload} />}
               documentsPanel={
               <section className="panel flush">
@@ -1845,10 +1854,17 @@ export default function App() {
               )}
             </section>
           )}
+          {view === "Model Registration" && <ModelRegistration models={models} settings={settings} api={api} run={run} busy={busy || answering}
+            onSaved={model => { setModels(current => current.some(m => m.id === model.id) ? current.map(m => m.id === model.id ? model : m) : [model, ...current]); notify("Model saved. New runs use the updated connection; apply embedding changes in Model Mapping."); reload(); }}
+            onMapping={() => navigate("Model Mapping")} />}
+          {view === "Model Mapping" && <section className="panel model-mapping-screen">
+            <div className="field mapping-dataset-select"><label htmlFor="mapping-dataset">Dataset</label><select id="mapping-dataset" value={selectedDataset?.id || ""} onChange={e => changeDataset(e.target.value)} disabled={busy || answering}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}{d.active === false ? " · Inactive" : ""}</option>)}</select></div>
+            {selectedDataset ? <DatasetMappings key={selectedDataset.id} dataset={selectedDataset} models={models} api={api} run={run} busy={busy || answering} reload={reload} notify={notify} onConnections={() => navigate("Model Registration")} /> : <p className="muted">Choose a dataset to configure its Embedding, Chat, and Extraction models.</p>}
+            {!kbs.length && <button className="btn" onClick={() => navigate("Datasets")}>Open Datasets to create one</button>}
+          </section>}
           {view === "Connections" && (
             <>
-              <div className="section-tabs" aria-label="Connection sections">{["Models", "Profiles", "Providers", "Storage", "OCI", "Diagnostics"].map(tab => <button key={tab} className={`btn ${connectionTab === tab ? "primary" : ""}`} aria-pressed={connectionTab === tab} onClick={() => setConnectionTab(tab)}>{tab}</button>)}</div>
-              <div hidden={connectionTab !== "Models"}><ModelCatalog models={models} profiles={profiles} api={api} run={run} busy={busy} reload={reload} notify={notify} /></div>
+              <div className="section-tabs" aria-label="Connection sections"><button className="btn" onClick={() => navigate("Model Registration")}>Model Registration</button><button className="btn" onClick={() => navigate("Model Mapping")}>Model Mapping</button>{["Profiles", "Providers", "Storage", "OCI", "Diagnostics"].map(tab => <button key={tab} className={`btn ${connectionTab === tab ? "primary" : ""}`} aria-pressed={connectionTab === tab} onClick={() => setConnectionTab(tab)}>{tab}</button>)}</div>
               <div hidden={!["Providers", "Storage", "OCI"].includes(connectionTab)}><Notice tone="warn">
                 Provider keys are encrypted on the server and never saved in
                 browser storage. OpenAI usage is separate from a ChatGPT
@@ -1904,15 +1920,16 @@ export default function App() {
                         <h3>{p.name}</h3>
                         <span className="muted small">
                           Version {p.version} · {date(p.created_at)} ·{" "}
-                          {p.api_key_configured || p.oci_api_key_configured
+                          {p.api_key_configured || p.oci_api_key_configured || p.connection_credentials_configured
                             ? "Encrypted credentials saved"
                             : "No provider key saved"}
                         </span>
                       </div>
                       <div className="row wrap">
+                        {p.registration_model_id && <button className="btn" onClick={() => navigate("Model Registration")}>Edit in Model Registration</button>}
                         <button
                           className="btn"
-                          disabled={busy}
+                          disabled={busy || !!p.registration_model_id}
                           onClick={() =>
                             setConfirm({
                               title: `Activate ${p.name}?`,
@@ -1941,7 +1958,7 @@ export default function App() {
                         </button>
                         <button
                           className="btn"
-                          disabled={busy}
+                          disabled={busy || !!p.registration_model_id}
                           onClick={() =>
                             setConfirm({
                               title: `Save a new version of ${p.name}?`,

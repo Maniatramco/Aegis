@@ -109,7 +109,7 @@ def _process(jid,token,snapshot):
     if kind=='index' and kb!=snapshot['dataset_id']:raise ValueError('Document dataset changed; submit a new indexing job.')
     if kind=='index':
         consent=store.json('jobs/'+jid+'.json').get('allow_external',False)
-        if (cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci') and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
+        if (cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider']=='oci') and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
         with Session.begin() as s:s.get(Record,did).status='processing'
         state=workflow.read(jid)
         # Retry an indexing failure from its saved extraction, using the same pinned configuration.
@@ -154,7 +154,7 @@ def _process(jid,token,snapshot):
     elif kind=='extract':
         workflow.transition(jid,'prepare','running')
         data=store.json(ref)
-        if cfg['model_provider'] in ('openai','oci') and not data.get('allow_external'):raise ValueError('External extraction requires explicit external data transmission consent')
+        if cfg['model_provider'] in ('openai','oci','registered') and not data.get('allow_external'):raise ValueError('External extraction requires explicit external data transmission consent')
         sources=[]
         with Session() as s:
             for doc_id in data['document_ids']:

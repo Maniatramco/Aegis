@@ -89,7 +89,7 @@ multidict==6.9.1
     #   yarl
 numpy==2.5.3
     # via qdrant-client
-oci==2.187.1
+oci==2.187.2
     # via
     #   -r backend/requirements-oci.txt
     #   oci-genai-auth

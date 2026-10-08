@@ -1,0 +1,4 @@
+# Optional native model protocols. Install once on API and worker hosts.
+boto3==1.43.109
+google-auth[requests]==2.61.0
+oci==2.187.2

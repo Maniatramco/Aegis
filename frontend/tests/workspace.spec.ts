@@ -27,6 +27,8 @@ test("navigates all workspace screens and preserves an authenticated refresh", a
     "Prompt templates",
     "Index inspector",
     "Jobs & activity",
+    "Model Registration",
+    "Model Mapping",
     "Connections",
     "Services & migration",
     "Setup",
@@ -72,12 +74,10 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   await expect(
     page.getByText("Dataset created. Map its models before adding documents.", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
-  await page.getByLabel(`Mapped model ${models.fast.name}`, { exact: true }).check();
-  await page.getByLabel(`Mapped model ${models.careful.name}`, { exact: true }).check();
-  await page.getByLabel(`Mapped model ${models.embedding.name}`, { exact: true }).check();
-  await page.getByLabel("Default chat model", { exact: true }).selectOption(models.fast.id);
-  await page.getByLabel("Default extraction model", { exact: true }).selectOption(models.careful.id);
+  await expect(page.getByRole("heading", { name: "Model Mapping", exact: true })).toBeVisible();
+  await page.getByLabel("Chat model", { exact: true }).selectOption(models.fast.id);
+  await expect(page.getByRole("button", { name: "Save & Apply", exact: true })).toBeDisabled();
+  await page.getByLabel("Extraction model", { exact: true }).selectOption(models.careful.id);
   await page.getByLabel("Embedding model", { exact: true }).selectOption(models.embedding.id);
   // A workspace refresh returns new dataset objects. Unsaved mapping choices
   // and defaults must survive that real refresh, including the onboarding load.
@@ -85,16 +85,12 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   await page.getByLabel("Refresh workspace", { exact: true }).click();
   await checked(await refreshed);
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
-  for (const model of [models.fast, models.careful, models.embedding]) {
-    await expect(page.getByLabel(`Mapped model ${model.name}`, { exact: true })).toBeChecked();
-  }
-  await expect(page.getByLabel(`Mapped model ${models.separate.name}`, { exact: true })).not.toBeChecked();
-  await expect(page.getByLabel("Default chat model", { exact: true })).toHaveValue(models.fast.id);
-  await expect(page.getByLabel("Default extraction model", { exact: true })).toHaveValue(models.careful.id);
+  await expect(page.getByLabel("Chat model", { exact: true })).toHaveValue(models.fast.id);
+  await expect(page.getByLabel("Extraction model", { exact: true })).toHaveValue(models.careful.id);
   await expect(page.getByLabel("Embedding model", { exact: true })).toHaveValue(models.embedding.id);
   const beforeSave = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
   expect(beforeSave.mappings).toEqual([]);
-  await page.getByRole("button", { name: "Save model mappings", exact: true }).click();
+  await page.getByRole("button", { name: "Save & Apply", exact: true }).click();
   await expect.poll(async () => {
     const saved = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
     return saved.default_extraction_model_id;
@@ -193,10 +189,12 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   const models = await seedMockCatalog(page.request, headers, prefix);
   const multiple = await seedDataset(page.request, headers, `${prefix} · multiple models`, [models.fast, models.careful], models.embedding);
   const single = await seedDataset(page.request, headers, `${prefix} · one model`, [models.separate], models.embedding);
-  const unavailable = await seedDataset(page.request, headers, `${prefix} · no generation model`, [], models.embedding);
+  const unavailableModel = await checked(await page.request.post("/api/models", {headers, data:{name:`${prefix} · disabled generation`, connection_profile_id:models.profile.id, provider_model:"mock-unavailable", capabilities:["chat","extraction"], enabled:true}}));
+  const unavailable = await seedDataset(page.request, headers, `${prefix} · no enabled generation model`, [unavailableModel], models.embedding);
   const documentA = await uploadReady(page.request, headers, multiple, `${prefix}-cobalt.txt`, "Synthetic dataset A evidence: the launch code is COBALT and the reference is INV-COBALT.");
   const documentB = await uploadReady(page.request, headers, single, `${prefix}-magenta.txt`, "Synthetic dataset B evidence: the launch code is MAGENTA and the reference is INV-MAGENTA.");
   const documentC = await uploadReady(page.request, headers, unavailable, `${prefix}-unconfigured.txt`, "Synthetic document ready for future model configuration.");
+  await checked(await page.request.put(`/api/models/${unavailableModel.id}`, {headers, data:{name:unavailableModel.name, connection_profile_id:models.profile.id, provider_model:unavailableModel.provider_model, capabilities:["chat","extraction"], enabled:false}}));
   const template = await seedTemplate(page.request, headers, `${prefix} · extraction schema`);
   await page.reload();
 
@@ -209,7 +207,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Configure dataset models", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Model Mapping", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "All datasets", exact: true }).click();
   await expect(page.getByRole("link", { name: `Open dataset ${unavailable.name}`, exact: true })).toBeVisible();
   await expect(page.getByRole("button", {name:"Open chat",exact:true})).not.toHaveCount(0);
@@ -363,8 +361,8 @@ test("mobile dataset and model selection fit the screen and sign out removes the
   await navigate(page, "Datasets");
   await page.getByRole("link", { name: `Open dataset ${dataset.name}`, exact: true }).first().click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "Map models", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Model Mapping", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Model Mapping", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Open navigation" }).click();
   await navigate(page, "Aegis Agent");

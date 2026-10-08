@@ -8,8 +8,8 @@ from . import core, providers
 
 CAPABILITIES={'chat','extraction','embedding'}
 ROUTING_DEFAULTS={'mappings':[], 'default_chat_model_id':None, 'default_extraction_model_id':None, 'embedding_model_id':None, 'index_generation':0}
-MODEL_KEYS=('model_provider','model','timeout','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_model')
-EMBED_KEYS=('embedding_provider','embedding_model','search_provider','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_vector_store_id','timeout','chunk_size','chunk_overlap','top_k')
+MODEL_KEYS=('model_provider','model','model_connection','timeout','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_model')
+EMBED_KEYS=('embedding_provider','embedding_model','embedding_connection','search_provider','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_vector_store_id','timeout','chunk_size','chunk_overlap','top_k')
 
 def owned(id,owner,kind):
     with core.Session() as s:r=s.get(core.Record,id)
@@ -32,19 +32,23 @@ def create(kind,owner,name,data,parent=''):
     with core.Session.begin() as s:s.add(r)
     return r
 
-def profile_snapshot(profile):
-    data=core.local_store.json(profile.ref);cfg=data['settings']
+def profile_snapshot(profile,version=None):
+    version=version or profile.version
+    ref=f'configuration/profiles/{profile.id}/v{version}.json' if version!=profile.version else profile.ref
+    data=core.local_store.json(ref);cfg=data['settings']
     refs={}
-    for provider,key,filename in [('openai','api_key_configured','openai.enc'),('oci','oci_api_key_configured','oci.enc')]:
-        refs[provider]=f'secrets/profiles/{profile.id}/v{profile.version}/{filename}' if data.get(key) else None
-    return {'settings':copy.deepcopy(cfg),'secret_refs':refs,'connection_profile_id':profile.id,'connection_profile_version':profile.version}
+    for provider,key,filename in [('openai','api_key_configured','openai.enc'),('oci','oci_api_key_configured','oci.enc'),('connection','connection_credentials_configured','connection.enc')]:
+        refs[provider]=f'secrets/profiles/{profile.id}/v{version}/{filename}' if data.get(key) else None
+    return {'settings':copy.deepcopy(cfg),'secret_refs':refs,'connection_profile_id':profile.id,'connection_profile_version':version}
 
 def model_data(r):return core.store.json(r.ref)
 def model_public(r):
-    data=model_data(r);profile=owned(data['connection_profile_id'],r.owner,'config_profile');snap=profile_snapshot(profile)
+    data=model_data(r);profile=owned(data['connection_profile_id'],r.owner,'config_profile');snap=profile_snapshot(profile,data.get('connection_profile_version'))
     p=snap['settings']['embedding_provider'] if data['capabilities']==['embedding'] else snap['settings']['model_provider']
     if data['capabilities']==['embedding'] and snap['settings']['search_provider']=='oci':p='oci'
-    return core.representation(r)|data|{'provider':p,'connection_profile_version':profile.version,'credential_configured':p not in ('openai','oci') or bool(snap['secret_refs'].get(p)) or (p=='oci' and snap['settings'].get('oci_auth_mode')!='api_key')}
+    connection=snap['settings'].get('embedding_connection' if data['capabilities']==['embedding'] else 'model_connection')
+    configured=(bool(snap['secret_refs'].get('connection')) or connection.get('auth_mode') in ('none','server_identity','config_profile')) if connection else p not in ('openai','oci') or bool(snap['secret_refs'].get(p)) or (p=='oci' and snap['settings'].get('oci_auth_mode')!='api_key')
+    return core.representation(r)|data|{'provider':connection['protocol'] if connection else p,'connection_profile_version':snap['connection_profile_version'],'credential_configured':configured,'connection':copy.deepcopy(connection),'timeout':snap['settings'].get('timeout',60)}
 
 def dataset_config(r):return core.store.json(r.ref)
 def routing_public(r):
@@ -53,7 +57,8 @@ def routing_public(r):
         try:models.append(model_public(owned(mapping['model_id'],r.owner,'model'))|{'mapping_enabled':mapping['enabled']})
         except HTTPException:continue
     selection=public_selection(data['embedding_snapshot']|{'dataset_id':r.id,'index_generation':out['index_generation']}) if data.get('embedding_snapshot') else None
-    return out|{'dataset_id':r.id,'models':models,'embedding_selection':selection,'migration_required':'mappings' not in data}
+    complete=all(out.get(key) and any(m['id']==out[key] and m.get('enabled',True) and m.get('mapping_enabled',True) and cap in m['capabilities'] for m in models) for cap,key in [('embedding','embedding_model_id'),('chat','default_chat_model_id'),('extraction','default_extraction_model_id')])
+    return out|{'dataset_id':r.id,'version':r.version,'models':models,'embedding_selection':selection,'models_complete':complete,'migration_required':'mappings' not in data}
 
 def dataset_public(r):
     data=dataset_config(r)
@@ -77,7 +82,7 @@ def resolve_model(r,capability,model_id=None):
         selected=eligible[0].id
     model=next((m for m in eligible if m.id==selected),None)
     if not model:raise HTTPException(409,'Selected model is not an enabled, capable mapping for this dataset.')
-    data=model_data(model);profile=owned(data['connection_profile_id'],r.owner,'config_profile');snap=profile_snapshot(profile)
+    data=model_data(model);profile=owned(data['connection_profile_id'],r.owner,'config_profile');snap=profile_snapshot(profile,data.get('connection_profile_version'))
     snap.update(model_id=model.id,model_name=model.name,model_version=model.version,provider_model=data['provider_model'],capability=capability)
     if capability=='embedding':
         snap['settings']['embedding_model']=data['provider_model']
@@ -90,12 +95,13 @@ def embedding_snapshot(r):
     if not selected or not data.get('embedding_snapshot'):raise HTTPException(409,'Map an embedding model for this dataset before indexing or asking questions.')
     # Enforce current ownership, enabled state and capability without changing the pinned space.
     current=resolve_model(r,'embedding',selected);snap=copy.deepcopy(data['embedding_snapshot'])
-    if current['model_version']!=snap['model_version']:raise HTTPException(409,'Embedding model configuration changed. Save the dataset model mapping and reindex documents.')
+    if current['model_version']!=snap['model_version'] or current['connection_profile_version']!=snap['connection_profile_version']:raise HTTPException(409,'Embedding model configuration changed. Save the dataset model mapping and reindex documents.')
     cfg=core.settings().copy();cfg.update({k:snap['settings'][k] for k in EMBED_KEYS if k in snap['settings']})
     snap['settings']=cfg
     if cfg['embedding_provider']=='ollama':
         from .ollama_provider import model_digest,OllamaError
-        try:cfg['_embedding_digest']=model_digest(cfg['embedding_model'])
+        try:
+            with core.execution_context(snap):cfg['_embedding_digest']=model_digest(cfg['embedding_model'])
         except OllamaError as error:raise HTTPException(409,str(error))
     snap['settings']['_index_namespace']=r.id+':'+str(data['index_generation'])
     snap.update(dataset_id=r.id,index_generation=data['index_generation'])
@@ -104,6 +110,7 @@ def embedding_snapshot(r):
 def execution_snapshot(r,capability,model_id=None):
     # Activity gates new work only; inspecting existing indexes must remain possible.
     require_active(r)
+    if not routing_public(r)['models_complete']:raise HTTPException(409,'Model Mapping requires an enabled Embedding, Chat, and Extraction selection for this dataset before starting new work.')
     embedding=embedding_snapshot(r)
     if capability=='embedding':return embedding
     model=resolve_model(r,capability,model_id)
@@ -174,6 +181,8 @@ class MappingInput(BaseModel):
     default_chat_model_id:str|None=None
     default_extraction_model_id:str|None=None
     embedding_model_id:str|None=None
+    expected_version:int|None=None
+    acknowledge_reindex:bool=False
 class DatasetInput(BaseModel):
     name:str=Field(min_length=1,max_length=200)
     description:str=Field(default='',max_length=10000)
@@ -185,6 +194,7 @@ def validate_model(body,owner):
     data=body.model_dump();data['capabilities']=sorted(set(data['capabilities']))
     if set(data['capabilities'])-CAPABILITIES or ('embedding' in data['capabilities'] and len(data['capabilities'])>1):raise HTTPException(400,'Use chat/extraction capabilities together, or a separate embedding model.')
     profile=owned(body.connection_profile_id,owner,'config_profile');cfg=profile_snapshot(profile)['settings']
+    if core.local_store.json(profile.ref).get('registration_model_id'):raise HTTPException(400,'Edit or register this model through Model Registration.')
     p=cfg['embedding_provider'] if data['capabilities']==['embedding'] else cfg['model_provider']
     if p=='mock' and __import__('os').getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true')
     if p=='sentence_transformers' and body.provider_model!='sentence-transformers/all-MiniLM-L6-v2':raise HTTPException(400,'Local embeddings currently support sentence-transformers/all-MiniLM-L6-v2 only.')
@@ -195,7 +205,8 @@ def validate_model(body,owner):
     return data
 
 def save_mappings(r,body):
-    values=body.model_dump();ids=[m['model_id'] for m in values['mappings']]
+    if body.expected_version is not None and body.expected_version!=r.version:raise HTTPException(409,'Dataset mappings changed. Refresh and review the saved mappings before applying your draft.')
+    values=body.model_dump(exclude={'expected_version','acknowledge_reindex'});ids=[m['model_id'] for m in values['mappings']]
     if len(ids)!=len(set(ids)):raise HTTPException(400,'Each model can be mapped only once.')
     for id in ids:owned(id,r.owner,'model')
     data=dataset_config(r)|values
@@ -206,15 +217,21 @@ def save_mappings(r,body):
         if m['enabled'] and md['enabled']:eligible[model.id]=md
     for capability,key in [('chat','default_chat_model_id'),('extraction','default_extraction_model_id'),('embedding','embedding_model_id')]:
         id=values[key]
+        if not id:raise HTTPException(400,'Embedding, Chat, and Extraction model selections are all required.')
         if id and (id not in eligible or capability not in eligible[id]['capabilities']):raise HTTPException(400,'The '+capability+' default must be an enabled mapped model with that capability.')
+        selected=owned(id,r.owner,'model');md=model_data(selected);cfg=profile_snapshot(owned(md['connection_profile_id'],r.owner,'config_profile'),md.get('connection_profile_version'))['settings']
+        if capability=='embedding' and cfg.get('embedding_connection') and cfg['search_provider']=='oci':raise HTTPException(400,'Registered embedding connections require Local or Qdrant vector storage. OCI managed retrieval owns its embedding configuration.')
+        try:core.enforce_local_only(cfg)
+        except ValueError as exc:raise HTTPException(409,str(exc)) from exc
     old=dataset_config(r);embedding=None
     if values['embedding_model_id']:
-        model=owned(values['embedding_model_id'],r.owner,'model');md=model_data(model);embedding=profile_snapshot(owned(md['connection_profile_id'],r.owner,'config_profile'))
+        model=owned(values['embedding_model_id'],r.owner,'model');md=model_data(model);embedding=profile_snapshot(owned(md['connection_profile_id'],r.owner,'config_profile'),md.get('connection_profile_version'))
         embedding.update(model_id=model.id,model_name=model.name,model_version=model.version,provider_model=md['provider_model'],capability='embedding')
         embedding['settings']['embedding_model']=md['provider_model']
     data['embedding_snapshot']=embedding
     # A different pinned profile version is a deliberate new generation, even if only credentials changed.
     changed=old.get('embedding_snapshot')!=embedding
+    if changed and old.get('embedding_snapshot') and not body.acknowledge_reindex and any(d.parent_id==r.id for d in rows(r.owner,'document')):raise HTTPException(400,'Acknowledge reindexing existing documents before applying an embedding change.')
     data['index_generation']=old.get('index_generation',0)+(1 if changed else 0)
     if not data['index_generation'] and embedding:data['index_generation']=1
     data['routing_version']=1

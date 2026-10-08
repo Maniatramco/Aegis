@@ -7,6 +7,14 @@ import httpx
 from jsonschema import validate
 
 def base_url():
+    from . import core
+    active=core._execution.get()
+    if active:
+        cfg=active['settings'];role='embedding' if active.get('capability')=='embedding' else 'model'
+        connection=cfg.get(role+'_connection')
+        if connection and connection.get('protocol')=='ollama':
+            from .model_connections import validate_endpoint
+            return validate_endpoint(connection['endpoint'],'ollama')
     port=os.getenv('AEGIS_OLLAMA_PORT','11434')
     if port not in ('11434','11435'):
         raise OllamaError('Ollama port must be the local default 11434 or isolated Aegis port 11435.')

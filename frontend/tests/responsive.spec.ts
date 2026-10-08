@@ -85,7 +85,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   const allDatasets = page.getByRole("button", { name: "All datasets", exact: true });
   if (await allDatasets.isVisible()) await allDatasets.click();
   await page.getByRole("link", { name: `Open dataset ${dataset.name}`, exact: true }).click();
-  for (const tab of ["Documents", "Map models", "Settings"]) {
+  for (const tab of ["Documents", "Model Mapping", "Settings"]) {
     await page.getByRole("button", { name: tab, exact: true }).click();
     const dimensions = await geometry(page);
     expect.soft(dimensions.scrollWidth, `Dataset/${tab}`).toBeLessThanOrEqual(321);

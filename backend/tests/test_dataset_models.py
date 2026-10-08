@@ -31,7 +31,7 @@ def model(s,profile,name='Alternative',caps=None,**values):
     return post(s,'/api/models',{'name':name,'connection_profile_id':profile,'provider_model':name,'capabilities':caps or ['chat','extraction'],'enabled':True}|values)
 def mapping(s,d,**values):
     config=s.api.get('/api/datasets/'+d['id']+'/models').json();body={k:config[k] for k in ('mappings','default_chat_model_id','default_extraction_model_id','embedding_model_id')}|values
-    r=s.api.put('/api/datasets/'+d['id']+'/models',json=body);assert r.status_code==200,r.text;return r.json()
+    r=s.api.put('/api/datasets/'+d['id']+'/models',json=body|{'acknowledge_reindex':True});assert r.status_code==200,r.text;return r.json()
 def upload(s,d,run=True):
     r=s.api.post('/api/documents/upload',files={'files':('invoice.txt',b'Invoice total 42. Alice is the owner.','text/plain')},data={'dataset_id':d['id'],'allow_external':'true'})
     assert r.status_code==200,r.text
@@ -57,9 +57,11 @@ def test_defaults_explicit_selection_capability_and_dataset_scope(system):
     explicit=message(s,c,model_id=extra['id']);assert explicit.status_code==200;assert explicit.json()['message']['model_selection']['model_id']==extra['id']
     assert message(s,c,model_id=unmapped['id']).status_code==409
     assert message(s,c,model_id=d['embedding_model_id']).status_code==409
-    mapping(s,d,default_chat_model_id=None)
-    assert message(s,c).status_code==409
-    mapping(s,d,mappings=[m|{'enabled':False} if m['model_id']==extra['id'] else m for m in s.api.get('/api/datasets/'+d['id']+'/models').json()['mappings']],default_chat_model_id=None)
+    config=s.api.get('/api/datasets/'+d['id']+'/models').json()
+    body={k:config[k] for k in ('mappings','default_chat_model_id','default_extraction_model_id','embedding_model_id')}
+    assert s.api.put('/api/datasets/'+d['id']+'/models',json=body|{'default_chat_model_id':None}).status_code==400
+    assert message(s,c).status_code==200
+    mapping(s,d,mappings=[m|{'enabled':False} if m['model_id']==extra['id'] else m for m in config['mappings']])
     assert message(s,c).json()['message']['model_selection']['model_id']==generation['id']
     other=dataset(s,'Other');other_doc=upload(s,other)['documents'][0]
     assert message(s,c,document_ids=[other_doc['id']]).status_code==400

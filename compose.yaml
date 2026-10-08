@@ -4,6 +4,7 @@ x-backend: &backend
     context: ./backend
     args:
       INSTALL_LOCAL_EMBEDDINGS: ${INSTALL_LOCAL_EMBEDDINGS:-true}
+      INSTALL_CLOUD_MODELS: ${INSTALL_CLOUD_MODELS:-true}
   restart: unless-stopped
   environment: &backend-env
     DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD:?Run scripts/setup.sh first}@db:5432/aegis
@@ -15,6 +16,8 @@ x-backend: &backend
     EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-sentence_transformers}
     SEARCH_PROVIDER: ${SEARCH_PROVIDER:-qdrant}
     AEGIS_ALLOW_MOCK: ${AEGIS_ALLOW_MOCK:-false}
+    AEGIS_LOCAL_ONLY: ${AEGIS_LOCAL_ONLY:-false}
+    AEGIS_MODEL_ENDPOINT_HOSTS: ${AEGIS_MODEL_ENDPOINT_HOSTS:-}
     HF_HOME: /data/model-cache
     OCI_REGION: ${OCI_REGION:-}
     OCI_NAMESPACE: ${OCI_NAMESPACE:-}

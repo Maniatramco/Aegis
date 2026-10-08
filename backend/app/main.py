@@ -58,7 +58,7 @@ def enqueue(owner,kind,target,allow_external=False,snapshot=None):
     return j
 
 def external_check(consent,embedding=False,cfg=None):
-    cfg=cfg or settings();external=(cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci') or cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci'
+    cfg=cfg or settings();external=(cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci','registered') or cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider']=='oci'
     if external and not consent:raise HTTPException(409,'This action sends document text or your query to the configured external provider. Confirm external data transmission first.')
     if (cfg['model_provider']=='mock' or cfg['embedding_provider']=='mock') and os.getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true and are for tests only')
 
@@ -650,7 +650,7 @@ class ProfileInput(BaseModel):
 
 def profile_public(record):
     data=local_store.json(record.ref)
-    return representation(record)|{'api_key_configured':data.get('api_key_configured',False),'oci_api_key_configured':data.get('oci_api_key_configured',False)}
+    return representation(record)|{'api_key_configured':data.get('api_key_configured',False),'oci_api_key_configured':data.get('oci_api_key_configured',False),'connection_credentials_configured':data.get('connection_credentials_configured',False),'registration_model_id':data.get('registration_model_id')}
 
 def write_profile(owner,name,id=None):
     with document_lock('settings-config'):
@@ -658,6 +658,7 @@ def write_profile(owner,name,id=None):
 
 def _write_profile(owner,name,id=None):
     existing=get_record(id,owner,'config_profile') if id else None
+    if existing and local_store.json(existing.ref).get('registration_model_id'):raise HTTPException(400,'Edit this connection through Model Registration.')
     id=id or uid();version=(existing.version+1) if existing else 1;ref=f'configuration/profiles/{id}/v{version}.json'
     data={'settings':settings(),'api_key_configured':False,'oci_api_key_configured':False,'saved_at':time.time()}
     for source,target,key in [('secrets/provider.enc','openai.enc','api_key_configured'),('secrets/oci-provider.enc','oci.enc','oci_api_key_configured')]:
@@ -683,6 +684,7 @@ def revise_profile(id:str,body:ProfileInput,owner=Depends(auth)):return write_pr
 @app.post('/api/settings/profiles/{id}/activate')
 def activate_profile(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'config_profile');data=local_store.json(r.ref);cfg=data['settings'].copy()
+    if data.get('registration_model_id'):raise HTTPException(400,'Apply registered models through the dataset Model Mapping screen.')
     for target,key in [('openai.enc','api_key'),('oci.enc','oci_api_key')]:
         try:
             encrypted=local_store.get(f'secrets/profiles/{id}/v{r.version}/{target}');cfg[key]=secret_cipher().decrypt(encrypted).decode()
@@ -696,6 +698,8 @@ def export_profile(id:str,owner=Depends(auth)):
 
 
 routing.install_routes(app,auth,write_profile)
+from . import model_registration
+model_registration.install_routes(app,auth)
 
 from .browser_recovery import router as browser_recovery_router
 app.include_router(browser_recovery_router)
@@ -727,9 +731,10 @@ def configure_local_models(id:str,owner=Depends(auth)):
                 r=routing.create('model',owner,label,{'name':label,'connection_profile_id':profile['id'],'provider_model':name,'capabilities':capabilities,'enabled':True});model=routing.model_public(r)
             if not any(m['model_id']==model['id'] for m in mappings):mappings.append({'model_id':model['id'],'enabled':True})
             return model['id']
-        for name in chat_names:selected.append(choose(name,['chat','extraction'] if name.startswith('qwen3') else ['chat'],'Qwen3:4b' if name.startswith('qwen3') else 'SmolLM2'))
+        for name in chat_names:selected.append(choose(name,['chat'],'Qwen3 chat' if name.startswith('qwen3') else 'SmolLM2 chat'))
+        extraction=existing['default_extraction_model_id'] or choose(chat_names[0],['extraction'],'Local extraction')
         embedding=existing['embedding_model_id'] or choose(nomic,['embedding'],'Nomic embeddings')
-        updated=routing.save_mappings(dataset,routing.MappingInput(mappings=mappings,default_chat_model_id=existing['default_chat_model_id'] or selected[0],default_extraction_model_id=existing['default_extraction_model_id'] or (selected[0] if chat_names[0].startswith('qwen3') else None),embedding_model_id=embedding))
+        updated=routing.save_mappings(dataset,routing.MappingInput(mappings=mappings,default_chat_model_id=existing['default_chat_model_id'] or selected[0],default_extraction_model_id=extraction,embedding_model_id=embedding))
         return routing.dataset_public(updated)
 
 temporary_files.install(app,auth)

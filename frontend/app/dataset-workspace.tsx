@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, Database, FileSearch, FileText, Layers, MessageSquare, Plus, Search, Settings2, Shield, X } from "lucide-react";
 import "./dataset-focus.css";
+import "./model-configuration.css";
 import {DirectoryRows} from "./dataset-directory";
 
 type Entity = Record<string, any>;
@@ -53,7 +54,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
   const mapped = dataset?.models?.filter((m: Entity) => m.mapping_enabled !== false && m.enabled !== false) || [];
   const chat = eligibleModels(dataset, "chat");
   const extraction = eligibleModels(dataset, "extraction");
-  const embedding = mapped.find((m: Entity) => m.id === dataset?.embedding_model_id);
+  const embedding = dataset?.models_complete && mapped.find((m: Entity) => m.id === dataset?.embedding_model_id);
   const visibleDatasets = datasets.filter(d => `${d.name} ${d.description || ""}`.toLowerCase().includes(search.toLowerCase()));
   useEffect(() => {
     setTab(modelsFocus && dataset?.active === false ? "settings" : modelsFocus || newlyCreated.current === selectedId ? "models" : "documents");
@@ -82,7 +83,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
           const all = documents.filter(doc => (doc.dataset_id || doc.kb_id) === d.id);
           const usable = all.filter(doc => doc.status === "ready" && !doc.requires_reindex).length;
           const mappedModels: Entity[] = d.models?.filter((m: Entity) => m.mapping_enabled !== false && m.enabled !== false) || [];
-          const taskConfigured = mappedModels.some(m => m.id === d.embedding_model_id) && mappedModels.some(m => m.capabilities?.includes("chat") || m.capabilities?.includes("extraction"));
+          const taskConfigured = d.models_complete;
           const state = d.active === false ? "Inactive" : usable > 0 && taskConfigured ? "Ready to use" : !taskConfigured ? "Models needed" : "Add documents";
           return <button key={d.id} className="dataset-card" onClick={() => openDataset(d.id)} aria-label={`Open dataset ${d.name}`}>
             <div className="row between"><span className="dataset-icon"><Database size={19} /></span><span className={`pill ${d.active === false ? "inactive" : usable > 0 && taskConfigured ? "green" : "amber"}`}>{state}</span></div>
@@ -99,11 +100,11 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
         <div className="panel-head dataset-detail-heading"><div><div className="row wrap"><h2>{dataset.name}</h2><span className={`pill ${dataset.active === false ? "inactive" : "green"}`}>{dataset.active === false ? "Inactive" : "Active"}</span></div>{dataset.description && <p className="muted small">{dataset.description}</p>}<p className="dataset-document-summary">{datasetDocs.length} document{datasetDocs.length === 1 ? "" : "s"} · {ready} ready</p></div><div className="row wrap dataset-use-actions"><button className="btn" onClick={() => onUse("Aegis Agent")} disabled={!chat.length || !ready}><MessageSquare size={14} />Ask this dataset</button><button className="btn" onClick={() => onUse("Extract")} disabled={!extraction.length || !ready}><FileSearch size={14} />Extract from dataset</button></div></div>
         <div className="tabs dataset-tabs" aria-label="Dataset sections">
           <button className={`btn ${tab === "documents" ? "primary" : ""}`} aria-pressed={tab === "documents"} onClick={() => setTab("documents")}><FileText size={14} />Documents</button>
-          <button className={`btn ${tab === "models" ? "primary" : ""}`} aria-pressed={tab === "models"} onClick={() => setTab("models")}><Layers size={14} />Map models</button>
+          <button className={`btn ${tab === "models" ? "primary" : ""}`} aria-pressed={tab === "models"} onClick={() => setTab("models")}><Layers size={14} />Model Mapping</button>
           <button className={`btn ${tab === "settings" ? "primary" : ""}`} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={14} />Settings</button>
         </div>
         <div hidden={tab !== "documents"}>
-          {dataset.active === false ? <div className="notice"><Settings2 size={16} /><div>This dataset is inactive. You can review its documents or <button className="text-button" onClick={() => setTab("settings")}>open settings to activate it</button>.</div></div> : !embedding && <div className="notice warn"><Layers size={16} /><div>Choose an embedding model before adding documents. <button className="text-button" onClick={() => setTab("models")}>Choose models <ArrowRight size={12} /></button></div></div>}
+          {dataset.active === false ? <div className="notice"><Settings2 size={16} /><div>This dataset is inactive. You can review its documents or <button className="text-button" onClick={() => setTab("settings")}>open settings to activate it</button>.</div></div> : !embedding && <div className="notice warn"><Layers size={16} /><div>Choose Embedding, Chat, and Extraction models before adding documents. <button className="text-button" onClick={() => setTab("models")}>Choose models <ArrowRight size={12} /></button></div></div>}
           <div className="dataset-documents-toolbar"><span className="muted small">Originals and their processing status</span><button className={`btn ${showUpload ? "" : "primary"}`} aria-expanded={showUpload} aria-controls="dataset-add-documents" disabled={dataset.active === false || !embedding} onClick={() => setShowUpload(!showUpload)}>{showUpload ? <X size={14} /> : <Plus size={14} />}{showUpload ? "Cancel upload" : "Add documents"}</button></div>
           <div id="dataset-add-documents" className="dataset-upload-panel" hidden={!showUpload}>{uploadPanel}</div>
         </div>
@@ -122,7 +123,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
   </div>;
 }
 
-function DatasetMappings({ dataset, models, api, run, busy, reload, notify, onConnections }: { dataset: Entity; models: Entity[]; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void }) {
+export function DatasetMappings({ dataset, models, api, run, busy, reload, notify, onConnections }: { dataset: Entity; models: Entity[]; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void }) {
   type MappingDraft = { mappings: Entity[]; chatDefault: string; extractDefault: string; embedding: string };
   const savedDraft = (source: Entity): MappingDraft => ({
     mappings: (source.mappings || (source.models || []).map((m: Entity) => ({ model_id: m.id, enabled: m.mapping_enabled !== false }))).map((m: Entity) => ({ ...m })),
@@ -133,7 +134,7 @@ function DatasetMappings({ dataset, models, api, run, busy, reload, notify, onCo
   const [draft, setDraft] = useState<MappingDraft>(() => savedDraft(dataset));
   const { mappings, chatDefault, extractDefault, embedding } = draft;
   const [ackReindex, setAckReindex] = useState(false);
-  const [modelSearch, setModelSearch] = useState("");
+
   const [remoteChanged, setRemoteChanged] = useState(false);
   const dirty = useRef(false);
   const savedRevision = useRef({ id: dataset.id, version: dataset.version });
@@ -154,41 +155,24 @@ function DatasetMappings({ dataset, models, api, run, busy, reload, notify, onCo
     }
     loadSavedDraft();
   }, [dataset.id, dataset.version]);
-  const mapped = (id: string) => mappings.some(m => m.model_id === id && m.enabled !== false);
-  const candidates = (capability: string) => models.filter(m => mapped(m.id) && m.enabled !== false && m.capabilities?.includes(capability));
+  const candidates = (capability: string) => models.filter(m => m.enabled !== false && m.capabilities?.includes(capability));
   const changeDefault = (key: "chatDefault" | "extractDefault" | "embedding", value: string) => {
     dirty.current = true;
-    setDraft(current => ({ ...current, [key]: value }));
+    setDraft(current => ({ ...current, [key]: value, mappings: [...new Set([key === "chatDefault" ? value : current.chatDefault, key === "extractDefault" ? value : current.extractDefault, key === "embedding" ? value : current.embedding].filter(Boolean))].map(model_id => ({model_id, enabled:true})) }));
     if (key === "embedding") setAckReindex(false);
   };
-  const toggle = (id: string) => {
-    dirty.current = true;
-    setDraft(current => {
-      const removing = current.mappings.some(m => m.model_id === id && m.enabled !== false);
-      const remaining = current.mappings.filter(m => m.model_id !== id);
-      return {
-        mappings: removing ? remaining : [...remaining, { model_id: id, enabled: true }],
-        chatDefault: removing && current.chatDefault === id ? "" : current.chatDefault,
-        extractDefault: removing && current.extractDefault === id ? "" : current.extractDefault,
-        embedding: removing && current.embedding === id ? "" : current.embedding,
-      };
-    });
-    setAckReindex(false);
-  };
   const selectedEmbedding = models.find(m => m.id === embedding);
+  const complete=candidates('chat').some(m=>m.id===chatDefault)&&candidates('extraction').some(m=>m.id===extractDefault)&&candidates('embedding').some(m=>m.id===embedding);
   const pinnedEmbedding = dataset.embedding_selection;
   const embeddingChanged = !!dataset.embedding_model_id && (embedding !== dataset.embedding_model_id || !!pinnedEmbedding && !!selectedEmbedding && (pinnedEmbedding.model_version !== selectedEmbedding.version || pinnedEmbedding.connection_profile_version !== selectedEmbedding.connection_profile_version));
-  const visibleModels = models.filter(m => `${modelLabel(m)} ${m.provider_model || ""} ${(m.capabilities || []).join(" ")}`.toLowerCase().includes(modelSearch.toLowerCase()));
   return <div className="dataset-mappings">
     {remoteChanged && <div className="notice warn"><Settings2 size={16} /><div><strong>Saved mappings changed while you were editing.</strong><p>Your unsaved selections are preserved. Load the latest saved mappings before making further changes.</p><button className="btn" onClick={loadSavedDraft}>Discard draft and load saved mappings</button></div></div>}
-    <div className="panel-head"><div><h3>Models approved for this dataset</h3><p className="muted small">Choose the models this dataset can use, then set its defaults.</p></div><button className="btn" onClick={onConnections}><Plus size={14} />Manage model catalog</button></div>
-    {models.length > 6 && <label className="dataset-search mapping-search"><Search size={16} /><input aria-label="Search catalog models" placeholder="Search models or capabilities" value={modelSearch} onChange={e => setModelSearch(e.target.value)} /></label>}
-    {models.length ? <><div className="mapping-grid">{visibleModels.map(m => <label key={m.id} className={`mapping-card ${mapped(m.id) ? "selected" : ""} ${m.enabled === false ? "disabled" : ""}`}><input type="checkbox" aria-label={`Mapped model ${m.name}`} checked={mapped(m.id)} onChange={() => toggle(m.id)} disabled={busy || m.enabled === false && !mapped(m.id)} /><div><div className="row wrap"><strong>{modelLabel(m)}</strong>{m.enabled === false && <span className="pill amber">Disabled</span>}</div><small>{m.provider_model} · {m.provider || m.connection_profile_name || "Saved connection"}</small><div className="model-chips">{(m.capabilities || []).map((c: string) => <span className="model-chip" key={c}>{c}</span>)}</div></div></label>)}</div>{!visibleModels.length && <p className="muted small">No models match your search.</p>}</> : <div className="notice"><Layers size={17} /><div>Create a saved connection profile and add a model to the shared catalog first. <button className="text-button" onClick={onConnections}>Open Connections <ArrowRight size={12} /></button></div></div>}
+    <div className="panel-head"><div><h3>Model Mapping</h3><p className="muted small">All three categories are required for this dataset.</p></div><button className="btn" onClick={onConnections}><Plus size={14} />Register model</button></div>
     <div className="grid3 mapping-defaults">
-      {[{label:"Default chat model", cap:"chat", value:chatDefault, key:"chatDefault" as const}, {label:"Default extraction model", cap:"extraction", value:extractDefault, key:"extractDefault" as const}, {label:"Embedding model", cap:"embedding", value:embedding, key:"embedding" as const}].map(f => <div className="field" key={f.cap}><label>{f.label}</label><select aria-label={f.label} value={f.value} onChange={e => changeDefault(f.key, e.target.value)} disabled={busy}><option value="">{f.cap === "embedding" ? "Select an embedding model" : "No default · choose at runtime"}</option>{candidates(f.cap).map(m => <option key={m.id} value={m.id}>{modelLabel(m)}</option>)}</select><small>{f.cap === "embedding" ? "A fixed embedding model keeps this dataset’s index consistent." : "One eligible model is automatic. Multiple models offer a dropdown."}</small></div>)}
+      {[{label:"Embedding model", cap:"embedding", value:embedding, key:"embedding" as const}, {label:"Chat model", cap:"chat", value:chatDefault, key:"chatDefault" as const}, {label:"Extraction model", cap:"extraction", value:extractDefault, key:"extractDefault" as const}].map(f => <div className="field" key={f.cap}><label className="mapping-role-header" htmlFor={`mapping-${f.cap}`}>{f.label} <span className="muted small">Required</span></label><select id={`mapping-${f.cap}`} aria-label={f.label} value={f.value} onChange={e => changeDefault(f.key, e.target.value)} disabled={busy} required><option value="">Select {f.cap === "extraction" ? "an extraction" : f.cap === "embedding" ? "an embedding" : "a chat"} model</option>{candidates(f.cap).map(m => <option key={m.id} value={m.id}>{modelLabel(m)} · {m.provider_model}</option>)}</select><small>{f.cap === "embedding" ? "Used for indexing and search." : f.cap === "chat" ? "Used for answering dataset questions." : "Used for structured document extraction."}</small>{!candidates(f.cap).length && <small className="field-error">Register an enabled {f.cap} model first.</small>}</div>)}
     </div>
     {embeddingChanged && <div className="notice warn"><Settings2 size={17} /><div><strong>Changing the embedding model requires reindexing.</strong><p>Existing documents must be reindexed before they can be used again. Changing chat or extraction models does not change this embedding space.</p><label className="check"><input type="checkbox" checked={ackReindex} onChange={e => setAckReindex(e.target.checked)} />I understand existing documents will need reindexing.</label></div></div>}
-    <div className="row between wrap"><span className="muted small">Index generation {dataset.index_generation || 1} · Credentials inherited from saved connections</span><button className="btn primary" disabled={busy || remoteChanged || embeddingChanged && !ackReindex} onClick={() => run(async () => { const saved = await api(`/datasets/${dataset.id}/models`, "PUT", { mappings, default_chat_model_id: chatDefault || null, default_extraction_model_id: extractDefault || null, embedding_model_id: embedding || null }); setDraft(savedDraft(saved)); dirty.current = false; notify(embeddingChanged ? "Mappings saved. Reindex existing documents with the new embedding model." : "Dataset model mappings saved."); reload(); })}><Check size={14} />Save model mappings</button></div>
+    <div className="row between wrap"><span className="muted small">Index generation {dataset.index_generation || 1} · Connection credentials remain encrypted</span><button className="btn primary" disabled={busy || remoteChanged || !complete || embeddingChanged && !ackReindex} onClick={() => run(async () => { const saved = await api(`/datasets/${dataset.id}/models`, "PUT", { mappings, default_chat_model_id: chatDefault || null, default_extraction_model_id: extractDefault || null, embedding_model_id: embedding || null, expected_version: dataset.version, acknowledge_reindex: ackReindex }); setDraft(savedDraft(saved)); dirty.current = false; notify(embeddingChanged ? "Mappings saved. Reindex existing documents with the new embedding model." : "Mappings applied. The next operation will use these selections."); reload(); })}><Check size={14} />Save &amp; Apply</button></div>
   </div>;
 }
 
