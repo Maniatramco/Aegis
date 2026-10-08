@@ -13,6 +13,7 @@ import "./workspace-flow.css";
 import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
 import { AgentV2 } from "./agent-v2";
+import { fetchWithSessionCsrf } from "./session-request";
 import { ApiDocumentation } from "./api-documentation";
 import { TemporaryDocumentChat } from "./temporary-document-chat";
 import { readPromptUpload, type PromptUpload } from "./prompt-upload";
@@ -215,6 +216,8 @@ export default function App() {
   const [user, setUser] = useState<Entity | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [csrf, setCsrf] = useState("");
+  const authSession = useRef({ userId: user?.id as string | undefined, csrf });
+  authSession.current = { userId: user?.id, csrf };
   const [bootstrap, setBootstrap] = useState(false);
   const [bootstrapToken, setBootstrapToken] = useState("");
   const [username, setUsername] = useState("admin");
@@ -358,8 +361,9 @@ export default function App() {
       const headers: Record<string, string> = {};
       if (body && !(body instanceof FormData))
         headers["Content-Type"] = "application/json";
-      if (csrf) headers["X-CSRF-Token"] = csrf;
-      const r = await fetch(`/api${path}`, {
+      const session = authSession.current;
+      if (session.csrf) headers["X-CSRF-Token"] = session.csrf;
+      const r = await fetchWithSessionCsrf(`/api${path}`, {
         method,
         headers,
         credentials: "include",
@@ -370,7 +374,7 @@ export default function App() {
               ? JSON.stringify(body)
               : undefined,
         signal: signal ? AbortSignal.any([signal,timeout]) : timeout,
-      });
+      }, session, token => { authSession.current = { ...authSession.current, csrf: token }; setCsrf(token); });
       let data;
       try {
         data = await r.json();
@@ -394,7 +398,7 @@ export default function App() {
         if(!quiet)setRequests(previous=>previous.filter(r=>r.id!==requestId));
       }
     },
-    [csrf],
+    [],
   );
   const run = async (fn: () => Promise<void>) => {
     if(operationLock.current)return;
@@ -622,7 +626,8 @@ export default function App() {
   const documentUpload = useDocumentUpload({
     dataset: selectedDataset, enabled: !!datasetEmbedding, externalRequired: externalProvider,
     consent: externalUpload, setConsent: setExternalUpload, maxMb: Number(settings.max_upload_mb || 25),
-    sessionKey: user ? csrf : "",
+    // Token recovery for this account must not discard in-flight upload tracking.
+    sessionKey: user?.id || "",
     contextKey: uploadContextKey,
     documents: docs, jobs, api, refresh: reload, pollError: documentPollError,
     onManage: () => navigate("Datasets"),
