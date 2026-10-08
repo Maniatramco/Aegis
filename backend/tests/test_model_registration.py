@@ -301,3 +301,56 @@ def test_registered_embeddings_cannot_be_ignored_by_managed_retrieval(system):
     result = s.api.put('/api/datasets/'+d['id']+'/models', json=payload)
     assert result.status_code == 400 and 'Local or Qdrant' in result.text
     assert s.api.get('/api/datasets/'+d['id']+'/models').json()['embedding_model_id'] == current['embedding_model_id']
+
+
+def test_local_context_limit_applies_to_next_chat_without_reindex(system, monkeypatch):
+    from app import ollama_provider as ollama
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0];c=conversation(s,d,[doc['id']])
+    m=register(s,body(protocol='ollama',provider_model='qwen3:4b',context_limit=32768));select(s,d,m,'chat')
+    assert m['context_limit']==32768
+    source={'document_id':doc['id'],'document_name':'Synthetic large excerpt','text':'Alice is the owner. '+'x'*70000,'chunk_id':'chunk-1','score':1}
+    monkeypatch.setattr(providers,'search',lambda *args,**kwargs:[source])
+    sent=[]
+    def response(path,payload,timeout):
+        sent.append(payload['options']['num_ctx'])
+        return {'done':True,'done_reason':'stop','message':{'content':'Alice [1].'}}
+    monkeypatch.setattr(ollama,'request',response)
+    failed=message(s,c)
+    assert failed.status_code==502 and 'context budget' in failed.text and '32,768' in failed.text
+    assert sent==[]
+    updated=s.api.put('/api/model-registrations/'+m['id'],json=body(protocol='ollama',provider_model='qwen3:4b',context_limit=65536))
+    assert updated.status_code==200 and updated.json()['context_limit']==65536
+    assert not s.api.get('/api/documents/'+doc['id']).json()['requires_reindex']
+    result=message(s,c)
+    assert result.status_code==200,result.text
+    assert result.json()['message']['model_selection']['context_limit']==65536
+    assert sent==[65536]
+    assert s.api.get('/api/models').json()[0]['context_limit']==65536
+    assert core.settings().get('context_limit') is None
+
+
+def test_local_context_limits_are_per_role_and_queued_extraction_is_pinned(system):
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0]
+    chat_model=register(s,body(protocol='ollama',provider_model='qwen3:4b',context_limit=65536));select(s,d,chat_model,'chat')
+    extraction_model=register(s,body('extraction','ollama',provider_model='qwen3:4b',context_limit=48000));select(s,d,extraction_model,'extraction')
+    t=template(s)
+    run=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':t['id']})
+    queued=core.store.json('jobs/'+run['job']['id']+'.json')['execution']
+    assert queued['settings']['context_limit']==48000
+    assert s.api.put('/api/model-registrations/'+extraction_model['id'],json=body('extraction','ollama',provider_model='qwen3:4b',context_limit=131072)).status_code==200
+    dataset_record=routing.owned(d['id'],s.owner,'knowledge_base')
+    assert routing.execution_snapshot(dataset_record,'chat')['settings']['context_limit']==65536
+    assert routing.execution_snapshot(dataset_record,'extraction')['settings']['context_limit']==131072
+    assert core.store.json('jobs/'+run['job']['id']+'.json')['execution']['settings']['context_limit']==48000
+
+
+@pytest.mark.parametrize('limit',[8191,262145,0,True,32768.5,'65536'])
+def test_invalid_local_context_limits_rejected(system,limit):
+    assert system.api.post('/api/model-registrations',json=body(protocol='ollama',context_limit=limit)).status_code==422
+
+
+def test_local_context_defaults_and_unsupported_categories(system):
+    m=register(system,body(protocol='ollama'))
+    assert m['context_limit']==32768
+    assert system.api.post('/api/model-registrations',json=body('embedding','ollama',context_limit=65536)).status_code==400
+    assert system.api.post('/api/model-registrations',json=body(context_limit=65536)).status_code==400

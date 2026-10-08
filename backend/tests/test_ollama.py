@@ -162,3 +162,23 @@ def run_workflow(s):
 def test_real_ollama_end_to_end(system,monkeypatch):
     monkeypatch.setenv('AEGIS_LOCAL_ONLY','true')
     run_workflow(system)
+
+
+def test_configured_context_allows_large_input_and_never_exceeds_non_power_of_two_limit(monkeypatch):
+    messages=[{'role':'user','content':'x'*70000}]
+    monkeypatch.setattr(core,'settings',lambda:{'context_limit':32768})
+    with pytest.raises(ollama.OllamaError,match='32,768'):ollama.generation_options(messages,4096)
+    monkeypatch.setattr(core,'settings',lambda:{'context_limit':48000})
+    options=ollama.generation_options(messages,4096)
+    assert options['num_ctx']==48000 and options['num_predict']==4096
+    assert messages[0]['content']=='x'*70000
+    monkeypatch.setattr(core,'settings',lambda:{'context_limit':65536})
+    assert ollama.generation_options(messages,4096)['num_ctx']==65536
+
+
+def test_context_budget_includes_output_reservation_and_keeps_legacy_default(monkeypatch):
+    messages=[{'role':'user','content':'x'*8000}]
+    monkeypatch.setattr(core,'settings',lambda:{'context_limit':8192})
+    with pytest.raises(ollama.OllamaError,match='including the answer'):ollama.generation_options(messages,4096)
+    monkeypatch.setattr(core,'settings',lambda:{})
+    assert ollama.generation_options([{'role':'user','content':'Short question'}],4096)['num_ctx']==8192

@@ -35,7 +35,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   models: Entity[]; settings: Entity; api: Api; run: (fn: () => Promise<void>) => Promise<void>;
   busy: boolean; onSaved: (model: Entity) => void; onMapping: () => void;
 }) {
-  const blank = (): Entity => ({ name: "", category: "chat", provider_model: "", timeout: 60, enabled: true,
+  const blank = (): Entity => ({ name: "", category: "chat", provider_model: "", timeout: 60, context_limit: 32768, enabled: true,
     credentials: {}, clear_credentials: false, allow_external: false,
     connection: { protocol: "ollama", endpoint: settings.ollama_endpoint || endpointHints.ollama, auth_mode: "none", region: "", project_id: "", compartment_id: "", profile: "DEFAULT", embedding_format: "titan", chat_format: "generic", dimensions: null, structured_output: true } });
   const [form, setForm] = useState<Entity>(blank);
@@ -54,7 +54,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
     const initial = blank();
     if (model) {
       initial.name = model.name; initial.provider_model = model.provider_model;
-      initial.category = model.capabilities[0]; initial.enabled = model.enabled; initial.timeout = model.timeout || 60;
+      initial.category = model.capabilities[0]; initial.enabled = model.enabled; initial.timeout = model.timeout || 60; initial.context_limit = model.context_limit || 32768;
       if (model.connection) initial.connection = { ...initial.connection, ...model.connection };
       else if (model.provider !== "ollama") {
         initial.connection = { ...initial.connection, protocol: "openai-compatible", auth_mode: "api_key", endpoint: "" };
@@ -67,7 +67,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   const remote = form.connection.protocol !== "ollama";
   const visible = models.filter(m => `${m.name} ${m.provider_model} ${m.capabilities.join(" ")}`.toLowerCase().includes(search.toLowerCase()));
   const retainedCredentials = editing?.credential_configured && editing?.connection && ["endpoint", "protocol", "auth_mode"].every(key => editing.connection[key] === form.connection[key]);
-  const payload = () => ({ ...form, existing_model_id: editing?.id || null });
+  const payload = () => ({ ...form, context_limit: form.connection.protocol === "ollama" && form.category !== "embedding" ? form.context_limit : null, existing_model_id: editing?.id || null });
 
   return <div className="model-registration">
     {settings.local_only && <div className="notice"><Layers size={17} /><div>This deployment runs in local-only mode. You can register cloud connections, but testing and applying them require cloud use to be enabled by the deployment administrator.</div></div>}
@@ -75,7 +75,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
       <div className="panel-head"><div><h2>Registered models</h2><p className="muted small">Register a model once, then use it across your datasets.</p></div><button className="btn primary" onClick={() => start()}><Plus size={15} />Register model</button></div>
       {!!models.length && <label className="registration-search"><Search size={16} /><input aria-label="Search registered models" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search models or categories" /></label>}
       <div className="registration-list">{visible.map(m => <div className="registration-row" key={m.id}>
-        <span className="file-icon"><Layers size={18} /></span><div className="registration-name"><strong>{m.name}</strong><small>{m.provider_model} · {protocols.find(([value]) => value === m.provider)?.[1] || m.provider}</small>{m.connection && <small className="registration-endpoint">{m.connection.endpoint}</small>}</div>
+        <span className="file-icon"><Layers size={18} /></span><div className="registration-name"><strong>{m.name}</strong><small>{m.provider_model} · {protocols.find(([value]) => value === m.provider)?.[1] || m.provider}</small>{m.context_limit && <small>Context limit: {m.context_limit.toLocaleString()} tokens</small>}{m.connection && <small className="registration-endpoint">{m.connection.endpoint}</small>}</div>
         <div className="model-chips">{m.capabilities.map((cap: string) => <span className="model-chip" key={cap}>{cap === "extraction" ? "Extraction" : cap === "embedding" ? "Embedding" : "Chat"}</span>)}<span className={`pill ${m.enabled ? "green" : "amber"}`}>{m.enabled ? "Enabled" : "Disabled"}</span></div>
         <button className="btn" disabled={busy} onClick={() => start(m)}>Edit <span className="sr-only">{m.name}</span></button>
       </div>)}</div>
@@ -97,6 +97,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
             {form.connection.protocol === "oci" && <div className="field"><label htmlFor="registration-compartment">Compartment OCID</label><input id="registration-compartment" value={form.connection.compartment_id} onChange={e => connectionChange("compartment_id", e.target.value)} required /></div>}
             <div className="field"><label htmlFor="registration-auth">Authentication</label><select id="registration-auth" value={form.connection.auth_mode} onChange={e => connectionChange("auth_mode", e.target.value)}>{authOptions[form.connection.protocol].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
             <div className="field"><label htmlFor="registration-timeout">Timeout (seconds)</label><input id="registration-timeout" type="number" min={5} max={600} value={form.timeout} onChange={e => change("timeout", Number(e.target.value))} required /></div>
+            {form.connection.protocol === "ollama" && form.category !== "embedding" && <div className="field registration-full"><label htmlFor="registration-context-limit">Local context limit (tokens)</label><input id="registration-context-limit" type="number" min={8192} max={262144} step={1} value={form.context_limit} onChange={e => change("context_limit", Number(e.target.value))} aria-describedby="registration-context-help" required /><small id="registration-context-help">Default: 32,768. Includes document text, instructions, chat history, and 4,096 tokens reserved for the answer. Use a value supported by your installed model; larger limits use more memory and may take longer. Applies to the next run without reindexing.</small></div>}
             {form.connection.auth_mode === "config_profile" && <div className="field"><label htmlFor="registration-profile">Server credential profile</label><input id="registration-profile" value={form.connection.profile} onChange={e => connectionChange("profile", e.target.value)} required /></div>}
           </div>
           {!!credentialFields[form.connection.auth_mode]?.length && <div className="registration-credentials"><h3>Credentials</h3><p className="muted small">{retainedCredentials ? "Leave all credential fields empty to retain the saved credentials. Enter the complete set to replace them." : "Enter credentials for this endpoint. They are never returned to the browser."}</p><div className="registration-fields">

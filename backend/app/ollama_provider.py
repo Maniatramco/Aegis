@@ -47,9 +47,14 @@ def generation_options(messages,max_output):
     # during generation and silently loses document facts. This conservative
     # estimate is for local text workloads, not an exact tokenizer count.
     needed=len(json.dumps(messages,ensure_ascii=False).encode('utf-8'))//2+max_output+512
+    from . import core
+    limit=core.settings().get('context_limit') or 32768
+    if isinstance(limit,bool) or not isinstance(limit,int) or not 8192<=limit<=262144:
+        raise OllamaError('Invalid local context budget. Set 8,192 to 262,144 tokens in Model Registration.')
+    if needed>limit:
+        raise OllamaError(f'Selected content exceeds the local context budget ({limit:,} tokens). Estimated requirement: {needed:,} tokens including the answer. Choose fewer documents, a smaller scope, or increase this model\'s context limit in Model Registration.')
     context=8192
-    while context<needed:context*=2
-    if context>32768:raise OllamaError('Selected content exceeds the local context budget; choose fewer documents or a smaller scope.')
+    while context<needed:context=min(context*2,limit)
     return {'temperature':0.7,'top_p':0.8,'top_k':20,'repeat_penalty':1.1,
             'num_ctx':context,'num_predict':max_output,'seed':42}
 

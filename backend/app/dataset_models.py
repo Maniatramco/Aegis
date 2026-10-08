@@ -8,7 +8,7 @@ from . import core, providers
 
 CAPABILITIES={'chat','extraction','embedding'}
 ROUTING_DEFAULTS={'mappings':[], 'default_chat_model_id':None, 'default_extraction_model_id':None, 'embedding_model_id':None, 'index_generation':0}
-MODEL_KEYS=('model_provider','model','model_connection','timeout','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_model')
+MODEL_KEYS=('model_provider','model','model_connection','timeout','context_limit','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_model')
 EMBED_KEYS=('embedding_provider','embedding_model','embedding_connection','search_provider','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_vector_store_id','timeout','chunk_size','chunk_overlap','top_k')
 
 def owned(id,owner,kind):
@@ -48,7 +48,7 @@ def model_public(r):
     if data['capabilities']==['embedding'] and snap['settings']['search_provider']=='oci':p='oci'
     connection=snap['settings'].get('embedding_connection' if data['capabilities']==['embedding'] else 'model_connection')
     configured=(bool(snap['secret_refs'].get('connection')) or connection.get('auth_mode') in ('none','server_identity','config_profile')) if connection else p not in ('openai','oci') or bool(snap['secret_refs'].get(p)) or (p=='oci' and snap['settings'].get('oci_auth_mode')!='api_key')
-    return core.representation(r)|data|{'provider':connection['protocol'] if connection else p,'connection_profile_version':snap['connection_profile_version'],'credential_configured':configured,'connection':copy.deepcopy(connection),'timeout':snap['settings'].get('timeout',60)}
+    return core.representation(r)|data|{'provider':connection['protocol'] if connection else p,'connection_profile_version':snap['connection_profile_version'],'credential_configured':configured,'connection':copy.deepcopy(connection),'timeout':snap['settings'].get('timeout',60),'context_limit':(snap['settings'].get('context_limit') or 32768) if p=='ollama' and data['capabilities']!=['embedding'] else None}
 
 def dataset_config(r):return core.store.json(r.ref)
 def routing_public(r):
@@ -88,6 +88,7 @@ def resolve_model(r,capability,model_id=None):
         snap['settings']['embedding_model']=data['provider_model']
     else:
         snap['settings']['model']=data['provider_model'];snap['settings']['oci_model']=data['provider_model']
+        snap['settings'].setdefault('context_limit',32768 if snap['settings']['model_provider']=='ollama' else None)
     return snap
 
 def embedding_snapshot(r):
@@ -127,7 +128,7 @@ def execution_snapshot(r,capability,model_id=None):
 def public_selection(snapshot):
     selected={k:snapshot.get(k) for k in ('model_id','model_name','model_version','provider_model','connection_profile_id','connection_profile_version','dataset_id','index_generation')}
     cfg=snapshot.get('settings',{})
-    return selected|{k:cfg.get(k) for k in ('model_provider','embedding_provider','search_provider')}
+    return selected|{k:cfg.get(k) for k in ('model_provider','embedding_provider','search_provider','context_limit')}
 
 def documents_scope(owner,dataset_id,ids=None):
     docs=[owned(id,owner,'document') for id in ids] if ids else []

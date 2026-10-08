@@ -32,6 +32,7 @@ class RegistrationInput(BaseModel):
     provider_model: str = Field(min_length=1, max_length=200)
     connection: ConnectionInput
     timeout: int = Field(default=60, ge=5, le=600)
+    context_limit: int | None = Field(default=None, ge=8192, le=262144, strict=True)
     enabled: bool = True
     credentials: dict[str, SecretStr] = Field(default_factory=dict, max_length=12)
     clear_credentials: bool = False
@@ -75,6 +76,12 @@ def prepare(body, owner, existing=None):
         cfg['embedding_model' if role == 'embedding' else 'model'] = body.provider_model.strip()
         cfg[role + '_connection'] = c
         cfg['timeout'] = body.timeout
+        if role == 'model' and c['protocol'] == 'ollama':
+            cfg['context_limit'] = body.context_limit if body.context_limit is not None else (snapshot['settings'].get('context_limit') if existing else None) or 32768
+        else:
+            if body.context_limit is not None:
+                raise ConnectionError('Local context limit applies only to Ollama Chat and Extraction models.')
+            cfg.pop('context_limit', None)
         return cfg, secret, (md['capabilities'] if md else [body.category])
     except ConnectionError as exc:
         raise HTTPException(400, str(exc)) from exc
