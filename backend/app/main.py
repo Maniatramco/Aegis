@@ -738,3 +738,6 @@ def configure_local_models(id:str,owner=Depends(auth)):
         return routing.dataset_public(updated)
 
 temporary_files.install(app,auth)
+
+from . import api_documentation
+api_documentation.install(app,auth)

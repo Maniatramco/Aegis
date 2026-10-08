@@ -12,6 +12,7 @@ import { OperationProgress } from "./operation-progress";
 import "./workspace-flow.css";
 import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
+import { ApiDocumentation } from "./api-documentation";
 import {
   Activity,
   ArrowDownToLine,
@@ -68,6 +69,7 @@ type View =
   | "Model Registration"
   | "Model Mapping"
   | "Services & migration"
+  | "API Documentation"
   | "Setup";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Home", icon: Database, group: "WORKSPACE" },
@@ -82,6 +84,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Model Registration", icon: Layers },
   { name: "Model Mapping", icon: BookOpen },
   { name: "Services & migration", icon: Cloud },
+  { name: "API Documentation", icon: FileJson },
   { name: "Setup", icon: Cog },
 ];
 const descriptions: Record<View, string> = {
@@ -103,6 +106,7 @@ const descriptions: Record<View, string> = {
   "Services & migration":
     "A clear path from local deployment to your cloud environment.",
   Setup: "Get your workspace ready, one deliberate step at a time.",
+  "API Documentation": "Learn the FastAPI endpoints behind Aegis, with requests, schemas, and workflow guides.",
 };
 const byteSize = (n: number) =>
   n > 1048576
@@ -1014,7 +1018,7 @@ export default function App() {
               <p className="muted small">{descriptions[view]}</p>
             </div>
             <div className="row">
-              <button
+              {view !== "API Documentation" && <button
                 className="btn"
                 onClick={reload}
                 disabled={loading}
@@ -1025,7 +1029,7 @@ export default function App() {
                   className={loading ? "animate-spin" : ""}
                 />
                 <span>Refresh</span>
-              </button>
+              </button>}
               {view === "Dashboard" && (
                 <button
                   className="btn primary"
@@ -1284,6 +1288,7 @@ export default function App() {
             </>
           )}
           {view === "Home" && <DatasetHome datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis Agent"); }} />}
+          {view === "API Documentation" && <ApiDocumentation api={api} />}
           {view === "Datasets" && (
             <>
             <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus} onUploadWorkflowVisible={setUploadWorkflowVisible}

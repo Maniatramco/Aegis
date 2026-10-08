@@ -1,0 +1,79 @@
+"use client";
+import { useEffect, useMemo, useState } from 'react';
+import { BookOpen, Check, Code2, Copy, Download, Search, RefreshCw, ArrowRight, AlertCircle } from 'lucide-react';
+import { curlExample, expandSchema, listOperations, requestExample, resolveSchema, schemaType, type Json, type Operation } from './api-reference';
+import './api-documentation.css';
+
+const lessons = [
+  { title: 'Sign in', description: 'Login creates a 12-hour session. The browser sends its cookie automatically. Get the CSRF token from login or /auth/me and send X-CSRF-Token when changing data with cookie authentication.', keys: ['POST /api/auth/login', 'GET /api/auth/me'] },
+  { title: 'Register and map models', description: 'Register connection details once, create a dataset, then select its three required roles: Embedding, Chat, and Extraction. Later operations use the saved mapping without a restart. Embedding changes require reindexing existing documents.', keys: ['POST /api/model-registrations', 'POST /api/model-registrations/test', 'POST /api/datasets', 'PUT /api/datasets/{id}/models'] },
+  { title: 'Upload and follow processing', description: 'Send files and dataset_id as multipart form data. The API stores originals and queues work; the worker reads text, creates chunks, embeds them, and builds the index. Follow the returned jobs until the documents are ready. A successful upload response does not mean indexing has finished.', keys: ['POST /api/documents/upload', 'GET /api/jobs', 'GET /api/documents/{id}'] },
+  { title: 'Ask with evidence', description: 'Create a conversation in one dataset. A message retrieves matching indexed chunks and sends that evidence to the selected Chat model. Answers include source citations. The stream variant sends events progressively; wait for its terminal event.', keys: ['POST /api/conversations', 'POST /api/conversations/{id}/messages', 'POST /api/conversations/{id}/messages/stream'] },
+  { title: 'Extract, review, and export', description: 'Save a strict object JSON Schema as a template. Extract from ready documents, follow the job, then read and review the result. Send the current version when saving a review to prevent conflicting edits. Re-extraction preserves saved versions.', keys: ['POST /api/templates', 'POST /api/extractions', 'GET /api/extractions/{id}', 'PATCH /api/extractions/{id}', 'POST /api/extractions/{id}/reextract', 'GET /api/extractions/{id}/export'] },
+];
+
+function CodeBlock({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { setCopied(false); setError(''); }, [value]);
+  return <div className="api-code"><div><span>{label}</span><button className="btn" onClick={async () => { try { await navigator.clipboard.writeText(value); setCopied(true); setError(''); } catch { setError('Copy unavailable. Select the example text to copy it.'); } }} aria-label={`Copy ${label}`}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}</button></div><pre><code>{value}</code></pre>{error && <p role="status">{error}</p>}</div>;
+}
+
+function constraints(s: Json): string {
+  return [s.description, s.enum && `Allowed: ${s.enum.join(', ')}`, s.default !== undefined && `Default: ${JSON.stringify(s.default)}`, s.minLength !== undefined && `Min length: ${s.minLength}`, s.maxLength !== undefined && `Max length: ${s.maxLength}`, s.minimum !== undefined && `Minimum: ${s.minimum}`, s.maximum !== undefined && `Maximum: ${s.maximum}`, s.minItems !== undefined && `Min items: ${s.minItems}`, s.maxItems !== undefined && `Max items: ${s.maxItems}`].filter(Boolean).join(' · ') || 'See schema for nested fields and validation.';
+}
+
+export function ApiDocumentation({ api }: { api: (path: string, method?: string, body?: unknown, signal?: AbortSignal) => Promise<any> }) {
+  const [data, setData] = useState<Json | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
+  const [search, setSearch] = useState('');
+  const [group, setGroup] = useState('All categories');
+  const [method, setMethod] = useState('All methods');
+  const [selected, setSelected] = useState('POST /api/documents/upload');
+  const [tab, setTab] = useState('API reference');
+  useEffect(() => {
+    const controller = new AbortController(); setLoading(true); setError('');
+    api('/documentation', 'GET', undefined, controller.signal).then(result => { if (!controller.signal.aborted) setData(result); })
+      .catch(reason => { if (!controller.signal.aborted) setError(reason.message || 'Could not load the API documentation.'); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [api, revision]);
+  const operations = useMemo(() => listOperations(data || {}), [data]);
+  const groups = [...new Set(operations.map(op => op.group))].sort();
+  const visible = operations.filter(op => (group === 'All categories' || group === op.group) && (method === 'All methods' || method === op.method) && `${op.key} ${op.group} ${op.definition.summary} ${op.definition.description}`.toLowerCase().includes(search.toLowerCase()));
+  const active = visible.find(op => op.key === selected) || visible[0];
+  const openEndpoint = (key: string) => { setSelected(key); setSearch(''); setGroup('All categories'); setMethod('All methods'); setTab('API reference'); };
+  const spec = data?.schema || {};
+
+  return <div className="api-documentation">
+    <section className="api-intro panel"><div><span className="api-eyebrow"><Code2 size={16} /> FASTAPI REFERENCE</span><h2>Learn how Aegis works</h2><p>Explore the APIs behind your workspace, from login to reviewed results.</p><div className="api-counts"><span><strong>{operations.length}</strong> endpoints</span><span><strong>{groups.length}</strong> categories</span><span>Live backend schema</span></div></div><div className="api-intro-actions">{data && !loading ? <a className="btn" href="/api/documentation/export" download="aegis-openapi.json"><Download size={15} />OpenAPI JSON</a> : <button className="btn" disabled><Download size={15} />OpenAPI JSON</button>}<button className="btn" disabled={loading} onClick={() => setRevision(value => value + 1)}><RefreshCw size={15} className={loading ? 'spin' : ''} />Reload documentation</button></div></section>
+    <div className="tabs" role="tablist" aria-label="Documentation views">{['API reference', 'Workflow guide'].map(name => <button key={name} role="tab" aria-selected={tab === name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>{name === 'API reference' ? <Code2 size={16} /> : <BookOpen size={16} />}{name}</button>)}</div>
+    {loading && <p role="status" className="api-load">Loading the live endpoint reference…</p>}
+    {error && <div className="notice api-error" role="alert"><AlertCircle size={18} /><div>{error}<button className="btn" onClick={() => setRevision(value => value + 1)}>Retry</button></div></div>}
+    {data && tab === 'Workflow guide' && <section className="api-lessons" aria-label="Workflow guide">{lessons.map((lesson, i) => <article className="panel" key={lesson.title}><span className="api-lesson-number">{i + 1}</span><div><h3>{lesson.title}</h3><p>{lesson.description}</p><div className="api-lesson-links">{lesson.keys.map(key => <button className="btn" key={key} onClick={() => openEndpoint(key)}><code>{key}</code><ArrowRight size={14} /></button>)}</div></div></article>)}<article className="panel api-concepts"><h3>What lives where?</h3><p><strong>FastAPI</strong> validates requests and coordinates work. <strong>SQLite</strong> tracks accounts, datasets, records, and jobs. <strong>Object storage</strong> holds originals and versioned content. The configured <strong>vector index</strong> supports retrieval; Qdrant is one supported option. The <strong>worker</strong> handles queued indexing and extraction. The registered <strong>model adapters</strong> connect these operations to local or supported cloud models.</p></article></section>}
+    {data && tab === 'API reference' && <><div className="api-filters"><label className="api-search"><Search size={17} /><input aria-label="Search API endpoints" placeholder="Search endpoints, features, or descriptions" value={search} onChange={e => setSearch(e.target.value)} /></label><select aria-label="API category" value={group} onChange={e => setGroup(e.target.value)}><option>All categories</option>{groups.map(g => <option key={g}>{g}</option>)}</select><select aria-label="HTTP method" value={method} onChange={e => setMethod(e.target.value)}><option>All methods</option>{['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m}>{m}</option>)}</select></div><div className="api-reference-layout"><section className="api-endpoints panel" aria-label="API endpoints"><div className="api-list-heading">Endpoints <span>{visible.length} of {operations.length}</span></div><div className="api-endpoint-scroll">{groups.filter(g => visible.some(op => op.group === g)).map(g => <div key={g}><h3>{g}</h3>{visible.filter(op => op.group === g).map(op => <button key={op.key} className={`api-endpoint ${active?.key === op.key ? 'selected' : ''}`} aria-pressed={active?.key === op.key} onClick={() => setSelected(op.key)}><span className={`api-method ${op.method.toLowerCase()}`}>{op.method}</span><span><code>{op.path}</code><small>{op.definition.summary}</small></span></button>)}</div>)}{!visible.length && <div className="api-no-results"><p>No matching endpoints.</p><button className="btn" onClick={() => { setSearch(''); setGroup('All categories'); setMethod('All methods'); }}>Clear filters</button></div>}</div></section>{active ? <EndpointDetails key={active.key} op={active} spec={spec} /> : <section className="panel api-no-results">Try a different search or clear the filters.</section>}</div></>}
+  </div>;
+}
+
+function EndpointDetails({ op, spec }: { op: Operation; spec: Json }) {
+  const content = op.definition.requestBody?.content || {};
+  const media = Object.keys(content)[0];
+  const schema = resolveSchema(content[media]?.schema, spec);
+  const parameters = op.definition.parameters || [];
+  const fields = Object.entries(schema.properties || {});
+  const binary = /\/(download|source|export)$/.test(op.path);
+  const stream = op.path.endsWith('/stream');
+  return <article className="api-detail panel" aria-label="Endpoint details"><div className="api-detail-head"><span className={`api-method ${op.method.toLowerCase()}`}>{op.method}</span><span>{op.group}</span></div><h2>{op.definition.summary}</h2><code className="api-path">{op.path}</code><p className="api-description">{op.definition.description || 'Read the request and response schemas below for this operation.'}</p>
+    <div className="api-auth"><strong>Authentication</strong><span>{op.notes.authentication}</span>{op.notes.csrf_required && <small>Cookie authentication also requires X-CSRF-Token. Bearer authentication does not use the cookie CSRF check.</small>}</div>
+    <details className="api-details"><summary>Calling the API</summary><p>Use the application origin (for example, http://127.0.0.1:3001) for /api routes, or the FastAPI origin for /health and /ready. Recovery requires its private direct-loopback flow and is blocked by the application proxy. Replace API_BASE_URL and all id placeholders. Examples use POSIX shell syntax; on Windows use curl.exe and adapt shell quoting.</p><p>First call login with -c cookies.txt to save its session cookie. Use -b cookies.txt for protected calls and copy the returned csrf_token into X-CSRF-Token on changes. The backend also accepts Authorization: Bearer with an existing session token; login does not return a bearer token.</p></details>
+    <h3>Request</h3>{!!parameters.length && <div className="api-table-wrap"><table><caption>Path and query parameters</caption><thead><tr><th>Name</th><th>Location / type</th><th>Required</th><th>Details</th></tr></thead><tbody>{parameters.map((p: Json) => <tr key={`${p.in}:${p.name}`}><td><code>{p.name}</code></td><td>{p.in} · {schemaType(p.schema || {}, spec)}</td><td>{p.required ? 'Yes' : 'No'}</td><td>{constraints(resolveSchema(p.schema, spec))}</td></tr>)}</tbody></table></div>}
+    {media ? <><p className="api-small">Body: <code>{media}</code> · {op.definition.requestBody?.required ? 'Required' : 'Optional'}</p>{!!fields.length && <div className="api-table-wrap"><table><caption>Request body fields</caption><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Details</th></tr></thead><tbody>{fields.map(([name, field]) => <tr key={name}><td><code>{name}</code></td><td>{schemaType(field as Json, spec)}</td><td>{(schema.required || []).includes(name) ? 'Yes' : 'No'}</td><td>{constraints(resolveSchema(field as Json, spec))}</td></tr>)}</tbody></table></div>}{media === 'application/json' && <CodeBlock value={JSON.stringify(requestExample(op, spec), null, 2)} label="Example request body" />}<details className="api-details"><summary>Full request schema · nested fields</summary><CodeBlock value={JSON.stringify(expandSchema(schema, spec), null, 2)} label="Request schema" /></details></> : <p className="api-small">No request body is defined for this endpoint.</p>}
+    <CodeBlock value={curlExample(op, spec)} label="cURL example" /><p className="api-small">Examples are illustrative. Replace placeholders and choose values valid for your workspace.</p>
+    <h3>Response</h3>{op.notes.response_example !== undefined && <><CodeBlock value={JSON.stringify(op.notes.response_example, null, 2)} label="Abridged example response" /><p className="api-small">Illustrative values and selected fields from the handler’s response. Additional metadata may be returned.</p></>}{stream && <p className="api-response-note">Runtime response: text/event-stream (SSE). Read events progressively and check the terminal event for completion or failure.</p>}{binary && <p className="api-response-note">Runtime response: file or export content. Content-Type and Content-Disposition depend on the operation/file/format; the generated JSON declaration below does not describe the downloaded bytes.</p>}
+    {Object.entries(op.definition.responses || {}).map(([code, response]) => { const r = response as Json; const responseContent = r.content || {}; const declared = Object.entries(responseContent); const hasShape = declared.some(([, value]) => { const s = resolveSchema((value as Json).schema, spec); return !!(s.type || s.properties || s.$ref || s.anyOf || s.oneOf); }); return <details className="api-details" key={code} open={code === '200'}><summary><strong>{code}</strong> · {r.description}</summary>{!hasShape && <p>The backend does not declare a typed response schema for this status. Read the operation notes for its behavior; the exact returned fields are not specified by OpenAPI.</p>}<CodeBlock value={JSON.stringify(r, null, 2)} label={`Response ${code} schema`} /></details>; })}
+    <details className="api-details"><summary>Errors and troubleshooting</summary><p>Runtime errors are separate from the declared responses above. Protected endpoints can reject missing/expired authentication (401), CSRF checks (403), or unavailable owned records (404). Validation failures use 422; business rules may use 400 or 409. Provider-dependent operations may return service/provider errors. These statuses vary by operation.</p><pre><code>{'{ "detail": "Explanation of the error" }'}</code></pre><p>A 422 detail contains a validation-error array rather than a string. For queued operations, also inspect the job status and error after the initial request succeeds.</p></details>
+    <footer className="api-source">Backend source: <code>{op.notes.source}</code><span>OpenAPI {spec.openapi} · Aegis {spec.info?.version}</span></footer>
+  </article>;
+}
