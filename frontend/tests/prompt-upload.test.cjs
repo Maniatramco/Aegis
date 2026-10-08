@@ -41,3 +41,35 @@ test('review dialog shows complete escaped JSON and requires an explicit confirm
  assert.match(preview,/&lt;script&gt;/);assert.doesNotMatch(preview,/<script>/);
  assert.match(preview,/Use Send to save it/);
 });
+
+const {filterPromptTemplates,promptTemplateDownload}=load(path.resolve(__dirname,'../app/prompt-template-data.ts'));
+const {PromptTemplates}=load(path.resolve(__dirname,'../app/prompt-templates.tsx'));
+test('dataset filtering keeps scoped prompts separate and legacy prompts accessible',()=>{
+ const prompts=[{id:'a',name:'Invoice',dataset_id:'one'},{id:'b',name:'Invoice two',dataset_id:'two'},{id:'c',name:'Shared invoice',dataset_id:null}];
+ assert.deepEqual(filterPromptTemplates(prompts,'one',' invoice ').map(t=>t.id),['a']);
+ assert.deepEqual(filterPromptTemplates(prompts,'two','').map(t=>t.id),['b']);
+ assert.deepEqual(filterPromptTemplates(prompts,'shared','').map(t=>t.id),['c']);
+ assert.equal(filterPromptTemplates(prompts,'all','INVOICE').length,3);
+ assert.equal(filterPromptTemplates(prompts,'one','missing').length,0);
+});
+test('download round trips complete nested schema through Upload Prompt without binding destination dataset',async()=>{
+ const nested={...schema,description:'Find amounts',properties:{group:{type:'object',properties:{amount:{type:['number','null'],description:'Total',minimum:0}},required:['amount'],additionalProperties:false}},required:['group']};
+ const exported=promptTemplateDownload({name:'Invoice / totals?',schema:nested,version:3,dataset_id:'source'});
+ assert.equal(exported.fileName,'Invoice - totals--v3.json');
+ const uploaded=await readPromptUpload(file(exported.json,exported.fileName));
+ assert.equal(uploaded.name,'Invoice / totals?');assert.deepEqual(uploaded.schema,nested);
+ assert.equal(JSON.parse(exported.json).dataset_id,undefined);
+ assert.deepEqual(JSON.parse(promptTemplateDownload({name:'Legacy',schema_json:schema}).json).schema,schema);
+ assert.throws(()=>promptTemplateDownload({name:'Broken'}),/no valid schema/);
+});
+test('template list renders one row per selected dataset prompt with all row actions',()=>{
+ const markup=renderToStaticMarkup(React.createElement(PromptTemplates,{templates:[{id:'a',name:'Invoice one',schema,dataset_id:'one',version:2},{id:'b',name:'Other dataset',schema,dataset_id:'two'}],datasets:[{id:'one',name:'Invoices'},{id:'two',name:'Other'}],selectedDataset:'one',initialId:'',api:async()=>{},onSaved:()=>{},onUse:()=>{},onDirty:()=>{}}));
+ assert.match(markup,/prompt-template-row/);assert.match(markup,/Invoice one/);assert.doesNotMatch(markup,/Prompt template Other dataset/);
+ for(const label of ['Edit','Versions','Download','Use template'])assert.match(markup,new RegExp(label));
+ assert.match(markup,/Invoices \u00b7 1 field \u00b7 Version 2/);assert.match(markup,/href="\/api\/templates\/a\/export\?version=2"/);assert.match(markup,/download="Invoice one-v2.json"/);assert.doesNotMatch(markup,/prompt-template-editor/);
+});
+test('editing a scoped template displays its fixed dataset and existing fields',()=>{
+ const markup=renderToStaticMarkup(React.createElement(PromptTemplates,{templates:[{id:'a',name:'Invoice',schema,dataset_id:'one'}],datasets:[{id:'one',name:'Invoices'}],selectedDataset:'one',initialId:'a',api:async()=>{},onSaved:()=>{},onUse:()=>{},onDirty:()=>{}}));
+ assert.match(markup,/<select aria-label="Template dataset"[^>]*disabled/);
+ assert.match(markup,/The dataset is fixed/);assert.match(markup,/Save new version/);
+});

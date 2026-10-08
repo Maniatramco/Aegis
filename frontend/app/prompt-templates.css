@@ -1,0 +1,15 @@
+.dataset-prompt-layout{grid-template-columns:minmax(0,1fr);gap:16px}
+.prompt-library{padding:20px}
+.prompt-library .panel-head{margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.prompt-library-filters{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(0,1fr);gap:16px}
+.prompt-library-count{margin:12px 0 8px}
+.prompt-template-row{display:flex;align-items:center;gap:16px;min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:8px}
+.prompt-template-row.selected{border-color:#0667ef;background:#f8fbff}
+.prompt-row-details{flex:1;min-width:0}
+.prompt-row-details h3{font-size:var(--text-subheading);margin:0;overflow-wrap:anywhere}
+.prompt-row-details p{margin:3px 0 0;overflow-wrap:anywhere}
+.prompt-row-actions{display:flex;gap:8px;flex-shrink:0}
+.prompt-row-actions .btn{padding:8px 12px}
+.dataset-prompt-layout .prompt-template-editor{scroll-margin-top:20px}
+@media(max-width:760px){.prompt-template-row{flex-wrap:wrap;gap:10px}.prompt-row-details{flex-basis:100%}.prompt-row-actions{flex-wrap:wrap}.prompt-row-actions .btn{padding:7px 10px}}
+@media(max-width:560px){.prompt-library{padding:16px}.prompt-library-filters{grid-template-columns:minmax(0,1fr);gap:10px}.prompt-row-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.prompt-row-actions .btn{justify-content:center}}

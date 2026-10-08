@@ -40,3 +40,23 @@ def test_dataset_template_import_scope_validation_and_extraction_stages(system):
     assert result['status']=='ready' and result['template_id']==template['id']
     job=next(j for j in system.api.get('/api/jobs').json() if j['id']==run['job']['id'])
     assert all(stage['status']=='completed' for stage in job['workflow']['stages'].values())
+
+
+def test_template_json_download_versions_and_owner_scope(system):
+    schema={'type':'object','properties':{'total':{'type':['number','null'],'description':'Amount','minimum':0}},'required':['total'],'additionalProperties':False}
+    d=dataset(system)
+    t=post(system,'/api/templates',{'name':'Invoice / totals','schema':schema,'dataset_id':d['id']})
+    updated=schema|{'description':'New instructions'}
+    response=system.api.put('/api/templates/'+t['id'],json={'name':'Invoice totals','schema':updated,'dataset_id':d['id']})
+    assert response.status_code==200
+    current=system.api.get('/api/templates/'+t['id']+'/export')
+    assert current.status_code==200 and current.json()=={'name':'Invoice totals','schema':updated}
+    assert current.headers['content-type'].startswith('application/json')
+    assert 'attachment;' in current.headers['content-disposition'] and 'Invoice%20totals-v2.json' in current.headers['content-disposition']
+    old=system.api.get('/api/templates/'+t['id']+'/export?version=1')
+    assert old.json()=={'name':'Invoice / totals','schema':schema}
+    assert 'Invoice%20-%20totals-v1.json' in old.headers['content-disposition']
+    assert system.api.get('/api/templates/'+t['id']+'/export?version=0').status_code==404
+    assert system.api.get('/api/templates/'+t['id']+'/export?version=3').status_code==404
+    system.owner='bob'
+    assert system.api.get('/api/templates/'+t['id']+'/export').status_code==404

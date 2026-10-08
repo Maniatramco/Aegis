@@ -335,6 +335,17 @@ def update_template(id:str,body:TemplateInput,owner=Depends(auth)):
 @app.get('/api/templates/{id}/versions')
 def template_versions(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'template');return [store.json(f'template/{id}/v{n}.json') for n in range(1,r.version+1)]
+@app.get('/api/templates/{id}/export')
+def export_template(id:str,version:int|None=None,owner=Depends(auth)):
+    from urllib.parse import quote
+    import re
+    r=get_record(id,owner,'template');number=r.version if version is None else version
+    if number<1 or number>r.version:raise HTTPException(404,'Template version not found')
+    data=store.json(r.ref if number==r.version else f'template/{id}/v{number}.json')
+    name=data['name'];safe=re.sub(r'[<>:"/\\|?*\x00-\x1f]','-',name.strip())[:100].rstrip('. ') or 'prompt-template'
+    filename=f'{safe}-v{number}.json'
+    disposition=f"attachment; filename=\"prompt-template-v{number}.json\"; filename*=UTF-8''{quote(filename,safe='')}"
+    return Response(json.dumps({'name':name,'schema':data['schema']},ensure_ascii=False,indent=2)+'\n',media_type='application/json',headers={'Content-Disposition':disposition})
 class ExtractInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=20);template_id:str;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
 @app.get('/api/extractions')
 def extractions(owner=Depends(auth)):
