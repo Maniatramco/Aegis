@@ -587,7 +587,7 @@ test("temporary chat reads one file directly without dataset indexing or saved h
   expect((await documents(page,w.dataset)).map(d=>d.id)).toEqual([permanent.id]);
   expect(writes).toEqual(['/api/temporary-chat/documents','/api/temporary-chat/messages']);
   await page.getByRole('button',{name:'Clear temporary document',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Choose document',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Attach temporary document',exact:true})).toBeVisible();
   expect((await page.request.get('/api/temporary-chat/documents/'+doc.id)).status()).toBe(404);
   await page.reload();
   await expect(page.getByRole('article',{name:'Temporary answer',exact:true})).toHaveCount(0);
