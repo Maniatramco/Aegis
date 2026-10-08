@@ -13,6 +13,8 @@ import "./workspace-flow.css";
 import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
 import { ApiDocumentation } from "./api-documentation";
+import { TemporaryDocumentChat } from "./temporary-document-chat";
+import { readPromptUpload, type PromptUpload } from "./prompt-upload";
 import {
   Activity,
   ArrowDownToLine,
@@ -292,8 +294,7 @@ export default function App() {
   const [conversations, setConversations] = useState<Entity[]>([]);
   const [conversation, setConversation] = useState<Entity | null>(null);
   const [temporary, setTemporary] = useState(false);
-  const [temporaryUploads, setTemporaryUploads] = useState<string[]>([]);
-  useEffect(() => { setTemporary(false); setTemporaryUploads([]); }, [user?.id]);
+  useEffect(() => { setTemporary(false); }, [user?.id]);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<string[]>([]);
   const [externalChat, setExternalChat] = useState(false);
@@ -305,7 +306,10 @@ export default function App() {
   const openingConversation = useRef(false);
   const [templates, setTemplates] = useState<Entity[]>([]);
   const [templateId, setTemplateId] = useState("");
-  const [templateAttachment,setTemplateAttachment]=useState<{file:File;datasetId:string}|null>(null);
+  const [templateAttachment,setTemplateAttachment]=useState<(PromptUpload & {datasetId:string})|null>(null);
+  const [promptPreview,setPromptPreview]=useState<(PromptUpload & {datasetId:string})|null>(null);
+  const [promptLoading,setPromptLoading]=useState(false);
+  const promptReadRequest=useRef(0);
   const [templateFeedback,setTemplateFeedback]=useState('');
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
@@ -314,7 +318,6 @@ export default function App() {
   const templateDirty = useRef(false);
   const onTemplateDirty = useCallback((dirty: boolean) => { templateDirty.current = dirty; }, []);
   const onReviewDirty = useCallback((dirty: boolean) => { reviewDirty.current = dirty; }, []);
-  const [temporarySession, setTemporarySession] = useState("");
   const [externalExtract, setExternalExtract] = useState(false);
   const [indexDoc, setIndexDoc] = useState("");
   const [indexData, setIndexData] = useState<Entity>({});
@@ -338,7 +341,7 @@ export default function App() {
       const requestId=crypto.randomUUID();
       const section=path.split('/')[1]?.replaceAll('-',' ')||'workspace';
       const testingModel=path==='/model-registrations/test';
-      const label=testingModel?'Testing model connection…':path.startsWith('/datasets/')&&path.endsWith('/models')&&method==='PUT'?'Applying dataset model mappings…':`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`;
+      const label=path==='/templates/validate'?'Validating prompt JSON…':path.startsWith('/temporary-chat/')?(path==='/temporary-chat/messages'?'Answering from the temporary document…':method==='DELETE'?'Clearing temporary document…':body instanceof FormData?'Reading temporary document…':'Loading temporary document…'):testingModel?'Testing model connection…':path.startsWith('/datasets/')&&path.endsWith('/models')&&method==='PUT'?'Applying dataset model mappings…':`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`;
       if(!quiet)setRequests(previous=>[...previous,{id:requestId,label}]);
       const timeout=AbortSignal.timeout(testingModel?Math.min(630000,(Number((body as Entity)?.timeout)||60)*1000+30000):method==='GET'?30000:120000);
       try {
@@ -491,6 +494,26 @@ export default function App() {
   const selectedChatModel = chatModels.find(m => m.id === chatModelId);
   const selectedExtractModel = extractionModels.find(m => m.id === extractModelId);
   const extractionNeedsConsent=!!selectedExtractModel&&!['ollama','mock'].includes(selectedExtractModel.provider);
+  const cancelPromptPreview = () => { promptReadRequest.current += 1; setPromptPreview(null); setPromptLoading(false); };
+  useEffect(() => { promptReadRequest.current += 1; setPromptPreview(null); setPromptLoading(false); setTemplateAttachment(null); }, [user?.id]);
+  const uploadPrompt = async (files: File[]) => {
+    if(busy || answering){setError('Wait for the current operation before uploading a prompt.');return;}
+    if(files.length!==1){setError('Upload one prompt JSON file at a time.');return;}
+    if(!kb){setError('Choose a dataset before uploading a prompt.');return;}
+    const request=++promptReadRequest.current;
+    setPromptPreview(null);setPromptLoading(true);setTemplateFeedback('');setError('');
+    try {
+      const parsed=await readPromptUpload(files[0]);
+      if(request!==promptReadRequest.current)return;
+      await api('/templates/validate','POST',{name:parsed.name,schema:parsed.schema,dataset_id:kb});
+      if(request===promptReadRequest.current)setPromptPreview({...parsed,datasetId:kb});
+    } catch(error){if(request===promptReadRequest.current)setError(error instanceof Error?error.message:'The prompt could not be validated.');}
+    finally {if(request===promptReadRequest.current)setPromptLoading(false);}
+  };
+  const confirmPrompt = () => {
+    if(!promptPreview || promptPreview.datasetId!==kb || busy || answering)return;
+    setTemplateAttachment(promptPreview);setPromptPreview(null);setTemplateFeedback('Prompt confirmed. Use Send to save it for this dataset.');setError('');
+  };
   const datasetEmbedding = selectedDataset?.active === false ? undefined : (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
   const datasetDocs = docs.filter(d => (d.dataset_id || d.kb_id) === kb);
   const readyDatasetDocs = datasetDocs.filter(d => d.status === "ready" && !d.requires_reindex);
@@ -500,7 +523,7 @@ export default function App() {
     conversationRequest.current += 1;
     openingConversation.current = false;
     setKb(id);
-    setTemplateAttachment(null);setTemplateFeedback('');setTemplateId('');
+    cancelPromptPreview();setTemplateAttachment(null);setTemplateFeedback('');setTemplateId('');
     setDatasetModelsFocus(false);
     setScope([]);
     setChatModelId("");
@@ -590,13 +613,11 @@ export default function App() {
     dataset: selectedDataset, enabled: !!datasetEmbedding, externalRequired: externalProvider,
     consent: externalUpload, setConsent: setExternalUpload, maxMb: Number(settings.max_upload_mb || 25),
     sessionKey: user ? csrf : "",
-    temporarySessionId: temporary ? temporarySession : "",
     contextKey: uploadContextKey,
     documents: docs, jobs, api, refresh: reload, pollError: documentPollError,
     onManage: () => navigate("Datasets"),
     onUploaded: data => {
       uploadRevision.current+=1;
-      if (temporary && data.newUpload) setTemporaryUploads(previous => [...new Set([...previous, ...(data.documents || []).map((d: Entity) => d.id)])]);
       setDocs(previous => [...(data.documents || []), ...previous.filter(d => !(data.documents || []).some((next: Entity) => next.id === d.id))]);
       setJobs(previous => [...(data.jobs || []), ...previous.filter(j => !(data.jobs || []).some((next: Entity) => next.id === j.id))]);
     },
@@ -649,18 +670,14 @@ export default function App() {
     finally { if (request === conversationRequest.current) openingConversation.current = false; }
   };
   const sendMessage = async (text = prompt) => {
+    if(promptLoading || promptPreview)return;
     if(templateAttachment){
       if(sending.current||busy||answering)return;
       if(!kb){setError('Choose a dataset before sending this prompt template.');return;}
       if(templateAttachment.datasetId&&templateAttachment.datasetId!==kb){setError('Attach the template again for the selected dataset.');return;}
       sending.current=true;setBusy(true);setError('');setTemplateFeedback('');
       try {
-        const file=templateAttachment.file;
-        if(file.size>1024*1024)throw new Error('Prompt template JSON must be smaller than 1 MB.');
-        let payload:Entity;try{payload=JSON.parse(await file.text());}catch{throw new Error('Invalid JSON. Attach a JSON Schema object or a JSON file containing name and schema.');}
-        if(!payload||Array.isArray(payload)||typeof payload!=='object')throw new Error('The template must be a JSON object.');
-        const schema=payload.schema||payload;
-        const imported:Entity=await api('/templates','POST',{name:typeof payload.name==='string'?payload.name:file.name.replace(/\.json$/i,''),schema,dataset_id:kb});
+        const imported:Entity=await api('/templates','POST',{name:templateAttachment.name,schema:templateAttachment.schema,dataset_id:kb});
         setTemplates(previous=>[imported!,...previous.filter(t=>t.id!==imported!.id)]);setTemplateId(imported.id);setTemplateAttachment(null);setPrompt('');
         setTemplateFeedback(`Saved “${imported.name}” for ${selectedDataset?.name}. This template is selected for extraction.`);
         const wantsExtraction=/\b(?:run|start|perform)\s+(?:an?\s+)?(?:extraction|re-extraction)\b|\b(?:extract|re-extract|reextract)\b.*\b(?:documents?|files?|fields?|data)\b|\buse\b.*\btemplate\b.*\b(?:extract|extraction|re-extract|re-extraction)\b/i.test(text);
@@ -694,15 +711,6 @@ export default function App() {
     abort.current = new AbortController();
     try {
       let c: Entity | null = conversation ? { ...conversation, messages: (conversation.messages || []).filter((m: Entity) => !["pending-user", "streaming-answer"].includes(m.id)) } : null;
-      if (temporary) {
-        const history = (c?.messages || []).filter((m: Entity) => m.role === "user" || m.role === "assistant").slice(-20).map((m: Entity) => ({ role: m.role, text: m.text || m.content || "" }));
-        const baseMessages = [...(c?.messages || []), { id: crypto.randomUUID(), role: "user", text }];
-        const thread = c || { id: "temporary", title: "Temporary chat", dataset_id: kb };
-        setConversation({ ...thread, messages: baseMessages }); setPrompt("");
-        const result = await api("/temporary-chat/messages", "POST", { text, dataset_id: kb, document_ids: scope, model_id: chatModelId, allow_external: true, history }, abort.current.signal);
-        setConversation({ ...thread, messages: [...baseMessages, result.message] });
-        return;
-      }
       if (!c) {
         c = await api("/conversations", "POST", {
           title: text.slice(0, 70),
@@ -1410,13 +1418,13 @@ export default function App() {
             </>
           )}
           {view === "Aegis Agent" && <section className="agent-header"><div><h1>Aegis Agent</h1><p>Upload documents, ask questions, and extract fields in one workspace.</p></div><div className="tabs" role="tablist" aria-label="Agent task">{["Chat","Extract"].map(tab=><button key={tab} role="tab" aria-selected={agentTab===tab} className={agentTab===tab?"active":""} onClick={()=>{if((reviewDirty.current||templateDirty.current)&&!window.confirm("Discard unsaved changes before switching tasks?"))return;setAgentTab(tab);}}>{tab==="Chat"?"Chat":"Extract & review"}</button>)}</div></section>}
-          {view === "Aegis Agent" && agentTab === "Chat" && (
-            <FocusedChat temporary={temporary} temporaryUploadCount={docs.filter(d=>d.temporary_session_id===temporarySession).length}
-              onTemporary={() => run(async () => { if (!temporary) { const session = await api("/temporary-chat/sessions", "POST", {}); setTemporarySession(session.id); } conversationRequest.current += 1; setTemporary(!temporary); setConversation(null); setPrompt(""); setLastPrompt(""); setError(""); })}
-              onCleanup={() => setConfirm({ title: "Clean up temporary-only uploads?", body: "Delete this temporary session’s originals and indexes? Permanent dataset documents and uploads kept or used in saved chat/extraction are preserved.", action: async () => { const result = await api(`/temporary-chat/sessions/${temporarySession}`, "DELETE"); setTemporaryUploads(result.pending_document_ids || []); reload(); notify(result.pending_document_ids?.length ? "Some cleanup remains pending; check service health and retry." : "Temporary-only uploads cleaned up. Permanent documents preserved."); } })}
-              upload={documentUpload} onUploadWorkflowVisible={setUploadWorkflowVisible} templateAttachment={templateAttachment?.file.name||''} templateFeedback={templateFeedback} onTemplateRemove={()=>setTemplateAttachment(null)} onTemplateAttach={file=>{if(busy||answering){setError('Wait for the current operation before attaching a template.');return;}setTemplateAttachment({file,datasetId:kb});setTemplateFeedback('');setError('');}} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
+          {view === "Aegis Agent" && agentTab === "Chat" && temporary && <TemporaryDocumentChat models={models} initialModelId={chatModelId} settings={settings} api={api} onExit={() => setTemporary(false)} />}
+          {view === "Aegis Agent" && agentTab === "Chat" && !temporary && (
+            <FocusedChat
+              onTemporary={() => { conversationRequest.current += 1; setTemporary(true); cancelPromptPreview(); setTemplateAttachment(null); setPrompt(""); setLastPrompt(""); setError(""); }}
+              upload={documentUpload} onUploadWorkflowVisible={setUploadWorkflowVisible} templateAttachment={templateAttachment?.fileName||''} templateFeedback={templateFeedback} promptPreview={promptPreview} promptLoading={promptLoading} onConfirmPrompt={confirmPrompt} onCancelPrompt={cancelPromptPreview} onTemplateRemove={()=>{setTemplateAttachment(null);setTemplateFeedback('');}} onTemplateAttach={files=>void uploadPrompt(files)} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
               error={error} onDismissError={() => setError("")} datasetName={selectedDataset?.name || "Choose a dataset"} localProcessing={settings.local_only || (selectedChatModel?.provider === "ollama" && !externalProvider)} reranker={settings.reranker || {}}
-              answering={answering} lastPrompt={lastPrompt} canSend={!busy && (!!templateAttachment || ((selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length))}
+              answering={answering} lastPrompt={lastPrompt} canSend={!busy && !promptLoading && !promptPreview && (!!templateAttachment || ((selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length))}
               externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={settings.local_only ? "Questions and document content are processed locally through Ollama with a compatible dataset embedding index. Choose an installed mapped model to continue." : externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
               scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}
               datasetControl={datasetSelect("Chat dataset")} modelControl={<ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />}

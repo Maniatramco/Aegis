@@ -52,3 +52,23 @@ test('stream and public examples preserve transport and omit irrelevant auth hea
   assert.equal(template.schema.additionalProperties, false);
   assert.deepEqual(template.schema.required, Object.keys(template.schema.properties));
 });
+
+test('temporary examples upload one file without a dataset and use the direct document message contract',()=>{
+ const op={key:'POST /api/temporary-chat/documents',path:'/api/temporary-chat/documents',method:'POST',notes:{},definition:{requestBody:{content:{'multipart/form-data':{schema:{type:'object',properties:{files:{type:'array',items:{type:'string',format:'binary'}},session_id:{type:'string',minLength:16}},required:['files','session_id']}}}}}};
+ const curl=curlExample(op,{});
+ assert.equal((curl.match(/-F 'files=@/g)||[]).length,1);
+ assert.doesNotMatch(curl,/dataset_id/);
+ assert.match(curl,/session_id=/);
+ const body=requestExample({key:'POST /api/temporary-chat/messages'},{});
+ assert.ok(body.document_id && body.model_id);
+ assert.equal(body.allow_external,false);
+ assert.deepEqual(body.history,[]);
+ assert.equal(body.dataset_id,undefined);
+});
+
+test('prompt validation examples use the same strict schema as saving',()=>{
+ const body=requestExample({key:'POST /api/templates/validate'},{});
+ assert.deepEqual(body,requestExample({key:'POST /api/templates'},{}));
+ assert.equal(body.schema.type,'object');
+ assert.equal(body.schema.additionalProperties,false);
+});

@@ -17,7 +17,15 @@ async def lifespan(app):
     if reranker.enabled():
         import asyncio
         await asyncio.to_thread(reranker.load)
-    yield
+    import asyncio
+    from contextlib import suppress
+    cleanup = asyncio.create_task(temporary_chat.expiry_loop())
+    try:
+        yield
+    finally:
+        cleanup.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup
 app=FastAPI(title='Aegis storage-first document intelligence',version='0.1.0',lifespan=lifespan)
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv('ALLOWED_ORIGINS','http://localhost:3000,http://127.0.0.1:3000').split(','),allow_credentials=True,allow_methods=['*'],allow_headers=['Content-Type','X-CSRF-Token','Authorization'])
 @app.middleware('http')
@@ -138,13 +146,11 @@ def documents(kb_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
     return [routing.document_public(d,snapshots) for d in records(owner,'document') if not scope or d.parent_id==scope]
 @app.post('/api/documents/upload')
 async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:str=Form(''),allow_external:bool=Form(False),temporary_session_id:str=Form(''),owner=Depends(auth)):
+    if temporary_session_id:raise HTTPException(409,'Temporary chat uploads use /api/temporary-chat/documents and never create an index.')
     if kb_id and dataset_id and kb_id!=dataset_id:raise HTTPException(400,'Conflicting dataset identifiers')
     kb_id=dataset_id or kb_id
     if not kb_id:raise HTTPException(409,'Create or choose a dataset and map its embedding model before uploading.')
     dataset=get_record(kb_id,owner,'knowledge_base');snapshot=routing.execution_snapshot(dataset,'embedding')
-    if temporary_session_id:
-        session=get_record(temporary_session_id,owner,'temporary_session')
-        if store.json(session.ref)['expires_at']<=time.time():raise HTTPException(409,'Temporary session expired. Start a new temporary chat.')
     if len(files)>20:raise HTTPException(400,'Upload at most 20 files at once')
     external_check(allow_external,True,snapshot['settings']);result=[];jobs=[]
     for file in files:
@@ -156,7 +162,6 @@ async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:
         id=uid();ref='documents/'+id+'/original';store.put(ref,raw)
         r=Record(id=id,kind='document',owner=owner,name=name,ref=ref,parent_id=kb_id,status='queued',size=len(raw),created_at=time.time(),updated_at=time.time())
         with Session.begin() as s:s.add(r)
-        if temporary_session_id:temporary_files.attach(id,temporary_session_id,owner)
         j=enqueue(owner,'index',id,allow_external,snapshot);result.append(routing.document_public(r));jobs.append(job_repr(j))
     return {'documents':result,'jobs':jobs}
 @app.get('/api/documents/{id}')
@@ -250,32 +255,6 @@ def message_execution(body,owner,data):
     return [d for d in docs if d.status=='ready'],snapshot
 
 
-class TemporaryTurn(BaseModel):
-    role: str
-    text: str = Field(max_length=12000)
-
-class TemporaryMessageInput(MessageInput):
-    history: list[TemporaryTurn] = Field(default_factory=list,max_length=20)
-
-@app.post('/api/temporary-chat/messages')
-def temporary_message(body:TemporaryMessageInput,owner=Depends(auth)):
-    """No conversation, message, execution snapshot or history is persisted."""
-    if any(turn.role not in ('user','assistant') for turn in body.history):
-        raise HTTPException(400,'Temporary history supports only user and assistant turns')
-    if sum(len(turn.text) for turn in body.history)>60000:
-        raise HTTPException(400,'Start a new temporary chat; history is too long')
-    docs,snapshot=message_execution(body,owner,{})
-    try:
-        with execution_context(snapshot['embedding_execution']):sources=providers.search(body.text,owner,docs,settings()['top_k'])
-        with execution_context(snapshot):answer=providers.answer(body.text,sources,[turn.model_dump() for turn in body.history])
-    except providers.ProviderError as error:raise HTTPException(502,str(error))
-    except Exception:raise HTTPException(502,'Retrieval or generation failed; check configured provider connectivity')
-    import re
-    used={int(value) for value in re.findall(r'\[(\d+)\]',answer)}
-    citations=[{'index':index+1,**source,'url':'/api/documents/'+source['document_id']+'/preview'} for index,source in enumerate(sources) if index+1 in used]
-    return {'message':{'id':uid(),'role':'assistant','text':answer,'citations':citations,'created_at':time.time(),'mock':snapshot['settings']['model_provider']=='mock','model_selection':routing.public_selection(snapshot)},'temporary':True}
-
-
 @app.post('/api/conversations/{id}/messages')
 def message(id:str,body:MessageInput,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');lock=_locks.setdefault(id,threading.Lock())
@@ -337,6 +316,11 @@ def check_schema(schema):
     strict(schema)
 @app.get('/api/templates')
 def templates(owner=Depends(auth)):return [representation(r)|store.json(r.ref) for r in records(owner,'template')]
+@app.post('/api/templates/validate')
+def validate_template(body:TemplateInput,owner=Depends(auth)):
+    if body.dataset_id:get_record(body.dataset_id,owner,'knowledge_base')
+    check_schema(body.schema_)
+    return {'valid':True,'name':body.name,'schema':body.schema_,'dataset_id':body.dataset_id}
 @app.post('/api/templates')
 def create_template(body:TemplateInput,owner=Depends(auth)):
     if body.dataset_id:get_record(body.dataset_id,owner,'knowledge_base')
@@ -738,6 +722,9 @@ def configure_local_models(id:str,owner=Depends(auth)):
         return routing.dataset_public(updated)
 
 temporary_files.install(app,auth)
+
+from . import temporary_chat
+temporary_chat.install(app,auth)
 
 from . import api_documentation
 api_documentation.install(app,auth)

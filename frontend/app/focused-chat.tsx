@@ -4,14 +4,16 @@ import { AlertCircle, ArrowDown, ChevronDown, ChevronsLeft, Copy, FileText, Hist
 import { DocumentUploadPanel, type DocumentUploadController } from "./document-upload";
 import { recordedModel } from "./dataset-workspace";
 import "./focused-chat.css";
+import { PromptUploadPreview } from "./prompt-upload-preview";
+import { type PromptUpload } from "./prompt-upload";
 
 type Entity = Record<string, any>;
 type Props = {
   error: string; onDismissError: () => void; datasetName: string; localProcessing: boolean; reranker: Entity;
-  temporary: boolean; temporaryUploadCount: number; onTemporary: () => void; onCleanup: () => void;
+  onTemporary: () => void;
   upload: DocumentUploadController;
   onUploadWorkflowVisible?: (visible:boolean)=>void;
-  templateAttachment: string; templateFeedback: string; onTemplateAttach:(file:File)=>void; onTemplateRemove:()=>void;
+  templateAttachment: string; templateFeedback: string; onTemplateAttach:(files:File[])=>void; promptPreview:PromptUpload|null; promptLoading:boolean; onConfirmPrompt:()=>void; onCancelPrompt:()=>void; onTemplateRemove:()=>void;
   conversation: Entity | null; conversations: Entity[]; prompt: string; setPrompt: (value: string) => void;
   answering: boolean; lastPrompt: string; canSend: boolean; externalChat: boolean; setExternalChat: (value: boolean) => void;
   providerNotice: string; modelName: string; scopeCount: number; readyCount: number;
@@ -117,7 +119,7 @@ export function FocusedChat(p: Props) {
       onDragEnter={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
       onDragOver={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = p.upload.blocked || p.upload.uploading ? "none" : "copy"; } }}
       onDragLeave={e => { if (e.dataTransfer.types.includes("Files")) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
-      onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); dragDepth.current = 0; setDragging(false); const files=Array.from(e.dataTransfer.files),templates=files.filter(file=>/\.json$/i.test(file.name)),documents=files.filter(file=>!/\.json$/i.test(file.name));if(templates.length)p.onTemplateAttach(templates[0]);if(documents.length){p.upload.choose(documents);openAttachments();} }}>
+      onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); dragDepth.current = 0; setDragging(false); const files=Array.from(e.dataTransfer.files),templates=files.filter(file=>/\.json$/i.test(file.name)),documents=files.filter(file=>!/\.json$/i.test(file.name));if(templates.length)p.onTemplateAttach(templates);if(documents.length){p.upload.choose(documents);openAttachments();} }}>
       {dragging && <div className="chat-drop-overlay" role="status"><UploadCloud size={38} /><strong>Drop documents to attach</strong><span>{p.upload.blocked || `Upload to ${p.upload.dataset?.name}`}</span><span>Review files before uploading</span></div>}
       <header className="chat-heading">
         <div className="chat-heading-row">
@@ -128,11 +130,9 @@ export function FocusedChat(p: Props) {
           <div className="chat-dataset-control"><span className="sr-only">Dataset</span>{p.datasetControl}</div>
           <div className="chat-model-control">{p.modelControl}</div>
           <details className="disclosure chat-scope"><summary><FileText size={15} /><span>{p.scopeCount ? `${p.scopeCount} selected` : `${p.readyCount} ready document${p.readyCount===1 ? "" : "s"}`}</span><ChevronDown size={14} /></summary><div className="scope-content"><p className="muted small">No selection searches all ready documents in this dataset.</p>{p.documentControl}</div></details>
-          <button type="button" className="chat-mode-toggle" aria-pressed={p.temporary} disabled={p.answering || p.upload.uploading} onClick={p.onTemporary}><span className={`temporary-switch ${p.temporary?"on":""}`} aria-hidden="true"/>Temporary chat</button>
-          {!p.temporary && p.conversation?.id && <div className="thread-actions"><button className="btn icon" title="Reload conversation" aria-label="Reload conversation" disabled={p.answering} onClick={p.onReload}><RefreshCw size={15} /></button>{p.exportControl}</div>}
+          <button type="button" className="chat-mode-toggle" aria-pressed={false} disabled={p.answering || p.upload.uploading} onClick={p.onTemporary}><span className="temporary-switch" aria-hidden="true"/>Temporary chat</button>
+          {p.conversation?.id && <div className="thread-actions"><button className="btn icon" title="Reload conversation" aria-label="Reload conversation" disabled={p.answering} onClick={p.onReload}><RefreshCw size={15} /></button>{p.exportControl}</div>}
         </div>
-        {p.temporary && <p className="temporary-notice">Messages are not saved and clear on reload. Temporary-only uploads expire after 1 hour; worker cleanup removes files and indexes after processing finishes. Keep them or use them in saved chat/extraction to retain them. Permanent dataset documents are preserved. {p.temporaryUploadCount > 0 && <button className="text-button" disabled={p.answering || p.upload.uploading} onClick={p.onCleanup}>Delete session uploads</button>}</p>}
-        {!p.temporary && p.temporaryUploadCount > 0 && <p className="temporary-notice"><button className="text-button" disabled={p.answering || p.upload.uploading} onClick={p.onCleanup}>Delete this session's temporary uploads</button></p>}
       </header>
       <div className="chat-messages" ref={thread} tabIndex={0} aria-label="Conversation messages" onScroll={() => { const el = thread.current!; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!atEnd.current); }}>
         {messages.length ? messages.map((m, i) => {
@@ -144,7 +144,7 @@ export function FocusedChat(p: Props) {
           <div className="message-body"><div className="message-label">{m.mock && <span className="pill amber">MOCK TEST OUTPUT</span>}{m.role !== "user" && recordedModel(m) && <span className="message-model">{recordedModel(m)}</span>}<span className="sr-only">{m.role === "user" ? "You" : "Aegis"}</span></div>{text && <div className="message-text">{m.role==="user"?text:text.split(/(\[\d+\])/g).map((part:string,index:number)=>{const cited=m.citations?.find((c:Entity)=>`[${c.index}]`===part);return cited?<button key={index} className="inline-citation" aria-label={`Citation ${cited.index}: ${cited.document_name}`} onClick={()=>showSource(cited)}>{part}</button>:part;})}</div>}
           {incomplete && <div className="answer-failure" role="status"><AlertCircle size={19} aria-hidden="true" /><div><strong>{m.status === "aborted" ? "Generation stopped" : "This answer could not be completed"}</strong><p>{m.error?.detail || (text ? "This response is incomplete. Retry the question for a complete answer." : "This earlier request did not return an answer. You can retry it with the current model.")}</p><button className="btn retry-answer" disabled={p.answering || !p.canSend || !question} onClick={() => p.onSend(question)}><RefreshCw size={14} />Retry question</button></div></div>}
           {!!m.citations?.length && <div className="answer-citations">{m.citations.map((c: Entity, n: number) => <button className="citation" key={n} onClick={() => showSource(c)}><FileText size={15} /><span>{c.index || n + 1} · {c.document_name || c.name || c.document_id || "Source document"}{c.page ? ` · page ${c.page}` : ""}</span></button>)}</div>}
-          {m.role !== "user" && !!text && m.id !== "streaming-answer" && <div className="message-actions"><button className="btn icon" title="Copy answer" aria-label="Copy answer" onClick={() => p.onCopy(m.text || m.content || "")}><Copy size={18} /></button><button className="btn icon" title="Helpful answer" aria-label="Helpful answer" disabled={p.temporary || incomplete} onClick={() => p.onFeedback(m.id, "up")}><ThumbsUp size={18} /></button><button className="btn icon" title="Unhelpful answer" aria-label="Unhelpful answer" disabled={p.temporary || incomplete} onClick={() => p.onFeedback(m.id, "down")}><ThumbsDown size={18} /></button></div>}</div>
+          {m.role !== "user" && !!text && m.id !== "streaming-answer" && <div className="message-actions"><button className="btn icon" title="Copy answer" aria-label="Copy answer" onClick={() => p.onCopy(m.text || m.content || "")}><Copy size={18} /></button><button className="btn icon" title="Helpful answer" aria-label="Helpful answer" disabled={incomplete} onClick={() => p.onFeedback(m.id, "up")}><ThumbsUp size={18} /></button><button className="btn icon" title="Unhelpful answer" aria-label="Unhelpful answer" disabled={incomplete} onClick={() => p.onFeedback(m.id, "down")}><ThumbsDown size={18} /></button></div>}</div>
         </article>; }) : <div className="chat-welcome"><img src="/aegis-logo.png" alt="" width={60} height={60} /><h2>What would you like to know?</h2><p>Choose a dataset above, then ask a question.<br />Every grounded answer connects back to its source.</p><div className="suggested-prompts">{["Summarize the key points", "What needs my attention?", "Find important dates and deadlines"].map(text => <button className="btn" key={text} onClick={() => { p.setPrompt(text); textarea.current?.focus(); }}>{text}</button>)}</div>{!p.readyCount && <p className="small muted">Add and index documents in your dataset to get started.</p>}</div>}
         <div className="answer-status" role="status">{p.answering && <><Loader2 size={16} className="animate-spin" />Working on your answer{elapsed > 0 ? ` · ${elapsed}s` : ""}…</>}</div>
       </div>
@@ -153,9 +153,10 @@ export function FocusedChat(p: Props) {
       <div className="chat-compose-area">
         <div className="composer-heading"><span className="model-status"><span className="status-dot" />{p.localProcessing ? "Local model" : "Selected model"}<strong>{p.modelName}</strong></span>{p.reranker?.enabled && <span className="retrieval-status" title={`${p.reranker.model} · up to ${p.reranker.candidate_limit} candidates, then the configured number of source chunks`}>{p.reranker.ready ? "Local reranking" : "Reranker unavailable"}</span>}</div>
         {p.error && !messages.at(-1)?.error && <div className="chat-error" role="alert"><AlertCircle size={17} aria-hidden="true" /><span>{p.error}</span><button className="btn icon" aria-label="Dismiss error" onClick={p.onDismissError}><X size={15} /></button></div>}
-        <div className="template-import-control"><input type="file" ref={templateInput} accept=".json,application/json" hidden aria-label="JSON prompt template attachment" onChange={e=>{const file=e.target.files?.[0];if(file)p.onTemplateAttach(file);e.target.value='';}}/><button type="button" className="text-button" disabled={p.answering} onClick={()=>templateInput.current?.click()}>Attach JSON template</button><span className="small muted">or drop it into this chat, then send</span></div>
+        <div className="template-import-control"><input type="file" ref={templateInput} accept=".json,application/json" hidden aria-label="Upload prompt JSON file" onChange={e=>{const files=Array.from(e.target.files||[]);if(files.length)p.onTemplateAttach(files);e.target.value='';}}/><button type="button" className="text-button" disabled={p.answering||p.promptLoading} onClick={()=>templateInput.current?.click()}>Upload Prompt</button><span className="small muted">JSON only · review and confirm before sending</span></div>
+        {p.promptLoading&&<p role="status" className="template-feedback">Validating prompt JSON…</p>}
         {p.templateFeedback&&<p role="status" className="template-feedback">{p.templateFeedback}</p>}
-        {p.templateAttachment&&<div className="template-attachment"><FileText size={18}/><span>{p.templateAttachment} · JSON template for {p.datasetName}</span><button type="button" className="btn icon" aria-label="Remove template attachment" disabled={p.answering} onClick={p.onTemplateRemove}><X size={16}/></button></div>}
+        {p.templateAttachment&&<div className="template-attachment"><FileText size={18}/><span>{p.templateAttachment} · Confirmed prompt for {p.datasetName}</span><button type="button" className="btn icon" aria-label="Remove template attachment" disabled={p.answering} onClick={p.onTemplateRemove}><X size={16}/></button></div>}
         <form className="composer" onSubmit={e => { e.preventDefault(); p.onSend(); }}>
           <button ref={attachTrigger} type="button" className="btn attach-documents" aria-label="Attach documents" title="Attach documents to the selected dataset" aria-haspopup="dialog" onClick={openAttachments}><Paperclip size={22} /></button>
           <textarea ref={textarea} aria-label="Ask a question" placeholder={messages.length ? "Ask a follow-up about your documents…" : "Ask a question about your documents…"} rows={1} value={p.prompt} onChange={e => p.setPrompt(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); if (!p.answering) p.onSend(); } }} />
@@ -166,6 +167,7 @@ export function FocusedChat(p: Props) {
 
       </div>
     </section>
+    <PromptUploadPreview prompt={p.promptPreview} datasetName={p.datasetName} onConfirm={p.onConfirmPrompt} onCancel={p.onCancelPrompt}/>
     <dialog className="chat-upload-dialog" ref={uploadDialog} aria-label={uploadView === "attach" ? "Attach documents" : "Document processing"} onKeyDown={event => {
       if (event.key !== "Tab") return;
       const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter(element => element.getClientRects().length > 0);

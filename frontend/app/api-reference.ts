@@ -62,9 +62,11 @@ export function requestExample(op: Operation, spec: Json): any {
     'POST /api/conversations': { title: 'Invoice questions', dataset_id: '<dataset-id>', document_ids: ['<document-id>'] },
     'POST /api/templates': { name: 'Invoice total', dataset_id: '<dataset-id>', schema: { type: 'object', properties: { total: { type: 'number' } }, required: ['total'], additionalProperties: false } },
     'POST /api/extractions': { dataset_id: '<dataset-id>', document_ids: ['<document-id>'], template_id: '<template-id>', allow_external: false },
+    'POST /api/temporary-chat/messages': { document_id: '<temporary-document-id>', model_id: '<chat-model-id>', text: 'What is the invoice total?', history: [], allow_external: false },
     'PUT /api/datasets/{id}/models': { mappings: ['embedding', 'chat', 'extraction'].map(role => ({ model_id: `<${role}-model-id>`, enabled: true })), embedding_model_id: '<embedding-model-id>', default_chat_model_id: '<chat-model-id>', default_extraction_model_id: '<extraction-model-id>', acknowledge_reindex: false },
     'POST /api/model-registrations': { name: 'Local chat', category: 'chat', provider_model: 'qwen3:4b', connection: { protocol: 'ollama', endpoint: 'http://127.0.0.1:11435', auth_mode: 'none' }, timeout: 60, enabled: true },
   };
+  if (op.key === 'POST /api/templates/validate') return preset['POST /api/templates'];
   if (preset[op.key]) return preset[op.key];
   if (/\/messages(?:\/stream)?$/.test(op.path)) return { text: 'What is the invoice total?', dataset_id: '<dataset-id>', allow_external: false };
   const content = op.definition.requestBody?.content || {};
@@ -85,7 +87,10 @@ export function curlExample(op: Operation, spec: Json): string {
   if (content['multipart/form-data']) {
     const s = resolveSchema(content['multipart/form-data'].schema, spec);
     for (const [name, field] of Object.entries(s.properties || {})) {
-      if (name === 'files') lines.push(`  -F 'files=@document-1.pdf'`, `  -F 'files=@document-2.pdf'`);
+      if (name === 'files') {
+        lines.push(`  -F 'files=@document-1.pdf'`);
+        if (op.path !== '/api/temporary-chat/documents') lines.push(`  -F 'files=@document-2.pdf'`);
+      }
       else if (name === 'dataset_id') lines.push(`  -F 'dataset_id=<dataset-id>'`);
       else if ((s.required || []).includes(name)) lines.push(`  -F ${shellQuote(`${name}=${sampleValue(field as Json, spec)}`)}`);
     }

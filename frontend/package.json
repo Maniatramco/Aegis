@@ -8,7 +8,7 @@
     "start": "next start -H 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test workspace.spec.ts chat-upload.spec.ts recovery.spec.ts review-flow.spec.ts",
-    "test:unit": "node --test tests/chat-stream.test.cjs tests/batch-workflow.test.cjs tests/batch-progress.test.cjs tests/api-reference.test.cjs",
+    "test:unit": "node --test tests/chat-stream.test.cjs tests/batch-workflow.test.cjs tests/batch-progress.test.cjs tests/api-reference.test.cjs tests/temporary-document-chat.test.cjs tests/prompt-upload.test.cjs",
     "test:screenshots": "playwright test screenshots.spec.ts responsive.spec.ts"
   },
   "dependencies": {

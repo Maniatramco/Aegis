@@ -23,7 +23,7 @@ def test_missing_daemon_is_explicit(monkeypatch):
     assert ollama.installed()=={'available':False,'models':[]}
 
 @pytest.mark.skipif(os.getenv('AEGIS_TEST_PUBLIC_OLLAMA')!='true',reason='Opt-in local models and downloaded public RFC8259 required')
-def test_public_rfc_two_models_same_index_temporary_chat(system,monkeypatch):
+def test_public_rfc_two_models_same_index_saved_chat(system,monkeypatch):
     monkeypatch.setenv('AEGIS_LOCAL_ONLY','true');system.owner='Dottie'
     raw=Path(os.environ['AEGIS_PUBLIC_SAMPLE']).read_bytes()
     assert b'The JavaScript Object Notation (JSON)' in raw
@@ -39,8 +39,9 @@ def test_public_rfc_two_models_same_index_temporary_chat(system,monkeypatch):
     doc=result.json()['documents'][0];assert worker.run_once()
     assert system.api.get('/api/documents/'+doc['id']).json()['status']=='ready'
     index_before=core.store.get('documents/'+doc['id']+'/index.json')
+    conversation=post(system,'/api/conversations',{'dataset_id':d['id'],'document_ids':[doc['id']]})
     for selected in (qwen,small):
-        answer=system.api.post('/api/temporary-chat/messages',json={'text':'Which character encoding MUST JSON text use when exchanged between systems that are not part of a closed ecosystem? Cite the source.','dataset_id':d['id'],'document_ids':[doc['id']],'model_id':selected['id']})
+        answer=system.api.post('/api/conversations/'+conversation['id']+'/messages',json={'text':'Which character encoding MUST JSON text use when exchanged between systems that are not part of a closed ecosystem? Cite the source.','dataset_id':d['id'],'document_ids':[doc['id']],'model_id':selected['id']})
         assert answer.status_code==200,answer.text
         message=answer.json()['message']
         assert 'UTF-8' in message['text'],message['text']
@@ -48,9 +49,10 @@ def test_public_rfc_two_models_same_index_temporary_chat(system,monkeypatch):
         assert message['model_selection']['model_id']==selected['id']
         print(selected['provider_model']+': grounded UTF-8 answer with citations passed')
     assert core.store.get('documents/'+doc['id']+'/index.json')==index_before
-    assert system.api.get('/api/conversations').json()==[]
+    assert len(system.api.get('/api/conversations').json())==1
     empty=dataset(system,'Dottie no-evidence fixture')
-    result=system.api.post('/api/temporary-chat/messages',json={'text':"What is Dottie's birthday?",'dataset_id':empty['id']})
+    empty_conversation=post(system,'/api/conversations',{'dataset_id':empty['id']})
+    result=system.api.post('/api/conversations/'+empty_conversation['id']+'/messages',json={'text':"What is Dottie's birthday?",'dataset_id':empty['id']})
     assert result.status_code==200 and not result.json()['message']['citations']
     assert 'evidence' in result.json()['message']['text'].lower()
 
