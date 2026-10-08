@@ -210,7 +210,9 @@ test("attachment opens a clean chooser while completed workflows remain availabl
   await expect(dialog(page).locator(".workflow-stages")).toHaveCount(0);
   await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await page.getByRole("button", {name:"View document workflows",exact:true}).click();
+  await expect(page.getByRole("button", {name:"View document workflows",exact:true})).toHaveCount(0);
+  await openUploads(page);
+  await dialog(page).getByRole("button", {name:"View processing status",exact:true}).click();
   await expect(row(page, stored.name)).toContainText("Ready for questions");
   await expect(row(page,"New-attachment-only.txt")).toContainText("Ready for questions");
   await page.keyboard.press("Escape");

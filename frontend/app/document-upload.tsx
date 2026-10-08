@@ -129,7 +129,7 @@ export function useDocumentUpload(options: Options) {
     return { ...entry, document, job, ready, failed, processing, label };
   });
   const processing = rows.filter(r => r.status === "uploading" || r.processing).length;
-  const summary = uploading ? `Uploading to ${uploadDestination}…` : processing ? `${processing} indexing` : pending.length ? `${pending.length} selected` : rows.some(r => r.status === "invalid" || r.status === "failed" || r.status === "uncertain" || r.failed || r.document?.requires_reindex) ? "Needs attention" : rows.some(r => r.ready) ? "Documents ready" : "";
+  const summary = uploading ? `Uploading to ${uploadDestination}…` : processing ? `${processing} indexing` : pending.length ? `${pending.length} selected` : rows.some(r => r.status === "invalid" || r.status === "failed" || r.status === "uncertain" || r.failed || r.document?.requires_reindex) ? "Needs attention" : "";
   const selectedIds = new Set(selected.map(entry => entry.id));
   const batchRows = selected.length ? rows.filter(row => selectedIds.has(row.id)) : rows;
   return { ...options, datasetId, blocked, rows, batchRows, notice, uploading, uploadDestination, retrying, pending, summary, choose, start, retryIndex, reextract, keep, remove: (id: string) => { if (!inFlight.current) setEntries(previous => previous.filter(e => e.id !== id)); } };
