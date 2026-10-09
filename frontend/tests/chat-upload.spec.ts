@@ -28,11 +28,51 @@ const test = base.extend<{ workspace: {
 test.use({ viewport: { width: 1440, height: 1000 }, locale: "en-US", timezoneId: "UTC", trace: "off", screenshot: "off", video: "off", actionTimeout: 15000 });
 const synthetic = "SYNTHETIC UI TEST. Review reference ATTACH-2026. Source originals remain stored. New documents are available after indexing completes.";
 const file = (name: string, content = synthetic) => ({ name, mimeType: "text/plain", buffer: Buffer.from(content) });
-const dialog = (page: Page) => page.getByRole("dialog", { name: "Attach documents", exact: true });
+const dialog = (page: Page) => page.getByRole("dialog", { name: /^(Attach documents|Document processing)$/ });
 const chatConsent = (page: Page) => page.getByRole("checkbox", { name: /I approve sending this request/ });
-const row = (page: Page, name: string) => dialog(page).getByRole("listitem").filter({ has: page.getByText(name, { exact: true }) });
+const row = (page: Page, name: string) => dialog(page).locator(".upload-files > li").filter({ has: page.getByText(name, { exact: true }) });
 const isUpload = (request: Request) => new URL(request.url()).pathname === "/api/documents/upload" && request.method() === "POST";
 const isChatWrite = (request: Request) => /^\/api\/conversations(?:\/|$)/.test(new URL(request.url()).pathname) && request.method() === "POST";
+
+test("chat JSON imports validate, require preview confirmation, and save only after Send", async ({ page, workspace: w }) => {
+  await uploadReady(page.request,w.headers,w.dataset,'JSON-template-safe.txt',synthetic);
+  await openChat(page,w.dataset);
+  const posts: string[]=[];
+  page.on('request',r=>{if(r.method()==='POST')posts.push(new URL(r.url()).pathname);});
+  const attachment=page.getByLabel('Upload prompt JSON file',{exact:true});
+  await attachment.setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{invalid')});
+  await expect(page.getByText('Invalid JSON. Fix the file syntax and upload it again.')).toBeVisible();
+  expect(posts).toEqual([]);
+  const payload={name:'Chat JSON '+Date.now(),schema:{type:'object',properties:{reference:{type:'string'}},required:['reference'],additionalProperties:false}};
+  const json={name:'template.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(payload))};
+  const preview=page.getByRole('dialog',{name:'Review uploaded prompt',exact:true});
+  await attachment.setInputFiles(json);
+  await expect(preview).toBeVisible();
+  await expect(preview.getByLabel('Uploaded prompt JSON')).toContainText('additionalProperties');
+  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeDisabled();
+  expect(posts).toEqual(['/api/templates/validate']);
+  await preview.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Remove template attachment',exact:true})).toHaveCount(0);
+  await attachment.setInputFiles(json);
+  await preview.getByRole('button',{name:'Confirm prompt',exact:true}).click();
+  await expect(page.getByText('Prompt confirmed. Use Send to save it for this dataset.')).toBeVisible();
+  expect(posts.filter(p=>p!=='/api/templates/validate')).toEqual([]);
+  const saving=page.waitForResponse(r=>r.url().endsWith('/api/templates')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  const saved=await checked(await saving);expect(saved.dataset_id).toBe(w.dataset.id);
+  await expect(page.getByText(`Saved “${payload.name}”`,{exact:false})).toBeVisible();
+  expect(posts.filter(p=>p!=='/api/templates/validate')).toEqual(['/api/templates']);
+  await attachment.setInputFiles(json);
+  await preview.getByRole('button',{name:'Confirm prompt',exact:true}).click();
+  await page.getByLabel('Ask a question',{exact:true}).fill('Use this template to extract the documents');
+  const extracting=page.waitForResponse(r=>r.url().endsWith('/api/extractions')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Send',exact:true}).click();const result=await checked(await extracting);
+  expect(result.dataset_id).toBe(w.dataset.id);expect(result.template_id).not.toBe(saved.id);
+  const templates=await checked(await page.request.get('/api/templates'));
+  const imported=templates.find((t:Entity)=>t.id===result.template_id);
+  expect(imported.schema).toEqual(payload.schema);expect(imported.dataset_id).toBe(w.dataset.id);
+  await expect(page.getByLabel('Value /reference',{exact:true})).toHaveValue('MOCK TEST VALUE',{timeout:90000});
+});
 async function navigate(page: Page, name: string) {
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
@@ -41,10 +81,10 @@ async function navigate(page: Page, name: string) {
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
 }
 async function openChat(page: Page, dataset: Entity) {
-  await page.goto("/");
+  await page.goto("/#Home");
   await expect(page.locator("main h1")).toHaveText("Home");
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
 }
 async function openUploads(page: Page) {
@@ -148,6 +188,39 @@ test("picker uploads to the selected dataset, preserves model, scope and draft, 
   expect(await documents(page, w.other)).toEqual([]);
 });
 
+test("attachment opens a clean chooser while completed workflows remain available", async ({ page, workspace: w }) => {
+  const stored = await uploadReady(page.request, w.headers, w.dataset, "Completed-before-attachment.txt", synthetic);
+  await openChat(page, w.dataset);
+  const uploads: Request[] = [];
+  page.on("request", request => { if (isUpload(request)) uploads.push(request); });
+  await page.getByLabel("Ask a question").fill("Preserve this draft while viewing uploads.");
+  await openUploads(page);
+  await expect(dialog(page).getByRole("heading", {name:"Add documents",exact:true})).toBeVisible();
+  await expect(dialog(page).getByLabel("Choose documents", {exact:true})).toBeEnabled();
+  await expect(dialog(page).locator(".workflow-stages")).toHaveCount(0);
+  await expect(dialog(page).getByText(stored.name, {exact:true})).toHaveCount(0);
+  await dialog(page).getByRole("button", {name:"View processing status",exact:true}).click();
+  await expect(dialog(page).getByRole("heading", {name:"Document processing",exact:true})).toBeVisible();
+  await expect(row(page, stored.name)).toContainText("Ready for questions");
+  await choose(page, [file("New-attachment-only.txt")]);
+  await dialog(page).getByRole("button", {name:"Upload 1",exact:true}).click();
+  await expect(row(page,"New-attachment-only.txt")).toContainText("Ready for questions",{timeout:90000});
+  await dialog(page).getByRole("button", {name:"Close uploads",exact:true}).click();
+  await openUploads(page);
+  await expect(dialog(page).locator(".workflow-stages")).toHaveCount(0);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", {name:"View document workflows",exact:true})).toHaveCount(0);
+  await openUploads(page);
+  await dialog(page).getByRole("button", {name:"View processing status",exact:true}).click();
+  await expect(row(page, stored.name)).toContainText("Ready for questions");
+  await expect(row(page,"New-attachment-only.txt")).toContainText("Ready for questions");
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Ask a question")).toHaveValue("Preserve this draft while viewing uploads.");
+  expect(uploads).toHaveLength(1);
+  expect((await documents(page,w.dataset)).map(document=>document.name).sort()).toEqual([stored.name,"New-attachment-only.txt"].sort());
+});
+
 test("dropping into chat and the panel requires explicit upload", async ({ page, workspace: w }) => {
   await openChat(page, w.dataset);
   await page.getByLabel("Ask a question").fill("This drop must not send my question.");
@@ -157,7 +230,7 @@ test("dropping into chat and the panel requires explicit upload", async ({ page,
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator(".chat-drop-overlay")).toHaveCount(0);
   await drop(page, dialog(page).locator(".shared-dropzone"), [file("Dropped-panel-evidence.txt")]);
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(2);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(2);
   expect(uploads).toEqual([]);
   await dialog(page).getByRole("button", { name: "Upload 2", exact: true }).click();
   for (const name of ["Dropped-chat-evidence.txt", "Dropped-panel-evidence.txt"]) await expect(row(page, name)).toContainText("Ready for questions", { timeout: 90000 });
@@ -216,13 +289,13 @@ test("invalid extension, empty files, configured size and twenty-file limit neve
   for (const name of ["Unsupported.csv", "Empty.txt", "Too-large.txt"]) await dialog(page).getByRole("button", { name: `Remove ${name}`, exact: true }).click();
   await choose(page, Array.from({ length: 21 }, (_, i) => file(`Synthetic-batch-${i + 1}.txt`)));
   await expect(dialog(page).getByRole("alert")).toContainText("Choose at most 20 files at once");
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(0);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
   await choose(page, Array.from({ length: 20 }, (_, i) => file(`Synthetic-batch-${i + 1}.txt`)));
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(20);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(20);
   await expect(dialog(page).getByRole("button", { name: "Upload 20", exact: true })).toBeEnabled();
   await choose(page, [file("One-too-many.txt")]);
   await expect(dialog(page).getByRole("alert")).toContainText("Choose at most 20 files at once");
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(20);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(20);
   expect(uploads).toEqual([]);
   expect(await documents(page, w.dataset)).toEqual([]);
 });
@@ -270,7 +343,7 @@ test("lost response never resubmits an accepted original or the remaining batch"
   await page.getByLabel("Refresh workspace", { exact: true }).click();
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   await navigate(page, "Home");
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await openUploads(page);
   await expect(row(page, "Response-lost-original.txt").filter({ hasText: "Upload not confirmed" })).toBeVisible();
   expect(attempts).toBe(1);
@@ -290,18 +363,19 @@ test("failed indexing retries the same stored original after a page reload", asy
   const original = result.documents[0];
   await expect.poll(async () => (await checked(await page.request.get(`/api/documents/${original.id}`))).status, { timeout: 90000 }).toBe("failed");
   await page.reload();
-  await expect(page.locator("main h1")).toHaveText("Ask Aegis");
+  await expect(page.locator("main h1")).toHaveText("Aegis Agent");
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
   await openUploads(page);
-  await expect(row(page, original.name).getByRole("button", { name: "Retry indexing", exact: true })).toBeEnabled();
-  const retried = page.waitForResponse(response => new URL(response.url()).pathname === `/api/documents/${original.id}/reindex` && response.request().method() === "POST");
-  await row(page, original.name).getByRole("button", { name: "Retry indexing", exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await dialog(page).getByRole("button", { name: "View processing status", exact: true }).click();
+  await expect(row(page, original.name).getByRole("button", { name: "Retry failed step", exact: true })).toBeEnabled();
+  const retried = page.waitForResponse(response => new URL(response.url()).pathname === `/api/jobs/${result.jobs[0].id}/retry` && response.request().method() === "POST");
+  await row(page, original.name).getByRole("button", { name: "Retry failed step", exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   const response = await retried;
   const job = await checked(response);
-  expect(response.request().postDataJSON()).toEqual({ allow_external: false });
+  expect(response.request().postDataJSON()).toEqual({});
   expect(job.target_id || job.document_id).toBe(original.id);
-  expect(job.id).not.toBe(result.jobs[0].id);
+  expect(job.id).toBe(result.jobs[0].id);
   // A retry cannot repair invalid bytes. Verify honest failure and identical
   // retained original, rather than fabricating a successful indexing response.
   await expect.poll(async () => (await checked(await page.request.get(`/api/documents/${original.id}`))).status, { timeout: 90000 }).toBe("failed");
@@ -311,7 +385,7 @@ test("failed indexing retries the same stored original after a page reload", asy
   expect(await download.body()).toEqual(bytes);
   expect(uploads).toHaveLength(1);
   const jobs: Entity[] = await checked(await page.request.get("/api/jobs"));
-  expect(jobs.filter(item => item.kind === "index" && (item.target_id || item.document_id) === original.id)).toHaveLength(2);
+  expect(jobs.filter(item => item.kind === "index" && (item.target_id || item.document_id) === original.id)).toHaveLength(1);
 });
 
 test("close, navigation and dataset change during delayed upload preserve destination and stop the batch", async ({ page, workspace: w }) => {
@@ -340,11 +414,11 @@ test("close, navigation and dataset change during delayed upload preserve destin
     await expect(row(page, "Original-destination.txt").filter({ hasText: "Uploading original" })).toBeVisible();
     await dialog(page).getByRole("button", { name: "Close uploads", exact: true }).click();
     await navigate(page, "Home");
-    await navigate(page, "Ask Aegis");
+    await navigate(page, "Aegis Agent");
     await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.other.id);
     await openUploads(page);
     await expect(dialog(page)).toContainText(w.other.name);
-    await expect(dialog(page).getByRole("listitem")).toHaveCount(0);
+    await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
     release();
     await expect(dialog(page).getByRole("alert")).toContainText("Remaining files were not uploaded");
     expect(attempts).toBe(1);
@@ -354,6 +428,7 @@ test("close, navigation and dataset change during delayed upload preserve destin
     await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
     await openUploads(page);
     await expect(row(page, "Remaining-pending.txt")).toContainText("Ready to upload");
+    await dialog(page).getByRole("button", { name: "View processing status", exact: true }).click();
     await expect(row(page, "Original-destination.txt")).toContainText("Ready for questions", { timeout: 90000 });
   } finally { release(); }
 });
@@ -377,7 +452,7 @@ test("mobile dialog fits narrow and landscape screens with keyboard focus and di
   await expect(dialog(page)).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(1);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(1);
   await upload.click();
   await expect(dialog(page).getByText("Ready for questions", { exact: true })).toBeVisible({ timeout: 90000 });
   await screenshot(page, "mobile-ready");
@@ -415,7 +490,7 @@ test("missing, inactive and unmapped datasets block attachments until a configur
   await expect(dialog(page).getByLabel("Choose documents", { exact: true })).toBeDisabled();
   await expect(dialog(page).getByRole("button", { name: /^Upload\s*$/ })).toBeDisabled();
   await drop(page, dialog(page).locator(".shared-dropzone"), [file("Must-not-upload.txt")]);
-  await expect(dialog(page).getByRole("listitem")).toHaveCount(0);
+  await expect(dialog(page).locator(".upload-files > li")).toHaveCount(0);
   expect(await documents(page, unmapped)).toEqual([]);
   await page.keyboard.press("Escape");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(w.dataset.id);
@@ -435,7 +510,7 @@ test("an explicitly sent question retrieves and cites the original uploaded from
   const chats: Request[] = [];
   page.on("request", request => { if (isChatWrite(request)) chats.push(request); });
   await openUploads(page);
-  await choose(page, [file(filename, "SYNTHETIC UPLOAD-TO-ANSWER EVIDENCE. The review reference is FRESH-ORIGINAL-2026. This document is newly uploaded from Ask Aegis and retained as the original source.")]);
+  await choose(page, [file(filename, "SYNTHETIC UPLOAD-TO-ANSWER EVIDENCE. The review reference is FRESH-ORIGINAL-2026. This document is newly uploaded from Aegis Agent and retained as the original source.")]);
   const accepted = page.waitForResponse(response => isUpload(response.request()));
   await dialog(page).getByRole("button", { name: "Upload 1", exact: true }).click();
   const uploaded = await checked(await accepted);
@@ -488,4 +563,36 @@ test("an explicitly sent question retrieves and cites the original uploaded from
   expect(chats.filter(request => /\/messages\/stream$/.test(request.url()))).toHaveLength(1);
   expect((await documents(page, w.dataset)).map(document => document.id)).toEqual([original.id]);
   await expect(page.getByRole("button", { name: "Dismiss error" })).toHaveCount(0);
+});
+
+test("temporary chat reads one file directly without dataset indexing or saved history", async ({ page, workspace: w }) => {
+  const permanent = await uploadReady(page.request,w.headers,w.dataset,'Permanent-fixture.txt',synthetic);
+  const before=await checked(await page.request.get('/api/conversations'));
+  const beforeJobs=await checked(await page.request.get('/api/jobs'));
+  const writes: string[]=[];
+  page.on('request',r=>{if(r.method()==='POST')writes.push(new URL(r.url()).pathname);});
+  await page.goto('/');
+  await expect(page.locator('main h1')).toHaveText('Aegis Agent');
+  await page.getByRole('button',{name:'Temporary chat',exact:true}).click();
+  await expect(page.getByLabel('Chat dataset',{exact:true})).toHaveCount(0);
+  await page.getByLabel('Temporary chat model',{exact:true}).selectOption(w.models.fast.id);
+  const direct=page.getByLabel('Temporary document file',{exact:true});
+  expect(await direct.getAttribute('multiple')).toBeNull();
+  const accepted=page.waitForResponse(r=>r.url().endsWith('/api/temporary-chat/documents')&&r.request().method()==='POST');
+  await direct.setInputFiles(file('Direct-fixture.txt','Synthetic invoice. Review reference TEMP-4242.'));
+  const doc=await checked(await accepted);expect(doc.indexed).toBe(false);expect(doc.embedded).toBe(false);
+  await page.getByLabel('Ask a temporary question',{exact:true}).fill('What is the review reference?');
+  await page.getByRole('button',{name:'Send temporary question',exact:true}).click();
+  await expect(page.getByRole('article',{name:'Temporary answer',exact:true})).toContainText('TEMP-4242');
+  expect(await checked(await page.request.get('/api/conversations'))).toEqual(before);
+  expect(await checked(await page.request.get('/api/jobs'))).toEqual(beforeJobs);
+  expect((await documents(page,w.dataset)).map(d=>d.id)).toEqual([permanent.id]);
+  expect(writes).toEqual(['/api/temporary-chat/documents','/api/temporary-chat/messages']);
+  await page.getByRole('button',{name:'Clear temporary document',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Attach temporary document',exact:true})).toBeVisible();
+  expect((await page.request.get('/api/temporary-chat/documents/'+doc.id)).status()).toBe(404);
+  await page.reload();
+  await expect(page.getByRole('article',{name:'Temporary answer',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Temporary chat',exact:true})).toHaveAttribute('aria-pressed','false');
+  expect(await checked(await page.request.get('/api/conversations'))).toEqual(before);
 });

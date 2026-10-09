@@ -5,15 +5,28 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFi
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from jsonschema import Draft202012Validator, validate, ValidationError
 from .core import *
-from . import providers, dataset_models as routing
+from . import providers, reranker, workflow, temporary_files, dataset_models as routing
 
 @asynccontextmanager
 async def lifespan(app):
-    init();yield
-app=FastAPI(title='Aegis storage-first document intelligence',version='0.1.0',lifespan=lifespan)
+    init()
+    from . import reranker
+    if reranker.enabled():
+        import asyncio
+        await asyncio.to_thread(reranker.load)
+    import asyncio
+    from contextlib import suppress
+    cleanup = asyncio.create_task(temporary_chat.expiry_loop())
+    try:
+        yield
+    finally:
+        cleanup.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup
+app=FastAPI(title='Aegis AI Data Platform',version='0.1.0',lifespan=lifespan)
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv('ALLOWED_ORIGINS','http://localhost:3000,http://127.0.0.1:3000').split(','),allow_credentials=True,allow_methods=['*'],allow_headers=['Content-Type','X-CSRF-Token','Authorization'])
 @app.middleware('http')
 async def security_headers(request,call_next):
@@ -46,13 +59,14 @@ def new_record(kind,owner,name='',parent='',data=None,status='ready'):
 def enqueue(owner,kind,target,allow_external=False,snapshot=None):
     j=Job(id=uid(),owner=owner,kind=kind,target_id=target,status='queued',created_at=time.time(),updated_at=time.time())
     store.put_json('jobs/'+j.id+'.json',{'allow_external':allow_external,**({'execution':snapshot} if snapshot else {})})
+    workflow.initialize(j.id,kind)
     with Session.begin() as s:s.add(j)
     from .queue_transport import get_transport
     get_transport(settings()['queue_provider']).notify(j.id)
     return j
 
 def external_check(consent,embedding=False,cfg=None):
-    cfg=cfg or settings();external=(cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci') or cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci'
+    cfg=cfg or settings();external=(cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci','registered') or cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider']=='oci'
     if external and not consent:raise HTTPException(409,'This action sends document text or your query to the configured external provider. Confirm external data transmission first.')
     if (cfg['model_provider']=='mock' or cfg['embedding_provider']=='mock') and os.getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true and are for tests only')
 
@@ -81,12 +95,13 @@ def login(body:Credentials,response:Response,request:Request):
     attempts=[t for t in _login_attempts.get(client,[]) if t>now-300]
     if len(attempts)>=15:raise HTTPException(429,'Too many login attempts; try again in five minutes')
     _login_attempts[client]=attempts+[now]
-    with Session.begin() as s:
-        u=s.scalar(select(User).where(User.username==body.username))
-        if not u or not password_valid(body.password,u.password_hash):raise HTTPException(401,'Invalid username or password')
-        token=secrets.token_urlsafe(40);csrf=secrets.token_urlsafe(32)
-        s.add(Login(id=hashlib.sha256(token.encode()).hexdigest(),owner=u.id,expires=now+43200,csrf=csrf))
-        user={'id':u.id,'username':u.username}
+    with document_lock('administrator-auth'):
+        with Session.begin() as s:
+            u=s.scalar(select(User).where(User.username==body.username))
+            if not u or not password_valid(body.password,u.password_hash):raise HTTPException(401,'Invalid username or password')
+            token=secrets.token_urlsafe(40);csrf=secrets.token_urlsafe(32)
+            s.add(Login(id=hashlib.sha256(token.encode()).hexdigest(),owner=u.id,expires=now+43200,csrf=csrf))
+            user={'id':u.id,'username':u.username}
     _login_attempts.pop(client,None)
     response.set_cookie('aegis_session',token,httponly=True,secure=os.getenv('COOKIE_SECURE','false')=='true',samesite='strict',max_age=43200,path='/')
     return {'user':user,'csrf_token':csrf}
@@ -109,8 +124,10 @@ def ready():
         with engine.connect() as c:c.execute(text('SELECT 1'))
         if settings()['search_provider']=='qdrant':providers.client().get_collections()
         if settings()['search_provider']=='oci':providers.oci_vector().test_connection()
-        return {'status':'ready','database':True,'vector_store':True}
-    except Exception:raise HTTPException(503,'Database or vector store unavailable')
+        from . import reranker
+        if reranker.enabled():reranker.load()
+        return {'status':'ready','database':True,'vector_store':True,'reranker':reranker.status()}
+    except Exception:raise HTTPException(503,'Database, vector store or configured reranker unavailable')
 @app.get('/api/overview')
 def overview(owner=Depends(auth)):
     docs=records(owner,'document')
@@ -125,9 +142,11 @@ def create_kb(body:KBInput,owner=Depends(auth)):return routing.dataset_public(ne
 def documents(kb_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
     scope=dataset_id or kb_id
     if scope:get_record(scope,owner,'knowledge_base')
-    return [routing.document_public(d) for d in records(owner,'document') if not scope or d.parent_id==scope]
+    snapshots={}
+    return [routing.document_public(d,snapshots) for d in records(owner,'document') if not scope or d.parent_id==scope]
 @app.post('/api/documents/upload')
-async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:str=Form(''),allow_external:bool=Form(False),owner=Depends(auth)):
+async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:str=Form(''),allow_external:bool=Form(False),temporary_session_id:str=Form(''),owner=Depends(auth)):
+    if temporary_session_id:raise HTTPException(409,'Temporary chat uploads use /api/temporary-chat/documents and never create an index.')
     if kb_id and dataset_id and kb_id!=dataset_id:raise HTTPException(400,'Conflicting dataset identifiers')
     kb_id=dataset_id or kb_id
     if not kb_id:raise HTTPException(409,'Create or choose a dataset and map its embedding model before uploading.')
@@ -156,14 +175,40 @@ def preview(id:str,owner=Depends(auth)):
 def download(id:str,owner=Depends(auth)):
     from urllib.parse import quote
     r=get_record(id,owner,'document');return Response(store.get(r.ref),media_type='application/octet-stream',headers={'Content-Disposition':"attachment; filename*=UTF-8''"+quote(r.name)})
+@app.get('/api/documents/{id}/source')
+def source_document(id:str,owner=Depends(auth)):
+    from urllib.parse import quote
+    r=get_record(id,owner,'document');ext=r.name.rsplit('.',1)[-1].lower()
+    if ext not in ('pdf','txt'):raise HTTPException(415,'Inline original preview supports PDF and UTF-8 TXT. Download DOCX to review its original layout.')
+    return Response(store.get(r.ref),media_type='application/pdf' if ext=='pdf' else 'text/plain; charset=utf-8',headers={'Content-Disposition':"inline; filename*=UTF-8''"+quote(r.name),'Content-Security-Policy':"sandbox"})
 class Consent(BaseModel):allow_external:bool=False
 @app.post('/api/documents/{id}/reindex')
 def reindex(id:str,body:Consent,owner=Depends(auth)):
     doc=get_record(id,owner,'document');dataset,_=routing.documents_scope(owner,doc.parent_id,[id]);snapshot=routing.execution_snapshot(dataset,'embedding');external_check(body.allow_external,True,snapshot['settings'])
-    with Session.begin() as s:
-        if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'An indexing job is already active')
-        r=s.get(Record,id);r.status='queued';r.error=''
-    return job_repr(enqueue(owner,'index',id,body.allow_external,snapshot))
+    with document_lock('submit-'+id):
+        with Session.begin() as s:
+            if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'An indexing job is already active')
+            r=s.get(Record,id);r.status='queued';r.error=''
+        return job_repr(enqueue(owner,'index',id,body.allow_external,snapshot))
+
+class ReextractDocument(Consent):confirm_reviewed:bool=False
+@app.post('/api/documents/{id}/reextract')
+def reextract_document(id:str,body:ReextractDocument,owner=Depends(auth)):
+    doc=get_record(id,owner,'document')
+    reviewed=[r for r in records(owner,'extraction') if id in store.json(r.ref).get('document_ids',[]) and store.json(r.ref).get('review_status')=='reviewed']
+    if reviewed and not body.confirm_reviewed:raise HTTPException(409,'Reviewed extraction results exist. Confirm re-extraction; saved structured reviews are retained and can be rerun separately.')
+    with document_lock('submit-'+id):
+        with Session() as s:
+            if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'A document job is already active')
+        revision=doc.version+1
+        for suffix in ('parsed.json','chunks.json','index.json','index-execution.json'):
+            try:store.put(f'documents/{id}/versions/v{doc.version}/{suffix}',store.get('documents/'+id+'/'+suffix))
+            except FileNotFoundError:pass
+        dataset,_=routing.documents_scope(owner,doc.parent_id,[id]);snapshot=routing.execution_snapshot(dataset,'embedding');external_check(body.allow_external,True,snapshot['settings'])
+        with Session.begin() as s:
+            r=s.get(Record,id);r.version=revision;r.status='queued';r.error=''
+        result=job_repr(enqueue(owner,'index',id,body.allow_external,snapshot))
+        return result|{'original_retained':True,'document_version':revision,'reviewed_results_retained':True}
 @app.delete('/api/documents/{id}')
 def delete_document(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'document')
@@ -173,7 +218,9 @@ def delete_document(id:str,owner=Depends(auth)):
     with document_lock(id):
         try:providers.delete_vectors(id)
         except Exception:raise HTTPException(503,'Vector cleanup failed; document is unavailable for retrieval. Retry deletion when vector storage recovers.')
-        for suffix in ['original','parsed.json','chunks.json','index.json','index-execution.json']:store.delete('documents/'+id+'/'+suffix)
+        for suffix in ['original','parsed.json','chunks.json','index.json','index-execution.json','retention.json']:store.delete('documents/'+id+'/'+suffix)
+        for n in range(1,r.version+1):
+            for suffix in ('parsed.json','chunks.json','index.json','index-execution.json'):store.delete(f'documents/{id}/versions/v{n}/{suffix}')
         with Session.begin() as s:s.delete(s.get(Record,id))
     return {'ok':True}
 class ConversationInput(BaseModel):title:str='New conversation';kb_id:str='';dataset_id:str='';document_ids:list[str]=Field(default_factory=list)
@@ -184,6 +231,7 @@ def create_conversation(body:ConversationInput,owner=Depends(auth)):
     dataset_id=body.dataset_id or body.kb_id
     if body.dataset_id and body.kb_id and body.dataset_id!=body.kb_id:raise HTTPException(400,'Conflicting dataset identifiers')
     if dataset_id or body.document_ids:dataset,_=routing.documents_scope(owner,dataset_id,body.document_ids);dataset_id=dataset.id
+    for id in body.document_ids:temporary_files.keep(id)
     r=new_record('conversation',owner,body.title[:200],parent=dataset_id,data=body.model_dump()|{'dataset_id':dataset_id,'kb_id':dataset_id,'messages':[]});return representation(r)|store.json(r.ref)
 @app.get('/api/conversations/{id}')
 def conversation(id:str,owner=Depends(auth)):
@@ -206,12 +254,15 @@ def message_execution(body,owner,data):
     external_check(body.allow_external,cfg=snapshot['settings']);external_check(body.allow_external,True,snapshot['embedding_execution']['settings'])
     return [d for d in docs if d.status=='ready'],snapshot
 
+
 @app.post('/api/conversations/{id}/messages')
 def message(id:str,body:MessageInput,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');lock=_locks.setdefault(id,threading.Lock())
     if not lock.acquire(blocking=False):raise HTTPException(409,'This conversation already has a response in progress')
     try:
         data=store.json(r.ref);docs,snapshot=message_execution(body,owner,data);selection=routing.public_selection(snapshot)
+        for doc in docs:temporary_files.keep(doc.id)
+        data['document_ids']=[doc.id for doc in docs]
         request_id=uid();store.put_json('executions/'+request_id+'.json',snapshot)
         data['messages'].append({'id':request_id,'role':'user','text':body.text,'created_at':time.time(),'model_selection':selection});store.put_json(r.ref,data)
         try:
@@ -238,7 +289,7 @@ def feedback(id:str,body:Feedback,owner=Depends(auth)):
 @app.get('/api/conversations/{id}/export')
 def export_conversation(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');return Response(store.get(r.ref),media_type='application/json',headers={'Content-Disposition':'attachment; filename="conversation.json"'})
-class TemplateInput(BaseModel):name:str=Field(min_length=1,max_length=200);schema_:dict=Field(alias='schema')
+class TemplateInput(BaseModel):name:str=Field(min_length=1,max_length=200);schema_:dict=Field(alias='schema');dataset_id:str|None=None
 def check_schema(schema):
     try:Draft202012Validator.check_schema(schema)
     except Exception:raise HTTPException(400,'Invalid JSON Schema')
@@ -265,68 +316,134 @@ def check_schema(schema):
     strict(schema)
 @app.get('/api/templates')
 def templates(owner=Depends(auth)):return [representation(r)|store.json(r.ref) for r in records(owner,'template')]
+@app.post('/api/templates/validate')
+def validate_template(body:TemplateInput,owner=Depends(auth)):
+    if body.dataset_id:get_record(body.dataset_id,owner,'knowledge_base')
+    check_schema(body.schema_)
+    return {'valid':True,'name':body.name,'schema':body.schema_,'dataset_id':body.dataset_id}
 @app.post('/api/templates')
 def create_template(body:TemplateInput,owner=Depends(auth)):
-    check_schema(body.schema_);r=new_record('template',owner,body.name,data={'name':body.name,'schema':body.schema_,'version':1});return representation(r)|store.json(r.ref)
+    if body.dataset_id:get_record(body.dataset_id,owner,'knowledge_base')
+    check_schema(body.schema_);r=new_record('template',owner,body.name,parent=body.dataset_id or '',data={'name':body.name,'schema':body.schema_,'version':1,'dataset_id':body.dataset_id});return representation(r)|store.json(r.ref)
 @app.put('/api/templates/{id}')
 def update_template(id:str,body:TemplateInput,owner=Depends(auth)):
     check_schema(body.schema_);r=get_record(id,owner,'template');version=r.version+1;ref=f'template/{id}/v{version}.json'
-    store.put_json(ref,{'name':body.name,'schema':body.schema_,'version':version})
+    if body.dataset_id and body.dataset_id!=r.parent_id:raise HTTPException(400,'Template dataset association cannot be changed. Import a new template for the destination dataset.')
+    store.put_json(ref,{'name':body.name,'schema':body.schema_,'version':version,'dataset_id':r.parent_id or None})
     with Session.begin() as s:r=s.get(Record,id);r.version=version;r.ref=ref;r.name=body.name;r.updated_at=time.time()
     return representation(r)|store.json(ref)
 @app.get('/api/templates/{id}/versions')
 def template_versions(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'template');return [store.json(f'template/{id}/v{n}.json') for n in range(1,r.version+1)]
+@app.get('/api/templates/{id}/export')
+def export_template(id:str,version:int|None=None,owner=Depends(auth)):
+    from urllib.parse import quote
+    import re
+    r=get_record(id,owner,'template');number=r.version if version is None else version
+    if number<1 or number>r.version:raise HTTPException(404,'Template version not found')
+    data=store.json(r.ref if number==r.version else f'template/{id}/v{number}.json')
+    name=data['name'];safe=re.sub(r'[<>:"/\\|?*\x00-\x1f]','-',name.strip())[:100].rstrip('. ') or 'prompt-template'
+    filename=f'{safe}-v{number}.json'
+    disposition=f"attachment; filename=\"prompt-template-v{number}.json\"; filename*=UTF-8''{quote(filename,safe='')}"
+    return Response(json.dumps({'name':name,'schema':data['schema']},ensure_ascii=False,indent=2)+'\n',media_type='application/json',headers={'Content-Disposition':disposition})
 class ExtractInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=20);template_id:str;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
 @app.get('/api/extractions')
-def extractions(owner=Depends(auth)):return [representation(r) for r in records(owner,'extraction')]
+def extractions(owner=Depends(auth)):
+    output=[]
+    for r in records(owner,'extraction'):
+        data=store.json(r.ref)
+        output.append(representation(r)|{key:data.get(key) for key in ('document_ids','template_id','template_version','review_status','model_selection')})
+    return output
 @app.post('/api/extractions')
 def create_extraction(body:ExtractInput,owner=Depends(auth)):
     t=get_record(body.template_id,owner,'template');dataset,docs=routing.documents_scope(owner,body.dataset_id,body.document_ids)
+    if t.parent_id and t.parent_id!=dataset.id:raise HTTPException(400,'Choose a prompt template belonging to the selected dataset.')
     snapshot=routing.execution_snapshot(dataset,'extraction',body.model_id);routing.require_indexes(docs,snapshot)
     external_check(body.allow_external,cfg=snapshot['settings'])
     if any(d.status!='ready' for d in docs):raise HTTPException(409,'Documents must be ready before extraction')
+    for doc in docs:temporary_files.keep(doc.id)
     data=body.model_dump()|{'dataset_id':dataset.id,'model_selection':routing.public_selection(snapshot),'schema':store.json(t.ref)['schema'],'template_version':t.version,'result':None,'sources':[]}
     r=new_record('extraction',owner,t.name,parent=dataset.id,data=data,status='queued');j=enqueue(owner,'extract',r.id,body.allow_external,snapshot)
     return representation(r)|data|{'job':job_repr(j)}
 @app.get('/api/extractions/{id}')
 def extraction(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'extraction');return representation(r)|store.json(r.ref)
-class ReviewInput(BaseModel):result:Any
+class ReviewInput(BaseModel):
+    result:Any
+    version:int=Field(ge=1)
 @app.patch('/api/extractions/{id}')
 def review_extraction(id:str,body:ReviewInput,owner=Depends(auth)):
-    r=get_record(id,owner,'extraction');data=store.json(r.ref)
-    if r.status!='ready':raise HTTPException(409,'Wait for extraction to complete')
-    try:validate(body.result,data['schema'])
-    except ValidationError:raise HTTPException(400,'Result does not match the template schema')
-    store.put_json(f'extraction/{id}/review-{uid()}.json',data)
-    data['result']=body.result;data['evidence']=[];data['evidence_notice']='Result manually edited. Original extraction sources are retained, but field evidence must be rechecked.';data['review_status']='reviewed';data['reviewed_at']=time.time();store.put_json(r.ref,data);return representation(r)|data
+    with document_lock(id):
+        r=get_record(id,owner,'extraction');data=store.json(r.ref)
+        if r.status!='ready':raise HTTPException(409,'Wait for extraction to complete')
+        if body.version!=r.version:raise HTTPException(409,'This result changed in another session. Reload the latest saved version before saving; your draft is retained.')
+        try:validate(body.result,data['schema'])
+        except ValidationError as error:raise HTTPException(400,'Result does not match the template schema at '+('/'.join(str(p) for p in error.path) or 'root'))
+        try:json.dumps(body.result,ensure_ascii=False,allow_nan=False).encode('utf-8')
+        except (ValueError,UnicodeError):raise HTTPException(400,'Saved values must contain valid Unicode and finite JSON numbers.')
+        from .result_exports import leaves
+        before=dict(leaves(data['result']));after=dict(leaves(body.result))
+        changed={path for path in before.keys()|after.keys() if before.get(path)!=after.get(path)}
+        prior_evidence=data.get('evidence',[])
+        data['original_evidence']=data.get('original_evidence',prior_evidence)
+        data['evidence']=[item for item in prior_evidence if not any((item.get('field') or item.get('path') or item.get('json_pointer') or '')==path or path.startswith((item.get('field') or item.get('path') or item.get('json_pointer') or '')+'/') for path in changed)]
+        data.update(result=body.result,review_status='reviewed',reviewed_at=time.time(),reviewed_by=owner,evidence_notice='Edited fields are unverified; original quotes and source provenance are retained.',edited_fields=sorted(set(data.get('edited_fields',[]))|changed))
+        r=routing.write_version(r,data)
+        return representation(r)|data
+
+class ReextractInput(Consent):
+    version:int=Field(ge=1)
+    confirm_reviewed:bool=False
+@app.post('/api/extractions/{id}/reextract')
+def reextract_result(id:str,body:ReextractInput,owner=Depends(auth)):
+    if get_record(id,owner,'extraction').status!='ready':raise HTTPException(409,'Wait for extraction to complete.')
+    with document_lock('submit-'+id),document_lock(id):
+        r=get_record(id,owner,'extraction');data=store.json(r.ref)
+        if r.status!='ready' or r.version!=body.version:raise HTTPException(409,'Reload the completed extraction before re-extracting.')
+        if data.get('review_status')=='reviewed' and not body.confirm_reviewed:raise HTTPException(409,'Confirm before replacing reviewed edits. The saved version is preserved.')
+        dataset,docs=routing.documents_scope(owner,r.parent_id,data['document_ids']);snapshot=routing.execution_snapshot(dataset,'extraction',data.get('model_id'));routing.require_indexes(docs,snapshot)
+        if any(d.status!='ready' for d in docs):raise HTTPException(409,'Wait for document indexing to finish.')
+        external_check(body.allow_external,cfg=snapshot['settings'])
+        with Session() as s:
+            if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'An extraction job is already active')
+        for key in ('reviewed_at','reviewed_by','evidence_notice'):
+            data.pop(key,None)
+        data.update(result=None,evidence=[],original_evidence=[],edited_fields=[],sources=[],review_status='unreviewed',previous_version=r.version,allow_external=body.allow_external,model_selection=routing.public_selection(snapshot))
+        r=routing.write_version(r,data)
+        with Session.begin() as s:s.get(Record,id).status='queued'
+        j=enqueue(owner,'extract',id,body.allow_external,snapshot)
+        return representation(get_record(id,owner,'extraction'))|data|{'job':job_repr(j)}
+
+@app.get('/api/extractions/{id}/versions')
+def extraction_versions(id:str,owner=Depends(auth)):
+    r=get_record(id,owner,'extraction')
+    return [{'version':n,**store.json(f'extraction/{id}/v{n}.json')} for n in range(1,r.version+1)]
 @app.get('/api/extractions/{id}/export')
 def export_extraction(id:str,format:str='json',owner=Depends(auth)):
     r=get_record(id,owner,'extraction');data=store.json(r.ref)
     if r.status!='ready':raise HTTPException(409,'Extraction is not complete')
-    if format=='json':payload=json.dumps(data['result'],indent=2);media='application/json'
-    elif format=='csv':
-        rows=data['result'] if isinstance(data['result'],list) else [data['result']];out=io.StringIO();keys=sorted({k for row in rows for k in row});writer=csv.DictWriter(out,fieldnames=keys);writer.writeheader()
-        for row in rows:
-            safe={k:json.dumps(v) if isinstance(v,(dict,list)) else str(v if v is not None else '') for k,v in row.items()}
-            safe={k:"'"+v if v.startswith(('=','+','-','@','\t','\r')) else v for k,v in safe.items()};writer.writerow(safe)
-        payload=out.getvalue();media='text/csv'
-    else:raise HTTPException(400,'Export format must be json or csv')
-    store.put(f'extraction/{id}/export.{format}',payload.encode());return Response(payload,media_type=media,headers={'Content-Disposition':f'attachment; filename="extraction.{format}"'})
+    from .result_exports import render
+    try:payload,media=render(r,data,format)
+    except ValueError as error:raise HTTPException(400,str(error))
+    return Response(payload,media_type=media,headers={'Content-Disposition':f'attachment; filename="extraction-v{r.version}.{format}"'})
 @app.get('/api/jobs')
 def jobs(owner=Depends(auth)):
     with Session() as s:return [job_repr(j) for j in s.scalars(select(Job).where(Job.owner==owner).order_by(Job.created_at.desc()))]
 @app.post('/api/jobs/{id}/retry')
 def retry_job(id:str,owner=Depends(auth)):
-    with Session.begin() as s:
+    initial=None
+    with Session() as s:initial=s.get(Job,id)
+    if not initial or initial.owner!=owner:raise HTTPException(404,'Not found')
+    with document_lock('submit-'+initial.target_id),Session.begin() as s:
         j=s.get(Job,id)
         if not j or j.owner!=owner:raise HTTPException(404,'Not found')
         if j.status not in ('failed','cancelled'):raise HTTPException(409,'Only failed or cancelled jobs can be retried')
         target=s.get(Record,j.target_id)
         if not target or target.owner!=owner:raise HTTPException(404,'Target deleted')
         if target.parent_id:routing.require_active(routing.owned(target.parent_id,owner,'knowledge_base'))
+        if s.scalar(select(Job).where(Job.target_id==j.target_id,Job.id!=id,Job.status.in_(['queued','running']))):raise HTTPException(409,'Another job is already active for this target')
         j.status='queued';j.progress=0;j.attempts=0;j.error='';j.lease_until=0;target.status='queued'
+        target.error='';workflow.retry(id)
     from .queue_transport import get_transport
     get_transport(settings()['queue_provider']).notify(j.id)
     return job_repr(j)
@@ -338,6 +455,8 @@ def cancel_job(id:str,owner=Depends(auth)):
         if j.status not in ('queued','running'):raise HTTPException(409,'Job already finished')
         j.status='cancelled';j.lease_token='';j.error='Cancelled by user';r=s.get(Record,j.target_id)
         if r:r.status='cancelled'
+        state=workflow.read(id)
+        if state.get('current'):workflow.transition(id,state['current'],'cancelled','Cancelled by user')
     return job_repr(j)
 @app.get('/api/index')
 def inspect_index(document_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
@@ -354,7 +473,7 @@ def get_settings(owner=Depends(auth)):
     except Exception:has_key=False
     try:has_oci_key=bool(oci_api_key())
     except Exception:has_oci_key=False
-    return settings()|{'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
+    return settings()|{'reranker':reranker.status(),'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'local_only':os.getenv('AEGIS_LOCAL_ONLY')=='true','ollama_endpoint':__import__('app.ollama_provider',fromlist=['base_url']).base_url(),'mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
 @app.patch('/api/settings')
 def save_settings(body:dict,owner=Depends(auth)):
     with document_lock('settings-config'):return _save_settings(body,owner)
@@ -366,7 +485,14 @@ def _save_settings(body,owner):
     with Session() as session:
         if session.scalar(select(Job).where(Job.status.in_(['queued','running'])).limit(1)):raise HTTPException(409,'Wait for or cancel active jobs before changing settings')
     cfg=settings()|{k:v for k,v in body.items() if k not in ('api_key','oci_api_key')}
-    if cfg['model_provider'] not in ('mock','openai','oci') or cfg['embedding_provider'] not in ('mock','openai','sentence_transformers') or cfg['search_provider'] not in ('local','qdrant','oci') or cfg['storage_provider'] not in ('local','oci'):raise HTTPException(400,'Selected provider is not implemented; see capabilities')
+    if cfg['model_provider'] not in ('mock','openai','oci','ollama') or cfg['embedding_provider'] not in ('mock','openai','sentence_transformers','ollama') or cfg['search_provider'] not in ('local','qdrant','oci') or cfg['storage_provider'] not in ('local','oci'):raise HTTPException(400,'Selected provider is not implemented; see capabilities')
+    try:
+        enforce_local_only(cfg)
+        from .ollama_provider import local_model_name
+        if cfg['model_provider']=='ollama':local_model_name(cfg['model'])
+        if cfg['embedding_provider']=='ollama':local_model_name(cfg['embedding_model'])
+    except (ValueError,RuntimeError) as exc:raise HTTPException(400,str(exc))
+    if os.getenv('AEGIS_LOCAL_ONLY')=='true' and any(body.get(k) not in (None,'','********') for k in ('api_key','oci_api_key')):raise HTTPException(400,'Provider credentials are disabled in local-only mode.')
     if any(cfg[k]!=settings()[k] for k in ('oci_region','oci_project_id','oci_vector_store_id')):
         with Session() as session:known_docs=list(session.scalars(select(Record).where(Record.kind=='document')))
         for doc in known_docs:
@@ -435,7 +561,9 @@ def test_settings(owner=Depends(auth)):
 def capabilities(owner=Depends(auth)):
     from .oci_adapters import capability_report
     from .queue_transport import get_transport
-    return {'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'openai_responses':True,'sentence_transformers':True,'ocr':False,'streaming':True},'oci':capability_report(),'active':settings()}
+    return {'reranker':reranker.status(),'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'openai_responses':True,'sentence_transformers':True,'ollama':True,'ocr':False,'streaming':True},'oci':capability_report(),'active':settings()}
+
+CHAT_HEARTBEAT_SECONDS=10
 
 @app.post('/api/conversations/{id}/messages/stream')
 async def stream_message(id:str,body:MessageInput,request:Request,owner=Depends(auth)):
@@ -444,52 +572,80 @@ async def stream_message(id:str,body:MessageInput,request:Request,owner=Depends(
     if not lock.acquire(blocking=False):raise HTTPException(409,'A response is already in progress')
     try:
         data=store.json(r.ref);docs,snapshot=message_execution(body,owner,data);selection=routing.public_selection(snapshot)
+        for doc in docs:temporary_files.keep(doc.id)
+        data['document_ids']=[doc.id for doc in docs]
         with execution_context(snapshot['embedding_execution']):sources=await asyncio.to_thread(providers.search,body.text,owner,docs,settings()['top_k'])
         request_id=uid();store.put_json('executions/'+request_id+'.json',snapshot)
         data['messages'].append({'id':request_id,'role':'user','text':body.text,'created_at':time.time(),'model_selection':selection});store.put_json(r.ref,data)
     except HTTPException:lock.release();raise
     except Exception:lock.release();raise HTTPException(502,'Retrieval failed; check provider connectivity and indexed documents')
     async def events():
+        from contextlib import suppress
         msg={'id':uid(),'role':'assistant','text':'','citations':[],'created_at':time.time(),'status':'streaming','mock':snapshot['settings']['model_provider']=='mock','model_selection':selection}
-        iterator=None
+        iterator=None;pending=None;saved=False
+        def persist():
+            nonlocal saved
+            used={int(x) for x in re.findall(r'\[(\d+)\]',msg['text'])}
+            msg['citations']=[{'index':i+1,**source,'url':'/api/documents/'+source['document_id']+'/preview'} for i,source in enumerate(sources) if i+1 in used]
+            if not saved:
+                data['messages'].append(msg);store.put_json(r.ref,data);saved=True
         try:
             with execution_context(snapshot):
                 iterator=providers.answer_stream_async(body.text,sources,data['messages'][:-1])
-                async for piece in iterator:
+                while True:
+                    if pending is None:pending=asyncio.create_task(anext(iterator))
+                    ready,_=await asyncio.wait({pending},timeout=CHAT_HEARTBEAT_SECONDS)
                     if await request.is_disconnected():msg['status']='aborted';break
+                    if not ready:
+                        yield ': keep-alive\n\n';continue
+                    try:piece=pending.result()
+                    except StopAsyncIteration:pending=None;break
+                    pending=None
                     msg['text']+=piece
                     yield 'event: delta\ndata: '+json.dumps({'text':piece})+'\n\n'
             if msg['status']=='streaming':msg['status']='completed'
-            used={int(x) for x in re.findall(r'\[(\d+)\]',msg['text'])}
-            msg['citations']=[{'index':i+1,**source,'url':'/api/documents/'+source['document_id']+'/preview'} for i,source in enumerate(sources) if i+1 in used]
-            yield 'event: done\ndata: '+json.dumps({'message':msg,'conversation_id':id})+'\n\n'
+            persist()
+            yield 'event: done\ndata: '+json.dumps({'message':msg,'user_message':data['messages'][-2],'conversation_id':id})+'\n\n'
         except (GeneratorExit,asyncio.CancelledError):msg['status']='aborted';raise
-        except Exception:
-            msg['status']='failed';yield 'event: error\ndata: '+json.dumps({'detail':'Response interrupted or provider unavailable; partial text was saved'})+'\n\n'
+        except Exception as exc:
+            msg['status']='failed'
+            local=snapshot['settings']['model_provider']=='ollama'
+            detail=str(exc) if local and isinstance(exc,providers.ProviderError) else 'The model could not complete this response. Try again or check its connection.'
+            code='provider_unavailable'
+            if 'incomplete' in detail:code='incomplete_answer'
+            elif 'context budget' in detail:code='context_limit'
+            detail+=(' Any partial response has been kept for reference.' if msg['text'] else ' No answer was generated.')
+            msg['error']={'code':code,'detail':detail,'retryable':True}
+            persist()
+            yield 'event: error\ndata: '+json.dumps({'detail':detail,'code':code,'message':msg,'user_message':data['messages'][-2]})+'\n\n'
         finally:
             try:
+                if pending is not None:
+                    pending.cancel()
+                    with suppress(asyncio.CancelledError,Exception):await pending
                 if iterator is not None:
                     with execution_context(snapshot):await iterator.aclose()
-                data['messages'].append(msg);store.put_json(r.ref,data)
+                persist()
             finally:lock.release()
-    return StreamingResponse(events(),media_type='text/event-stream',headers={'X-Accel-Buffering':'no'})
+    return StreamingResponse(events(),media_type='text/event-stream',headers={'X-Accel-Buffering':'no','Cache-Control':'no-cache, no-transform'})
 
 @app.post('/api/index/search')
 def diagnose_retrieval(body:MessageInput,owner=Depends(auth)):
     dataset,docs=routing.documents_scope(owner,body.dataset_id or body.kb_id,body.document_ids)
     snapshot=routing.execution_snapshot(dataset,'embedding');routing.require_indexes(docs,snapshot);external_check(body.allow_external,True,snapshot['settings'])
     ready=[d for d in docs if d.status=='ready'];started=time.monotonic()
+    reranking={}
     try:
-        with execution_context(snapshot):hits=providers.search(body.text,owner,ready,settings()['top_k'])
+        with execution_context(snapshot):hits=providers.search(body.text,owner,ready,settings()['top_k'],diagnostics=reranking)
     except Exception:raise HTTPException(502,'Retrieval failed; verify the selected provider and matching index configuration')
-    return {'matches':hits,'count':len(hits),'duration_ms':round((time.monotonic()-started)*1000),'scoped_documents':len(docs),'ready_documents':len(ready),'embedding_fingerprint':providers.fingerprint(snapshot['settings']),'top_k':snapshot['settings']['top_k'],'provider':snapshot['settings']['search_provider'],'note':'Scores are provider-specific similarity values, not probabilities. Only permitted ready documents and canonical stored excerpts are returned.'}
+    return {'matches':hits,'count':len(hits),'duration_ms':round((time.monotonic()-started)*1000),'scoped_documents':len(docs),'ready_documents':len(ready),'embedding_fingerprint':providers.fingerprint(snapshot['settings']),'top_k':snapshot['settings']['top_k'],'provider':snapshot['settings']['search_provider'],'reranking':reranking,'note':'Vector scores and reranker logits are not probabilities. With reranking enabled, results are sorted by rerank_score; score retains the original vector similarity. Only permitted ready documents and canonical stored excerpts are returned.'}
 
 class ProfileInput(BaseModel):
     name:str=Field(min_length=1,max_length=120)
 
 def profile_public(record):
     data=local_store.json(record.ref)
-    return representation(record)|{'api_key_configured':data.get('api_key_configured',False),'oci_api_key_configured':data.get('oci_api_key_configured',False)}
+    return representation(record)|{'api_key_configured':data.get('api_key_configured',False),'oci_api_key_configured':data.get('oci_api_key_configured',False),'connection_credentials_configured':data.get('connection_credentials_configured',False),'registration_model_id':data.get('registration_model_id')}
 
 def write_profile(owner,name,id=None):
     with document_lock('settings-config'):
@@ -497,6 +653,7 @@ def write_profile(owner,name,id=None):
 
 def _write_profile(owner,name,id=None):
     existing=get_record(id,owner,'config_profile') if id else None
+    if existing and local_store.json(existing.ref).get('registration_model_id'):raise HTTPException(400,'Edit this connection through Model Registration.')
     id=id or uid();version=(existing.version+1) if existing else 1;ref=f'configuration/profiles/{id}/v{version}.json'
     data={'settings':settings(),'api_key_configured':False,'oci_api_key_configured':False,'saved_at':time.time()}
     for source,target,key in [('secrets/provider.enc','openai.enc','api_key_configured'),('secrets/oci-provider.enc','oci.enc','oci_api_key_configured')]:
@@ -522,6 +679,7 @@ def revise_profile(id:str,body:ProfileInput,owner=Depends(auth)):return write_pr
 @app.post('/api/settings/profiles/{id}/activate')
 def activate_profile(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'config_profile');data=local_store.json(r.ref);cfg=data['settings'].copy()
+    if data.get('registration_model_id'):raise HTTPException(400,'Apply registered models through the dataset Model Mapping screen.')
     for target,key in [('openai.enc','api_key'),('oci.enc','oci_api_key')]:
         try:
             encrypted=local_store.get(f'secrets/profiles/{id}/v{r.version}/{target}');cfg[key]=secret_cipher().decrypt(encrypted).decode()
@@ -535,3 +693,52 @@ def export_profile(id:str,owner=Depends(auth)):
 
 
 routing.install_routes(app,auth,write_profile)
+from . import model_registration
+model_registration.install_routes(app,auth)
+
+from .browser_recovery import router as browser_recovery_router
+app.include_router(browser_recovery_router)
+
+
+@app.get('/api/local-models')
+def local_models(owner=Depends(auth)):
+    from . import ollama_provider
+    return ollama_provider.installed()
+
+@app.post('/api/datasets/{id}/local-models')
+def configure_local_models(id:str,owner=Depends(auth)):
+    """Explicit setup convenience: preserve existing embedding selection/generation."""
+    cfg=settings();dataset=get_record(id,owner,'knowledge_base');routing.require_active(dataset)
+    if cfg['model_provider']!='ollama' or cfg['embedding_provider']!='ollama' or cfg['search_provider']!='local' or cfg['storage_provider']!='local':raise HTTPException(409,'Local setup requires local Ollama, embeddings, search and storage in deployment settings.')
+    from .ollama_provider import installed
+    names={m['name'] for m in installed()['models']}
+    chat_names=[name for name in ('qwen3:4b','smollm2:1.7b-instruct-q4_K_M') if name in names]
+    nomic=next((name for name in ('nomic-embed-text:latest','nomic-embed-text') if name in names),None)
+    if not chat_names or not nomic:raise HTTPException(409,'Install Qwen3 or SmolLM2 and Nomic locally first. No model is downloaded by this action.')
+    with document_lock('dataset-'+id):
+        dataset=get_record(id,owner,'knowledge_base');existing=routing.routing_public(dataset)
+        profile=write_profile(owner,'Local Ollama models')
+        mappings=existing['mappings'].copy();selected=[]
+        catalog=[routing.model_public(r) for r in routing.rows(owner,'model')]
+        def choose(name,capabilities,label):
+            model=next((m for m in catalog if m['provider']=='ollama' and m['provider_model']==name and m['capabilities']==capabilities and m.get('enabled',True)),None)
+            if not model:
+                r=routing.create('model',owner,label,{'name':label,'connection_profile_id':profile['id'],'provider_model':name,'capabilities':capabilities,'enabled':True});model=routing.model_public(r)
+            if not any(m['model_id']==model['id'] for m in mappings):mappings.append({'model_id':model['id'],'enabled':True})
+            return model['id']
+        for name in chat_names:selected.append(choose(name,['chat'],'Qwen3 chat' if name.startswith('qwen3') else 'SmolLM2 chat'))
+        extraction=existing['default_extraction_model_id'] or choose(chat_names[0],['extraction'],'Local extraction')
+        embedding=existing['embedding_model_id'] or choose(nomic,['embedding'],'Nomic embeddings')
+        updated=routing.save_mappings(dataset,routing.MappingInput(mappings=mappings,default_chat_model_id=existing['default_chat_model_id'] or selected[0],default_extraction_model_id=extraction,embedding_model_id=embedding))
+        return routing.dataset_public(updated)
+
+temporary_files.install(app,auth)
+
+from . import temporary_chat
+temporary_chat.install(app,auth)
+
+from . import api_documentation
+api_documentation.install(app,auth)
+
+from . import agent_workspace
+agent_workspace.install(app, auth, __import__(__name__, fromlist=['app']))

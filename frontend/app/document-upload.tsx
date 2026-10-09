@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, FileText, Loader2, RefreshCw, UploadCloud, X } from "lucide-react";
+import { BatchProgress } from "./batch-progress";
+import { currentUploadStep, readableUploadError } from "./batch-workflow";
 import "./document-upload.css";
 
 type Entity = Record<string, any>;
@@ -8,6 +10,7 @@ type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
 type Entry = { id: string; datasetId: string; file?: File; name: string; size: number; status: "selected" | "invalid" | "uploading" | "submitted" | "failed" | "uncertain"; error?: string; document?: Entity };
 type Options = {
   dataset?: Entity; enabled: boolean; externalRequired: boolean; consent: boolean; setConsent: (value: boolean) => void;
+  temporarySessionId?: string;
   maxMb: number; contextKey: string; sessionKey: string; documents: Entity[]; jobs: Entity[]; api: Api; onUploaded: (data: Entity) => void;
   refresh: () => void; onManage: () => void; pollError: boolean;
 };
@@ -44,10 +47,15 @@ export function useDocumentUpload(options: Options) {
     if (!files.length) return;
     setNotice("");
     setEntries(previous => {
-      const existing = previous.filter(e => e.datasetId === datasetId && e.file);
+      const batchActive = previous.some(entry => entry.datasetId === datasetId && entry.document && ["queued", "processing"].includes((options.documents.find(document => document.id === entry.document!.id) || entry.document).status));
+      // A new selection starts a new batch after processing finishes. Persisted
+      // documents remain in the dataset, while uncertain/pending uploads stay visible.
+      const retained = batchActive ? previous : previous.filter(entry => entry.datasetId !== datasetId || entry.file);
+      const existing = retained.filter(e => e.datasetId === datasetId && e.file);
       const additions = files.filter((file, index) => !existing.some(e => e.file!.name === file.name && e.file!.size === file.size && e.file!.lastModified === file.lastModified) && !files.slice(0, index).some(f => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified));
       if (existing.length + additions.length > 20) { setNotice("Choose at most 20 files at once. Remove some files and try again."); return previous; }
-      return [...previous, ...additions.map(file => {
+      if (!additions.length) return previous;
+      return [...retained, ...additions.map(file => {
         const error = !/\.(pdf|docx|txt)$/i.test(file.name) ? "Only PDF, DOCX and UTF-8 TXT files are supported." : !file.size ? "Empty files cannot be uploaded." : file.size > options.maxMb * 1024 * 1024 ? `Exceeds the ${options.maxMb} MB upload limit.` : undefined;
         return { id: crypto.randomUUID(), datasetId, name: file.name, size: file.size, file, status: error ? "invalid" as const : "selected" as const, error };
       })];
@@ -68,12 +76,13 @@ export function useDocumentUpload(options: Options) {
         body.append("files", entry.file!);
         body.append("dataset_id", datasetId);
         body.append("allow_external", String(options.consent));
+        if (options.temporarySessionId) body.append("temporary_session_id", options.temporarySessionId);
         try {
           const result = await options.api("/documents/upload", "POST", body);
           if (currentSession.current !== options.sessionKey) break;
           if (!result.documents?.[0]) throw new Error("The server did not confirm a document.");
           patch(entry.id, { status: "submitted", file: undefined, document: result.documents[0] });
-          options.onUploaded(result);
+          options.onUploaded({ ...result, newUpload: true });
         } catch (error) {
           const status = (error as { status?: number }).status;
           const definite = !!status && status >= 400 && status < 500;
@@ -90,15 +99,25 @@ export function useDocumentUpload(options: Options) {
     if (options.externalRequired && !options.consent) { setNotice("Approve the external processing notice before retrying indexing."); return; }
     retryLocks.current.add(document.id); setRetrying(ids => [...ids, document.id]); setNotice("");
     try {
-      const job = await options.api(`/documents/${document.id}/reindex`, "POST", { allow_external: options.consent });
+      const failed = options.jobs.filter(j => j.target_id === document.id && ["failed","cancelled"].includes(j.status)).sort((a,b) => b.created_at-a.created_at)[0];
+      const job = failed ? await options.api(`/jobs/${failed.id}/retry`, "POST", {}) : await options.api(`/documents/${document.id}/reindex`, "POST", { allow_external: options.consent });
       if (currentSession.current !== options.sessionKey) return;
       options.onUploaded({ documents: [{ ...document, status: "queued", error: null }], jobs: [job] });
     } catch (error) { if (currentSession.current === options.sessionKey) setNotice(error instanceof Error ? error.message : "Could not retry indexing. Check the document status before trying again."); }
     finally { retryLocks.current.delete(document.id); setRetrying(ids => ids.filter(id => id !== document.id)); options.refresh(); }
   };
+  const reextract = async (document: Entity) => {
+    if (retryLocks.current.has(document.id) || blocked) return;
+    if (!window.confirm("Re-extract text and rebuild the dependent index? The original and prior parsed versions are retained. Existing reviewed structured results are preserved; rerun them separately to replace edits.")) return;
+    retryLocks.current.add(document.id); setRetrying(ids => [...ids,document.id]); setNotice("");
+    try { const job = await options.api(`/documents/${document.id}/reextract`, "POST", {allow_external:options.consent,confirm_reviewed:true}); options.onUploaded({documents:[{...document,status:"queued",error:null}],jobs:[job]}); }
+    catch(error) { setNotice((error as Error).message); }
+    finally { retryLocks.current.delete(document.id); setRetrying(ids => ids.filter(id => id!==document.id)); options.refresh(); }
+  };
   const trackedIds = new Set(selected.flatMap(e => e.document ? [e.document.id] : []));
+  const keep = async (document:Entity) => {setNotice("");try{await options.api(`/documents/${document.id}/keep`,"POST",{});}catch(error){setNotice((error as Error).message);}finally{options.refresh();}};
   // Pending/failed persisted documents remain visible after refresh or navigation.
-  const recovered: Entry[] = options.documents.filter(d => (d.dataset_id || d.kb_id) === datasetId && !trackedIds.has(d.id) && (["queued", "processing", "failed", "cancelled"].includes(d.status) || d.requires_reindex)).map(d => ({ id: d.id, datasetId, name: d.name, size: d.size, status: "submitted", document: d }));
+  const recovered: Entry[] = options.documents.filter(d => (d.dataset_id || d.kb_id) === datasetId && !trackedIds.has(d.id)).map(d => ({ id: d.id, datasetId, name: d.name, size: d.size, status: "submitted", document: d }));
   const rows = [...selected, ...recovered].map(entry => {
     const document = entry.document && options.documents.find(d => d.id === entry.document!.id);
     const job = document && options.jobs.filter(j => (j.document_id || j.target_id) === document.id && j.kind === "index").sort((a, b) => b.created_at - a.created_at)[0];
@@ -110,35 +129,45 @@ export function useDocumentUpload(options: Options) {
     return { ...entry, document, job, ready, failed, processing, label };
   });
   const processing = rows.filter(r => r.status === "uploading" || r.processing).length;
-  const summary = uploading ? `Uploading to ${uploadDestination}…` : processing ? `${processing} indexing` : pending.length ? `${pending.length} selected` : rows.some(r => r.status === "invalid" || r.status === "failed" || r.status === "uncertain" || r.failed || r.document?.requires_reindex) ? "Needs attention" : rows.some(r => r.ready) ? "Documents ready" : "";
-  return { ...options, datasetId, blocked, rows, notice, uploading, uploadDestination, retrying, pending, summary, choose, start, retryIndex, remove: (id: string) => { if (!inFlight.current) setEntries(previous => previous.filter(e => e.id !== id)); } };
+  const summary = uploading ? `Uploading to ${uploadDestination}…` : processing ? `${processing} indexing` : pending.length ? `${pending.length} selected` : rows.some(r => r.status === "invalid" || r.status === "failed" || r.status === "uncertain" || r.failed || r.document?.requires_reindex) ? "Needs attention" : "";
+  const selectedIds = new Set(selected.map(entry => entry.id));
+  const batchRows = selected.length ? rows.filter(row => selectedIds.has(row.id)) : rows;
+  return { ...options, datasetId, blocked, rows, batchRows, notice, uploading, uploadDestination, retrying, pending, summary, choose, start, retryIndex, reextract, keep, remove: (id: string) => { if (!inFlight.current) setEntries(previous => previous.filter(e => e.id !== id)); } };
 }
 export type DocumentUploadController = ReturnType<typeof useDocumentUpload>;
 
-export function DocumentUploadPanel({ upload: u }: { upload: DocumentUploadController }) {
+export function DocumentUploadPanel({ upload: u, attachmentOnly = false, workflowOnly = false, onStart, onWorkflow }: { upload: DocumentUploadController; attachmentOnly?: boolean; workflowOnly?: boolean; onStart?: () => void; onWorkflow?: () => void }) {
+  const rows = attachmentOnly ? u.batchRows.filter(row => !row.document) : u.batchRows;
+  const storedCount = u.batchRows.filter(row => row.document).length;
+  const retryUpload = workflowOnly && !u.uploading && u.pending.some(entry => entry.status === "failed");
   return <section className="document-upload-panel" aria-label="Document uploads">
     <p className="upload-destination">Destination: <strong>{u.dataset?.name || "No dataset selected"}</strong></p>
-    <p className="muted small">PDF, DOCX or UTF-8 TXT · up to {u.maxMb} MB per file · 20 files at a time. Originals are stored, then indexed using this dataset’s configuration.</p>
+    {!workflowOnly && <p className="muted small">PDF, DOCX or UTF-8 TXT · up to {u.maxMb} MB per file · 20 files at a time. Originals are stored, then indexed using this dataset’s configuration.</p>}
     {u.uploading && u.uploadDestination !== u.dataset?.name && <p className="upload-notice" role="status">Finishing the current upload to {u.uploadDestination}. Remaining files will stay with that dataset.</p>}
     {u.blocked && <p className="upload-notice" role="status"><AlertCircle size={16} />{u.blocked}</p>}
-    <div className="dropzone shared-dropzone" onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); e.stopPropagation(); u.choose(Array.from(e.dataTransfer.files)); }}>
+    {!workflowOnly && <div className="dropzone shared-dropzone" onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={e => { if (!e.dataTransfer.types.includes("Files")) return; e.preventDefault(); e.stopPropagation(); u.choose(Array.from(e.dataTransfer.files)); }}>
       <UploadCloud size={28} /><strong>Drop documents here, or choose files</strong>
       <input aria-label="Choose documents" disabled={!!u.blocked || u.uploading} type="file" accept=".pdf,.docx,.txt" multiple onChange={e => { u.choose(Array.from(e.target.files || [])); e.target.value = ""; }} />
-    </div>
-    {u.rows.length > 0 && <ul className="upload-files" aria-label="Selected and processing documents">{u.rows.map(row => <li key={row.id}>
+    </div>}
+    {!attachmentOnly && rows.length > 0 && <BatchProgress items={rows} compact={workflowOnly}/>}
+    {rows.length > 0 && <ul className="upload-files batch-document-list" aria-label="Selected and processing documents">{rows.map(row => <li key={row.id}>
       <div className="upload-file-icon">{row.ready ? <CheckCircle2 size={19} /> : row.status === "uploading" || row.processing ? <Loader2 className="animate-spin" size={19} /> : <FileText size={19} />}</div>
-      <div className="upload-file-detail"><strong>{row.name}</strong><span className={`upload-file-status ${row.ready ? "is-ready" : ""}`} role="status">{row.label}</span>
-        {(row.error || (row.failed && (row.document?.error || row.job?.error))) && <p className="upload-file-error">{row.error || row.document?.error || row.job?.error}</p>}
+      <div className="upload-file-detail"><div className="batch-document-heading"><strong>{row.name}</strong><span className={`upload-file-status ${row.ready ? "is-ready" : ""}`} role="status">{currentUploadStep(row)}</span></div>
+        {(row.error || (row.failed && (row.document?.error || row.job?.error))) && <p className="upload-file-error">{readableUploadError(row.error || row.document?.error || row.job?.error)}</p>}
+        {row.document?.index_notice && <p className="small muted">{row.document.index_notice}</p>}
         {row.status === "uncertain" && <p className="upload-file-error">The original may already be stored. Check this dataset’s documents before selecting this file again to avoid a duplicate.</p>}
-        {row.processing && <progress aria-label={`Indexing ${row.name}`} max={100} value={Math.min(100, Math.max(0, Number(["queued", "running"].includes(row.job?.status) ? row.job?.progress || 0 : 0)))} />}
-        {row.document && !row.processing && (row.failed || row.document.requires_reindex) && <button type="button" className="text-button" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13} />{u.retrying.includes(row.document.id) ? "Retrying…" : "Retry indexing"}</button>}
+        {row.document && <>
+        {row.job?.workflow?.notice && <p className="small muted">{row.job.workflow.notice}</p>}
+        {!row.processing && (row.failed || row.document.requires_reindex) && <div className="batch-document-retry"><button type="button" className="btn primary" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13}/>{u.retrying.includes(row.document.id)?"Retrying…":"Retry failed step"}</button></div>}
+        <details className="batch-document-actions"><summary>Document actions</summary><div className="workflow-actions"><button type="button" className="btn" disabled={row.processing||u.retrying.includes(row.document.id)||!!u.blocked} onClick={()=>u.reextract(row.document!)}>Re-extract document</button>{row.document.temporary_session_id&&<button type="button" className="text-button" onClick={()=>u.keep(row.document!)}>Keep in dataset</button>}</div></details></>}
       </div>
       {!row.document && row.status !== "uploading" && <button type="button" className="btn icon" aria-label={`Remove ${row.name}`} disabled={u.uploading} onClick={() => u.remove(row.id)}><X size={16} /></button>}
     </li>)}</ul>}
-    {u.externalRequired && <label className="check upload-consent"><input type="checkbox" checked={u.consent} disabled={u.uploading} onChange={e => u.setConsent(e.target.checked)} /><span>I approve sending original files to the configured external storage, and document text to external search or embedding providers. API usage may be billed separately.</span></label>}
+    {u.externalRequired && (!workflowOnly || retryUpload || rows.some(row => row.failed || row.document?.requires_reindex && !row.processing)) && <label className="check upload-consent"><input type="checkbox" checked={u.consent} disabled={u.uploading} onChange={e => u.setConsent(e.target.checked)} /><span>I approve sending original files to the configured external storage, and document text to external search or embedding providers. API usage may be billed separately.</span></label>}
     {u.notice && <p className="upload-notice" role="alert"><AlertCircle size={16} />{u.notice}</p>}
     {u.pollError && <p className="upload-notice" role="status">Could not refresh processing status. <button type="button" className="text-button" onClick={u.refresh}>Check again</button></p>}
-    <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={u.start}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>
-    <p className="upload-footnote">Only ready, current-index documents are available to chat. If you use a document selection, add new files in Document scope when ready. Uploading never sends a question.</p>
+    {attachmentOnly && storedCount > 0 && onWorkflow && <button type="button" className="text-button" onClick={onWorkflow}>View processing status</button>}
+    {(!workflowOnly || retryUpload) && <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={() => { onStart?.(); void u.start(); }}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>}
+    <p className="upload-footnote">{workflowOnly ? "Closing this popup does not stop processing." : "Only ready, compatible-index documents are available for questions. Hiding this popup does not cancel accepted processing. The original is retained."}</p>
   </section>;
 }

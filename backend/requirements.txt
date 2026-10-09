@@ -10,3 +10,4 @@ pypdf==6.19.0
 python-docx==1.2.0
 qdrant-client==1.19.1
 jsonschema==4.26.0
+portalocker==3.2.0

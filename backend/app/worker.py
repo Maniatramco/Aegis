@@ -3,10 +3,11 @@ import time, os, uuid, io, traceback, threading, zipfile
 from sqlalchemy import select, update, or_, and_
 from .core import Session, Record, Job, store, settings, uid, init, document_lock, execution_context
 from . import core, dataset_models as routing
-from . import providers
+from . import providers, workflow
 
 MAX_ATTEMPTS=3
 _last_reconcile=0.0
+_last_cleanup=0.0
 
 def claim(job_id=None):
     now=time.time();token=uid()
@@ -15,6 +16,7 @@ def claim(job_id=None):
             expired.status='failed';expired.error='Worker recovery attempts exhausted';expired.lease_until=0
             target=s.get(Record,expired.target_id)
             if target:target.status='failed';target.error=expired.error
+            workflow.fail(expired.id,expired.error)
         candidate=s.scalar(select(Job).where(or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now)),Job.attempts<MAX_ATTEMPTS,Job.id==job_id if job_id else True).order_by(Job.created_at).limit(1).with_for_update(skip_locked=True))
         if not candidate:return None
         result=s.execute(update(Job).where(Job.id==candidate.id,or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now))).values(status='running',attempts=Job.attempts+1,lease_until=now+900,lease_token=token,updated_at=now))
@@ -46,8 +48,11 @@ def parse_document(name,raw):
         return pages
     if ext=='docx':
         from docx import Document
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        try:archive=zipfile.ZipFile(io.BytesIO(raw))
+        except zipfile.BadZipFile:raise ValueError('This DOCX file is invalid or damaged. Upload a valid DOCX copy.') from None
+        with archive:
             entries=archive.infolist();names=[e.filename for e in entries]
+            if '[Content_Types].xml' not in names or 'word/document.xml' not in names:raise ValueError('This file is not a valid DOCX document. Export it as DOCX and upload it again.')
             if len(names)!=len(set(names)) or any(n.startswith('/') or '..' in n.replace('\\','/').split('/') for n in names):raise ValueError('Unsafe DOCX archive entries')
             if sum(e.file_size for e in entries)>100*1024*1024 or any(e.file_size>25*1024*1024 for e in entries):raise ValueError('DOCX decompressed content exceeds safety limits')
         doc=Document(io.BytesIO(raw));lines=[p.text for p in doc.paragraphs]
@@ -107,13 +112,23 @@ def _process(jid,token,snapshot):
     if kind=='index' and kb!=snapshot['dataset_id']:raise ValueError('Document dataset changed; submit a new indexing job.')
     if kind=='index':
         consent=store.json('jobs/'+jid+'.json').get('allow_external',False)
-        if (cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci') and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
+        if (cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider']=='oci') and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
         with Session.begin() as s:s.get(Record,did).status='processing'
-        pages=parse_document(name,store.get(ref));chunks=chunk_pages(did,pages,cfg['chunk_size'],cfg['chunk_overlap'])
+        state=workflow.read(jid)
+        # Retry an indexing failure from its saved extraction, using the same pinned configuration.
+        reuse=state.get('current')=='index' and state.get('stages',{}).get('extract',{}).get('status')=='completed'
+        if reuse:
+            pages=store.json('documents/'+did+'/parsed.json')['pages']
+            chunks=store.json('documents/'+did+'/chunks.json')['chunks']
+        else:
+            workflow.transition(jid,'extract','running')
+            pages=parse_document(name,store.get(ref));chunks=chunk_pages(did,pages,cfg['chunk_size'],cfg['chunk_overlap'])
         if not chunks:raise ValueError('Document has no usable text')
         if len(chunks)>5000:raise ValueError('Document exceeds 5000 chunk processing limit')
         store.put_json('documents/'+did+'/parsed.json',{'pages':pages})
         store.put_json('documents/'+did+'/chunks.json',{'chunks':chunks,'fingerprint':providers.fingerprint(),'chunk_size':cfg['chunk_size'],'chunk_overlap':cfg['chunk_overlap']})
+        workflow.transition(jid,'extract','completed')
+        workflow.transition(jid,'index','running')
         checkpoint(jid,token,35)
         vectors=[]
         if cfg['search_provider']=='oci':
@@ -136,10 +151,13 @@ def _process(jid,token,snapshot):
             providers.delete_vectors(did)
             raise
         store.put_json('documents/'+did+'/index-execution.json',snapshot)
-        store.put_json('documents/'+did+'/index.json',{'dataset_id':snapshot['dataset_id'],'index_generation':snapshot['index_generation'],'model_selection':routing.public_selection(snapshot),'search_provider':cfg['search_provider'],'fingerprint':providers.fingerprint(),'dimensions':dimensions,'chunk_count':len(chunks),'indexed_at':time.time(),'embedding_provider':cfg['embedding_provider'],'embedding_model':cfg['embedding_model']})
+        store.put_json('documents/'+did+'/index.json',{'dataset_id':snapshot['dataset_id'],'index_generation':snapshot['index_generation'],'model_selection':routing.public_selection(snapshot),'search_provider':cfg['search_provider'],'fingerprint':providers.fingerprint(),'dimensions':dimensions,'chunk_count':len(chunks),'indexed_at':time.time(),'embedding_provider':cfg['embedding_provider'],'embedding_model':cfg['embedding_model'],'embedding_digest':cfg.get('_embedding_digest')})
+        workflow.transition(jid,'index','completed')
+        workflow.transition(jid,'ready','completed')
     elif kind=='extract':
+        workflow.transition(jid,'prepare','running')
         data=store.json(ref)
-        if cfg['model_provider'] in ('openai','oci') and not data.get('allow_external'):raise ValueError('External extraction requires explicit external data transmission consent')
+        if cfg['model_provider'] in ('openai','oci','registered') and not data.get('allow_external'):raise ValueError('External extraction requires explicit external data transmission consent')
         sources=[]
         with Session() as s:
             for doc_id in data['document_ids']:
@@ -149,11 +167,18 @@ def _process(jid,token,snapshot):
                 for c in store.json('documents/'+doc_id+'/chunks.json')['chunks']:sources.append({'document_id':doc_id,'document_name':d.name,**c})
         text='\n\n'.join(f'Document: {c["document_name"]}; chunk {c["id"]}; page {c["page"]}\n{c["text"]}' for c in sources)
         if len(text)>200000:raise ValueError('Extraction exceeds 200,000 character context limit; choose fewer documents')
+        checkpoint(jid,token,20)
+        workflow.transition(jid,'prepare','completed')
+        workflow.transition(jid,'generate','running')
         result,evidence=providers.extract_with_evidence(text,data['schema'],sources)
+        workflow.transition(jid,'generate','completed')
+        workflow.transition(jid,'validate','running')
         from jsonschema import validate
         validate(result,data['schema']);checkpoint(jid,token,90)
         data.update(result=result,evidence=evidence,evidence_notice='Review all values. Evidence contains only validated verbatim source quotes; fields without evidence are unverified.',sources=[{'document_id':c['document_id'],'document_name':c['document_name'],'chunk_id':c['id'],'page':c['page'],'excerpt':c['text'][:1000]} for c in sources],review_status='unreviewed',completed_at=time.time(),mock=cfg['model_provider']=='mock')
         store.put_json(ref,data)
+        workflow.transition(jid,'validate','completed')
+        workflow.transition(jid,'ready','completed')
     else:raise ValueError('Unknown job type')
     with Session.begin() as s:
         j=s.get(Job,jid)
@@ -164,9 +189,13 @@ def _process(jid,token,snapshot):
 
 def run_once():
     from .queue_transport import get_transport
-    global _last_reconcile
+    global _last_reconcile,_last_cleanup
     transport=get_transport(settings()['queue_provider']);delivery=None;claimed=None
     now=time.monotonic()
+    if now-_last_cleanup>=60:
+        _last_cleanup=now
+        from .temporary_files import purge_expired
+        purge_expired()
     if now-_last_reconcile>=30:
         _last_reconcile=now;claimed=claim()
     if not claimed:
@@ -203,6 +232,7 @@ def run_once():
                 j.status='failed';j.error=message;j.updated_at=time.time();j.lease_until=0
                 r=s.get(Record,j.target_id)
                 if r:r.status='failed';r.error=message
+        workflow.fail(jid,message)
     finally:
         stop.set();thread.join(timeout=1)
         if delivery and delivery.job_id==jid:

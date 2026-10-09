@@ -99,7 +99,7 @@ def secret_cipher():
     key=os.getenv('AEGIS_MASTER_KEY', os.getenv('MASTER_KEY'))
     if not key: raise ValueError('MASTER_KEY is required to save provider credentials (generate a Fernet key)')
     return Fernet(key.encode())
-DEFAULTS={'model_provider':os.getenv('MODEL_PROVIDER','openai'),'embedding_provider':os.getenv('EMBEDDING_PROVIDER','sentence_transformers'),'model':os.getenv('OPENAI_MODEL','gpt-4.1-mini'),'embedding_model':os.getenv('EMBEDDING_MODEL','text-embedding-3-small'),'chunk_size':1200,'chunk_overlap':180,'top_k':5,'timeout':60,'max_upload_mb':25,'search_provider':os.getenv('SEARCH_PROVIDER','qdrant'),'storage_provider':os.getenv('STORAGE_PROVIDER','local'),'oci_region':os.getenv('OCI_REGION',''),'oci_project_id':'','oci_auth_mode':'api_key','oci_profile':'DEFAULT','oci_model':'','oci_vector_store_id':'','oci_storage_namespace':os.getenv('OCI_NAMESPACE',''),'oci_storage_bucket':os.getenv('OCI_BUCKET',''),'oci_storage_prefix':os.getenv('OCI_OBJECT_PREFIX','aegis'),'oci_storage_region':os.getenv('OCI_REGION',''),'oci_storage_auth_mode':os.getenv('OCI_AUTH_MODE','config_file'),'oci_storage_profile':os.getenv('OCI_PROFILE','DEFAULT'),'queue_provider':os.getenv('QUEUE_PROVIDER','database')}
+DEFAULTS={'model_provider':os.getenv('MODEL_PROVIDER','openai'),'embedding_provider':os.getenv('EMBEDDING_PROVIDER','sentence_transformers'),'model':os.getenv('AEGIS_MODEL',os.getenv('OPENAI_MODEL','gpt-4.1-mini')),'embedding_model':os.getenv('EMBEDDING_MODEL','text-embedding-3-small'),'chunk_size':1200,'chunk_overlap':180,'top_k':5,'timeout':int(os.getenv('AEGIS_TIMEOUT','60')),'max_upload_mb':25,'search_provider':os.getenv('SEARCH_PROVIDER','qdrant'),'storage_provider':os.getenv('STORAGE_PROVIDER','local'),'oci_region':os.getenv('OCI_REGION',''),'oci_project_id':'','oci_auth_mode':'api_key','oci_profile':'DEFAULT','oci_model':'','oci_vector_store_id':'','oci_storage_namespace':os.getenv('OCI_NAMESPACE',''),'oci_storage_bucket':os.getenv('OCI_BUCKET',''),'oci_storage_prefix':os.getenv('OCI_OBJECT_PREFIX','aegis'),'oci_storage_region':os.getenv('OCI_REGION',''),'oci_storage_auth_mode':os.getenv('OCI_AUTH_MODE','config_file'),'oci_storage_profile':os.getenv('OCI_PROFILE','DEFAULT'),'queue_provider':os.getenv('QUEUE_PROVIDER','database')}
 _execution=ContextVar('aegis_execution',default=None)
 @contextmanager
 def execution_context(snapshot):
@@ -107,11 +107,20 @@ def execution_context(snapshot):
     try:yield
     finally:_execution.reset(token)
 
+def enforce_local_only(cfg):
+    if os.getenv('AEGIS_LOCAL_ONLY')=='true':
+        allowed={'model_provider':('ollama','mock'),'embedding_provider':('ollama','mock','sentence_transformers'),
+                 'search_provider':('local',),'storage_provider':('local',),'queue_provider':('database',)}
+        if any(cfg.get(key,DEFAULTS[key]) not in values for key,values in allowed.items()):
+            raise ValueError('Local-only mode blocks cloud models, external storage/search, and remote queues.')
+    return cfg
+
 def settings():
     active=_execution.get()
-    if active is not None:return active['settings'].copy()
-    try:return DEFAULTS|store.json('configuration/settings.json')
-    except FileNotFoundError:return DEFAULTS.copy()
+    if active is not None:return enforce_local_only(active['settings'].copy())
+    try:cfg=DEFAULTS|store.json('configuration/settings.json')
+    except FileNotFoundError:cfg=DEFAULTS.copy()
+    return enforce_local_only(cfg)
 def _provider_secret(key,environment):
     # Explicit clearing overrides bootstrap environment fallback, including profile activation.
     try:store.get(key+'.disabled');return ''
@@ -131,7 +140,11 @@ def api_key():
 def representation(r):
     return {'id':r.id,'name':r.name,'status':r.status,'kb_id':r.parent_id or None,'size':r.size,'version':r.version,'created_at':r.created_at,'updated_at':r.updated_at,'error':r.error or None}
 def job_repr(j):
-    return {'id':j.id,'kind':j.kind,'status':j.status,'progress':j.progress,'attempts':j.attempts,'error':j.error or None,'document_id':j.target_id if j.kind=='index' else None,'target_id':j.target_id,'created_at':j.created_at}
+    from .workflow import read
+    workflow=read(j.id)
+    current=workflow.get('current')
+    stage={'upload':'Upload','extract':'Extracting text','index':'Indexing','ready':'Ready'}.get(current,'Ready' if j.status=='completed' else j.status.title())
+    return {'id':j.id,'kind':j.kind,'status':j.status,'progress':j.progress,'stage':stage,'workflow':workflow,'attempts':j.attempts,'error':j.error or None,'document_id':j.target_id if j.kind=='index' else None,'target_id':j.target_id,'created_at':j.created_at}
 
 def oci_api_key():
     value=execution_secret('oci')
@@ -145,10 +158,17 @@ def oci_storage(cfg=None):
 @contextmanager
 def document_lock(document_id):
     """Filesystem lock fences deletion against in-flight worker writes on shared data volume."""
-    import fcntl
+    if os.name=='nt':
+        import portalocker
+        lock=lambda handle:portalocker.lock(handle,portalocker.LOCK_EX)
+        unlock=portalocker.unlock
+    else:
+        import fcntl
+        lock=lambda handle:fcntl.flock(handle,fcntl.LOCK_EX)
+        unlock=lambda handle:fcntl.flock(handle,fcntl.LOCK_UN)
     if not all(c.isalnum() or c in '-_' for c in document_id):raise ValueError('Invalid document identifier')
     path=local_store.path('locks/'+document_id+'.lock');path.parent.mkdir(parents=True,exist_ok=True)
     with open(path,'a') as handle:
-        fcntl.flock(handle,fcntl.LOCK_EX)
+        lock(handle)
         try:yield
-        finally:fcntl.flock(handle,fcntl.LOCK_UN)
+        finally:unlock(handle)

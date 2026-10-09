@@ -6,6 +6,10 @@ async function proxy(
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params;
+  // Recovery accepts a private capability only over direct loopback, never a relay.
+  if (path[0] === "auth" && path[1] === "recovery") {
+    return Response.json({ detail: "Use the private local recovery page." }, { status: 403 });
+  }
   const base = (process.env.API_INTERNAL_URL || "http://api:8000").replace(
     /\/$/,
     "",

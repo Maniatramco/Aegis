@@ -49,7 +49,7 @@ def test_complete_storage_first_workflow():
         ext=c.post('/api/extractions',json={'document_ids':[doc['id']],'template_id':template['id']});assert ext.status_code==200,ext.text
         assert run_once()
         extracted=c.get('/api/extractions/'+ext.json()['id']).json();assert extracted['result']=={'owner':'MOCK TEST VALUE'}
-        assert c.patch('/api/extractions/'+ext.json()['id'],json={'result':{'owner':'Alice'}}).status_code==200
+        assert c.patch('/api/extractions/'+ext.json()['id'],json={'result':{'owner':'Alice'},'version':extracted['version']}).status_code==200
         assert b'Alice' in c.get('/api/extractions/'+ext.json()['id']+'/export?format=csv').content
         assert c.get('/api/index').json()['documents'][0]['chunk_count']>0
         assert c.delete('/api/documents/'+doc['id']).status_code==200

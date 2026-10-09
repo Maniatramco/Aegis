@@ -7,25 +7,28 @@ test.beforeEach(async ({ page }) => {
     throw new Error(
       "Set AEGIS_SMOKE_PASSWORD to the disposable administrator password seeded by scripts/smoke.py.",
     );
-  await page.goto("/");
+  await page.goto("/#Home");
   await expect.poll(() => page.locator('img[src="/aegis-logo.png"]').evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Home", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Aegis Agent", exact: true }).first()).toBeVisible();
+  await page.goto("/#Home");
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
 });
 test("navigates all workspace screens and preserves an authenticated refresh", async ({
   page,
 }) => {
   for (const name of [
     "Datasets",
-    "Ask Aegis",
+    "Aegis Agent",
     "Extract",
-    "Templates",
+    "Re-extract",
+    "Prompt templates",
     "Index inspector",
     "Jobs & activity",
+    "Model Registration",
+    "Model Mapping",
     "Connections",
     "Services & migration",
     "Setup",
@@ -36,7 +39,7 @@ test("navigates all workspace screens and preserves an authenticated refresh", a
     await expect(
       page
         .getByRole("heading", {
-          name: name === "Dashboard" ? "Workspace overview" : name,
+          name: name === "Dashboard" ? "Workspace overview" : name === "Extract" ? "Aegis Agent" : name,
           exact: true,
         })
         .first(),
@@ -57,11 +60,11 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   const models = await seedMockCatalog(page.request, headers, datasetName);
   await page.reload();
   await navigate(page, "Datasets");
-  await page.locator(".dataset-intro").getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await page.locator(".dataset-intro").getByRole("button", { name: "New dataset", exact: true }).click();
   await page.getByLabel("Dataset name", { exact: true }).fill("Cancelled draft dataset");
   await page.getByRole("button", { name: "Cancel dataset onboarding", exact: true }).click();
   await expect(page.getByLabel("Dataset name", { exact: true })).toHaveCount(0);
-  await page.locator(".dataset-intro").getByRole("button", { name: "Onboard dataset", exact: true }).click();
+  await page.locator(".dataset-intro").getByRole("button", { name: "New dataset", exact: true }).click();
   await expect(page.getByLabel("Dataset name", { exact: true })).toHaveValue("");
   await page.getByLabel("Dataset name", { exact: true }).fill(datasetName);
   await page.getByLabel("Dataset description", { exact: true }).fill("Synthetic onboarding evidence for browser QA.");
@@ -71,12 +74,10 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   await expect(
     page.getByText("Dataset created. Map its models before adding documents.", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
-  await page.getByLabel(`Mapped model ${models.fast.name}`, { exact: true }).check();
-  await page.getByLabel(`Mapped model ${models.careful.name}`, { exact: true }).check();
-  await page.getByLabel(`Mapped model ${models.embedding.name}`, { exact: true }).check();
-  await page.getByLabel("Default chat model", { exact: true }).selectOption(models.fast.id);
-  await page.getByLabel("Default extraction model", { exact: true }).selectOption(models.careful.id);
+  await expect(page.getByRole("heading", { name: "Model Mapping", exact: true })).toBeVisible();
+  await page.getByLabel("Chat model", { exact: true }).selectOption(models.fast.id);
+  await expect(page.getByRole("button", { name: "Save & Apply", exact: true })).toBeDisabled();
+  await page.getByLabel("Extraction model", { exact: true }).selectOption(models.careful.id);
   await page.getByLabel("Embedding model", { exact: true }).selectOption(models.embedding.id);
   // A workspace refresh returns new dataset objects. Unsaved mapping choices
   // and defaults must survive that real refresh, including the onboarding load.
@@ -84,16 +85,12 @@ test("onboards a dataset, maps models, uploads a document, previews and indexes 
   await page.getByLabel("Refresh workspace", { exact: true }).click();
   await checked(await refreshed);
   await expect(page.getByLabel("Refresh workspace", { exact: true })).toBeEnabled();
-  for (const model of [models.fast, models.careful, models.embedding]) {
-    await expect(page.getByLabel(`Mapped model ${model.name}`, { exact: true })).toBeChecked();
-  }
-  await expect(page.getByLabel(`Mapped model ${models.separate.name}`, { exact: true })).not.toBeChecked();
-  await expect(page.getByLabel("Default chat model", { exact: true })).toHaveValue(models.fast.id);
-  await expect(page.getByLabel("Default extraction model", { exact: true })).toHaveValue(models.careful.id);
+  await expect(page.getByLabel("Chat model", { exact: true })).toHaveValue(models.fast.id);
+  await expect(page.getByLabel("Extraction model", { exact: true })).toHaveValue(models.careful.id);
   await expect(page.getByLabel("Embedding model", { exact: true })).toHaveValue(models.embedding.id);
   const beforeSave = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
   expect(beforeSave.mappings).toEqual([]);
-  await page.getByRole("button", { name: "Save model mappings", exact: true }).click();
+  await page.getByRole("button", { name: "Save & Apply", exact: true }).click();
   await expect.poll(async () => {
     const saved = await checked(await page.request.get(`/api/datasets/${dataset.id}/models`));
     return saved.default_extraction_model_id;
@@ -139,14 +136,15 @@ async function navigate(page: Page, name: string) {
   const open = page.getByRole("button", { name: "Open navigation", exact: true });
   if (await open.isVisible() && !await page.locator(".sidebar").evaluate(el => el.classList.contains("open"))) await open.click();
   const nav = page.getByRole("navigation");
-  const target = nav.getByRole("button", { name, exact: true });
+  const target = nav.getByRole("button", { name: name === "Extract" ? "Aegis Agent" : name, exact: true });
   if (!await target.isVisible()) await nav.getByRole("button", { name: "Manage workspace", exact: true }).click();
   await target.click();
-  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name, exact: true }).first()).toBeVisible();
+  if (name === "Extract") await page.getByRole("tab", { name: "Extract & review", exact: true }).click();
+  await expect(page.getByRole("heading", { name: name === "Dashboard" ? "Workspace overview" : name === "Extract" ? "Aegis Agent" : name, exact: true }).first()).toBeVisible();
 }
 
 async function openDocumentScope(page: Page) {
-  const details = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Document scope/ }) });
+  const details = page.locator(".chat-scope");
   if (!await details.evaluate(el => el.hasAttribute("open"))) await details.locator("summary").click();
 }
 
@@ -191,14 +189,16 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   const models = await seedMockCatalog(page.request, headers, prefix);
   const multiple = await seedDataset(page.request, headers, `${prefix} · multiple models`, [models.fast, models.careful], models.embedding);
   const single = await seedDataset(page.request, headers, `${prefix} · one model`, [models.separate], models.embedding);
-  const unavailable = await seedDataset(page.request, headers, `${prefix} · no generation model`, [], models.embedding);
+  const unavailableModel = await checked(await page.request.post("/api/models", {headers, data:{name:`${prefix} · disabled generation`, connection_profile_id:models.profile.id, provider_model:"mock-unavailable", capabilities:["chat","extraction"], enabled:true}}));
+  const unavailable = await seedDataset(page.request, headers, `${prefix} · no enabled generation model`, [unavailableModel], models.embedding);
   const documentA = await uploadReady(page.request, headers, multiple, `${prefix}-cobalt.txt`, "Synthetic dataset A evidence: the launch code is COBALT and the reference is INV-COBALT.");
   const documentB = await uploadReady(page.request, headers, single, `${prefix}-magenta.txt`, "Synthetic dataset B evidence: the launch code is MAGENTA and the reference is INV-MAGENTA.");
   const documentC = await uploadReady(page.request, headers, unavailable, `${prefix}-unconfigured.txt`, "Synthetic document ready for future model configuration.");
+  await checked(await page.request.put(`/api/models/${unavailableModel.id}`, {headers, data:{name:unavailableModel.name, connection_profile_id:models.profile.id, provider_model:unavailableModel.provider_model, capabilities:["chat","extraction"], enabled:false}}));
   const template = await seedTemplate(page.request, headers, `${prefix} · extraction schema`);
   await page.reload();
 
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(unavailable.id);
   await page.getByLabel("Ask a question").fill("This must not be sent without a mapped model.");
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
@@ -207,10 +207,11 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
   await expect(page.getByRole("combobox", { name: "Chat model", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Configure dataset models", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Datasets", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Model Mapping", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "All datasets", exact: true }).click();
-  await expect(page.getByRole("button", { name: `Open dataset ${unavailable.name}`, exact: true })).toContainText("Models needed");
-  await navigate(page, "Ask Aegis");
+  await expect(page.getByRole("link", { name: `Open dataset ${unavailable.name}`, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", {name:"Open chat",exact:true})).not.toHaveCount(0);
+  await navigate(page, "Aegis Agent");
 
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(multiple.id);
   const chatModel = page.getByRole("combobox", { name: "Chat model", exact: true });
@@ -242,7 +243,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
 
   await navigate(page, "Extract");
   await page.getByLabel("Extraction dataset", { exact: true }).selectOption(unavailable.id);
-  await page.getByLabel("Extraction template", { exact: true }).selectOption(template.id);
+  await page.getByLabel("Prompt template", { exact: true }).selectOption(template.id);
   await documentCheckbox(page, documentC.name).check();
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
   await expect(page.getByText("No eligible extraction models", { exact: false })).toBeVisible();
@@ -287,22 +288,19 @@ test("saves a strict template and verifies connections without exposing a key", 
   page,
 }) => {
   const name = `Browser schema ${Date.now()}`;
-  await navigate(page, "Templates");
-  await page.getByLabel("Template name", { exact: true }).fill(name);
+  await navigate(page, "Prompt templates");
+  await page.getByLabel("Prompt template name", { exact: true }).fill(name);
+  await page.getByLabel("Extraction instructions", { exact: true }).fill("Copy the invoice reference without guessing.");
+  await page.getByRole("button", {name:"Add field",exact:true}).click();
+  await page.getByLabel("Field name /new_field",{exact:true}).fill("invoice_number");
+  await page.getByLabel("Extraction instructions",{exact:true}).click();
+  await page.getByLabel("Field guidance /invoice_number",{exact:true}).fill("Invoice reference");
   await page
-    .getByLabel("Template JSON schema")
-    .fill(
-      JSON.stringify({
-        type: "object",
-        properties: { invoice_number: { type: "string" } },
-        required: ["invoice_number"],
-        additionalProperties: false,
-      }),
-    );
-  await page
-    .getByRole("button", { name: "Save template", exact: true })
+    .getByRole("button", { name: "Save prompt template", exact: true })
     .click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  const savedTemplates=await checked(await page.request.get('/api/templates'));
+  expect(savedTemplates.find((t:{name:string})=>t.name===name).schema).toMatchObject({type:'object',description:'Copy the invoice reference without guessing.',properties:{invoice_number:{type:'string',description:'Invoice reference'}},required:['invoice_number'],additionalProperties:false});
   await navigate(page, "Connections");
   await page.getByRole("button", { name: "Providers", exact: true }).click();
   await expect(page.getByLabel("OpenAI API key", { exact: true })).toHaveValue(
@@ -318,6 +316,38 @@ test("saves a strict template and verifies connections without exposing a key", 
     page.getByText('"database": true', { exact: false }),
   ).toBeVisible();
 });
+test("prompt form preserves validation and versions, supports groups and nullable lists, and cancels drafts", async ({page}) => {
+  const headers=await sessionHeaders(page.request),name=`Friendly form roundtrip ${Date.now()}`;
+  const original={type:'object',properties:{total:{type:'number',minimum:0,description:'Final amount'}},required:['total'],additionalProperties:false};
+  const template=await checked(await page.request.post('/api/templates',{headers,data:{name,schema:original}}));
+  await page.reload();await navigate(page,'Prompt templates');
+  await page.getByRole('article').filter({has:page.getByRole('heading',{name,exact:true})}).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByLabel('Field guidance /total',{exact:true}).fill('Changed draft');
+  await page.getByRole('button',{name:'Cancel changes',exact:true}).click();
+  await expect(page.getByLabel('Field guidance /total',{exact:true})).toHaveValue('Final amount');
+  await page.getByRole('button',{name:'Add field',exact:true}).click();
+  await page.getByLabel('Value type /new_field',{exact:true}).selectOption('object');
+  await page.getByRole('button',{name:'Add nested field',exact:true}).click();
+  await page.getByLabel('Field name /new_field/new_field',{exact:true}).fill('reference');
+  await page.getByLabel('Extraction instructions',{exact:true}).click();
+  await page.getByLabel('Field guidance /new_field/reference',{exact:true}).fill('Copy the reference');
+  await page.getByRole('button',{name:'Add field',exact:true}).click();
+  await page.getByLabel('Value type /new_field_2',{exact:true}).selectOption('array');
+  await page.getByLabel('List item type /new_field_2',{exact:true}).selectOption('number');
+  await page.getByLabel('May be missing /new_field_2',{exact:true}).check();
+  await page.getByRole('button',{name:'Save new version',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();
+  const versions=await checked(await page.request.get(`/api/templates/${template.id}/versions`));
+  expect(versions).toHaveLength(2);expect(versions[0].schema).toEqual(original);
+  expect(versions[1].schema.properties.total).toEqual(original.properties.total);
+  expect(versions[1].schema.properties.new_field).toEqual({type:'object',description:'',properties:{reference:{type:'string',description:'Copy the reference'}},required:['reference'],additionalProperties:false});
+  expect(versions[1].schema.properties.new_field_2).toEqual({type:['array','null'],description:'',items:{type:'number'}});
+  await page.getByLabel('Field guidance /total',{exact:true}).fill('Do not save');
+  page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'Home',exact:true}).click();
+  await expect(page.getByLabel('Field guidance /total',{exact:true})).toHaveValue('Do not save');
+  await page.getByRole('button',{name:'Cancel changes',exact:true}).click();
+});
+
 test("mobile dataset and model selection fit the screen and sign out removes the session", async ({
   page,
 }) => {
@@ -329,13 +359,13 @@ test("mobile dataset and model selection fit the screen and sign out removes the
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
   await navigate(page, "Datasets");
-  await page.getByRole("button", { name: `Open dataset ${dataset.name}`, exact: true }).first().click();
+  await page.getByRole("link", { name: `Open dataset ${dataset.name}`, exact: true }).first().click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "Map models", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Models approved for this dataset", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Model Mapping", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Model Mapping", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
   const models = dataset.models.filter((model: { enabled: boolean; mapping_enabled: boolean; capabilities: string[] }) => model.enabled !== false && model.mapping_enabled !== false && model.capabilities.includes("chat"));
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models[1].id);
@@ -363,13 +393,13 @@ test("Home cards use saved activity, open the right dataset, and retain status a
   const active = await checked(await page.request.post("/api/datasets", { headers, data: { name, description: "Registered without models or documents." } }));
   const inactive = await checked(await page.request.post("/api/datasets", { headers, data: { name: `${name} paused`, active: false } }));
   await page.reload();
-  const activeCard = page.getByRole("link", { name: `Open dataset ${name}`, exact: true });
-  const inactiveCard = page.getByRole("link", { name: `Open dataset ${name} paused`, exact: true });
+  const activeCard = page.getByRole("article", { name: `Dataset ${name}`, exact: true });
+  const inactiveCard = page.getByRole("article", { name: `Dataset ${name} paused`, exact: true });
   await expect(activeCard.getByText("Active", { exact: true })).toBeVisible();
   await expect(inactiveCard.getByText("Inactive", { exact: true })).toBeVisible();
   // Active is a saved setting, not an inference from an index, document count, or model readiness.
   expect(active.embedding_model_id).toBeNull();
-  await activeCard.click();
+  await activeCard.getByRole("link", {name: `Open dataset ${name}`,exact:true}).click();
   await expect(page.locator(".dataset-detail").getByRole("heading", { name, exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`#dataset/${active.id}$`));
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -392,7 +422,7 @@ test("Home cards use saved activity, open the right dataset, and retain status a
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(activeCard).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await inactiveCard.focus();
+  await inactiveCard.getByRole("link", {name: `Open dataset ${name} paused`,exact:true}).focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".dataset-detail").getByRole("heading", { name: `${name} paused`, exact: true })).toBeVisible();
 });
@@ -442,7 +472,7 @@ test("focused screens reveal secondary controls only when requested", async ({ p
   await expect(manage).toHaveAttribute("aria-expanded", "false");
 
   await navigate(page, "Datasets");
-  const cards = page.getByRole("button", { name: /^Open dataset / });
+  const cards = page.getByRole("link", { name: /^Open dataset / });
   await expect(cards.first()).toBeVisible();
   await expect(page.locator(".dataset-detail")).not.toBeVisible();
   await page.getByLabel("Search datasets", { exact: true }).fill("no-dataset-matches-this-qa-query");
@@ -458,13 +488,14 @@ test("focused screens reveal secondary controls only when requested", async ({ p
   await page.getByRole("button", { name: "All datasets", exact: true }).click();
   await expect(cards.first()).toBeVisible();
 
-  await navigate(page, "Ask Aegis");
-  const scope = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Document scope/ }) });
+  await navigate(page, "Aegis Agent");
+  const scope = page.locator(".chat-scope");
   const history = page.getByRole("button", { name: "Conversations", exact: true });
   await expect(scope).not.toHaveAttribute("open", "");
   await page.getByLabel("Ask a question").fill("Draft survives opening and closing optional controls.");
   await scope.locator("summary").click();
   await scope.locator("summary").click();
+  if (!await page.locator(".chat-list").isVisible()) await history.click();
   await page.getByRole("button", { name: "Hide conversations", exact: true }).click();
   await history.click();
   await expect(page.getByLabel("Ask a question")).toHaveValue("Draft survives opening and closing optional controls.");
@@ -502,7 +533,7 @@ async function focusedChat(page: Page) {
   const source = await uploadReady(page.request, headers, dataset, `${prefix}-evidence.txt`,
     "SYNTHETIC QA SOURCE. The project reference is FOCUS-2042. The review owner is the fictional Northstar team. Delivery is 23 October 2026.");
   await page.reload();
-  await navigate(page, "Ask Aegis");
+  await navigate(page, "Aegis Agent");
   await page.getByLabel("Chat dataset", { exact: true }).selectOption(dataset.id);
   await page.getByRole("combobox", { name: "Chat model", exact: true }).selectOption(models.careful.id);
   await page.getByRole("checkbox", { name: /I approve sending this request/ }).check();
@@ -579,15 +610,16 @@ test("focused chat blocks duplicate submissions, stops pending output, and retri
     await expect(page.getByRole("button", { name: "New conversation", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     release();
-    await expect(page.getByText(/Stopped waiting for the answer/)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
-    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.locator(".answer-failure")).toContainText("Generation stopped");
+    await expect(page.getByRole("button", { name: "Retry question", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Retry question", exact: true }).click();
     await expect(page.getByTitle("Copy answer")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
     await expect(page.locator(".citation").first()).toBeVisible();
     await expect(page.locator(".message.user")).toHaveCount(1);
-    await expect(page.locator(".message:not(.user)")).toHaveCount(1);
+    await expect(page.locator(".message.assistant:not(.incomplete)")).toHaveCount(1);
+    await expect(page.locator(".message.incomplete")).toHaveCount(1);
     expect(count).toBe(2);
   } finally { release(); }
 });
@@ -605,7 +637,7 @@ test("focused chat recovers a failed request and restores conversation model and
   await page.getByLabel("Ask a question").fill(question);
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText("Synthetic temporary answer outage", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.getByRole("button", { name: "Retry question", exact: true }).click();
   await expect(page.getByTitle("Copy answer")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
@@ -701,22 +733,22 @@ test("latest history selection and New chat win over stale conversation loads", 
     await choose(a.title).click();
     await expect.poll(() => loads).toBe(1);
     await choose(b.title).click();
-    await expect(page.locator(".thread-title")).toHaveText(b.title);
+    await expect(choose(b.title)).toHaveAttribute("aria-current", "true");
     const first = page.waitForResponse(response => response.url().endsWith(`/api/conversations/${a.id}`));
     gates[0].release();
     await first;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    await expect(page.locator(".thread-title")).toHaveText(b.title);
+    await expect(choose(b.title)).toHaveAttribute("aria-current", "true");
     await choose(a.title).click();
     await expect.poll(() => loads).toBe(2);
-    await page.getByRole("button", { name: "New conversation", exact: true }).click();
+    await page.locator(".chat-heading").getByRole("button", { name: "New conversation", exact: true }).click();
     await page.getByLabel("Ask a question").fill("A fresh draft");
     const second = page.waitForResponse(response => response.url().endsWith(`/api/conversations/${a.id}`));
     gates[1].release();
     await second;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await expect(page.getByRole("heading", { name: "What would you like to know?", exact: true })).toBeVisible();
-    await expect(page.locator(".thread-title")).toHaveText("Your documents. A clearer answer.");
+    await expect(page.locator('.chat-list button[aria-current="true"]')).toHaveCount(0);
     await expect(page.getByLabel("Ask a question")).toHaveValue("A fresh draft");
   } finally { gates.forEach(gate => gate.release()); }
 });
@@ -745,10 +777,12 @@ test("compact conversation dialog restores focus on Escape, Close and backdrop",
   await expect(history).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  await history.getByRole("button", { name: "New conversation", exact: true }).click();
   await expect(history).not.toBeVisible();
   await expect(page.getByLabel("Ask a question")).toBeFocused();
   await page.setViewportSize({ width: 1440, height: 540 });
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.click();
   await expect(page.getByRole("heading", { name: "Conversations", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Manage workspace", exact: true }).click();
   const setup = page.getByRole("navigation").getByRole("button", { name: "Setup", exact: true });

@@ -1,0 +1,22 @@
+.batch-progress{border:1px solid #dfe8f7;border-radius:12px;background:#f8faff;padding:16px;margin:16px 0;min-width:0}
+.batch-progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:var(--text-body)}
+.batch-progress-heading>span{color:#536480;font-size:var(--text-caption);white-space:nowrap}
+.batch-progress-track{height:6px;background:#e0e8f5;border-radius:8px;overflow:hidden;margin:12px 0 0}
+.batch-progress-track>span{display:block;height:100%;background:#167950;border-radius:inherit;transition:width .45s ease}
+.batch-progress .batch-stages{margin:18px 0 12px}
+.batch-progress .batch-stages small{text-transform:none;line-height:1.5;font-size:var(--text-small)}
+.batch-progress .stage-running .stage-symbol{animation:batch-pulse 1.8s ease-in-out infinite}
+.batch-progress .stage-completed .stage-symbol{animation:batch-arrive .3s ease-out}
+.batch-progress-summary{font-size:var(--text-caption);line-height:1.6;margin:0;color:#536480}
+.batch-progress.is-compact{padding:12px;margin:10px 0 0;background:#fff}
+.batch-progress.is-compact .batch-stages{margin:14px 0 10px}
+.batch-popup-documents{max-height:180px;overflow:auto;list-style:none;padding:0;margin:10px 0 0}
+.operation-popup>.batch-popup-documents{padding:0;font-size:var(--text-small)}
+.batch-popup-documents li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 10px;padding:7px 0;border-bottom:1px solid #e4eaf4;font-size:var(--text-small)}
+.batch-popup-documents strong{font-weight:500;min-width:0;overflow-wrap:anywhere}
+.batch-popup-documents span{color:#536480;text-align:right}
+.batch-popup-error{grid-column:1/-1;margin:0;color:#a01730;line-height:1.5}
+@keyframes batch-pulse{0%,100%{box-shadow:0 0 0 0 #2563eb00}50%{box-shadow:0 0 0 5px #2563eb15}}
+@keyframes batch-arrive{from{transform:scale(.88)}to{transform:scale(1)}}
+@media(max-width:560px){.batch-progress{padding:12px}.batch-progress .batch-stages strong{font-size:var(--text-small)}.batch-progress .batch-stages small{font-size:var(--text-small)}}
+@media(prefers-reduced-motion:reduce){.batch-progress *{animation:none!important;transition:none!important}}

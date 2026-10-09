@@ -19,15 +19,24 @@ Only the web app is published, bound to `127.0.0.1`. PostgreSQL and Qdrant have 
 
 ### First dataset
 
-1. Configure provider connections and save a named connection profile. Register the chat, extraction, and embedding models you want to use.
-2. Onboard a dataset, map its eligible models, and choose the default chat/extraction models and indexing configuration.
+1. Open **Model Registration** and register the Embedding, Chat, and Extraction models with their connection details. Test each connection and save it.
+2. Onboard a dataset and open **Model Mapping**. Select all three required roles and choose **Save & Apply**.
 3. Upload text-based PDF, DOCX, or TXT documents from Datasets, or use the attachment button / drag-and-drop in Ask Aegis after selecting a dataset. Both entry points use the same storage-first upload and indexing workflow. Review files and any external-processing notice, then choose Upload. Watch indexing progress; documents become available to questions only when ready. The local embedding model downloads on first use.
 4. In Ask Aegis, select the dataset and an eligible model. With multiple mapped models, the model dropdown lets you choose which one answers. Sources link answers to stored chunks.
 5. In Extract, select the dataset, mapped extraction model, documents, and JSON-schema template. Review the structured output and export JSON/CSV.
 
 See [dataset configuration and existing-workspace migration](docs/DATASETS.md). A dataset with no eligible mapped model gives configuration guidance instead of silently using a global model.
 
+See [generic model registration and mapping](docs/MODEL_CONFIGURATION.md) for supported protocols, encrypted credentials, next-run changes, and embedding reindexing.
+
 Scanned/image-only PDFs require OCR first. Aegis does not silently invent OCR text. OpenAI chat/extraction sends the selected source content and your prompt to OpenAI after the UI's external-processing acknowledgment. OpenAI embeddings also send chunks when selected. API use is billed separately by the provider. Local embeddings keep document text local during indexing; downloading model weights still requires network access.
+
+### Free local inference with Ollama
+
+For native Windows development with local chat, extraction, and embeddings, see
+[the Ollama setup guide](docs/OLLAMA.md). It uses SQLite and local file search,
+with cloud features and paid providers disabled. Ollama model downloads are separate
+from application dependencies; no OpenAI API key or subscription is required.
 
 ## Storage-first architecture
 
@@ -47,6 +56,10 @@ docker compose start
 ```
 
 Never run `docker compose down -v` unless you intend to destroy all deployment volumes. Restore requires the original master key and reindexing all documents; see the backup runbook. Keep backups private: they contain original documents and conversation contents.
+
+## Forgotten administrator password
+
+Local SQLite installations can use the [offline operator recovery runbook](docs/PASSWORD_RECOVERY.md). It preserves the existing account and workspace, creates a private backup, and revokes existing sessions. The owner enters the new password privately; there is no unauthenticated web reset endpoint.
 
 ## Development and verification
 

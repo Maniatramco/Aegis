@@ -1,11 +1,25 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { DocumentUploadPanel, useDocumentUpload } from "./document-upload";
 import { FocusedChat } from "./focused-chat";
-import { DatasetHome } from "./dataset-home";
-import { DatasetWorkspace, ModelCatalog, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
+import { readChatStream } from "./chat-stream";
+import { DatasetHome } from "./dataset-directory";
+import { ExtractionReview } from "./extraction-review";
+import { PromptTemplates } from "./prompt-templates";
+import { ReExtract } from "./re-extract";
+import { OperationProgress, extractionProgressJob } from "./operation-progress";
+import "./workspace-flow.css";
+import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
+import { ModelRegistration } from "./model-registration";
+import { AgentV2 } from "./agent-v2";
+import { fetchWithSessionCsrf } from "./session-request";
+import { ApiDocumentation } from "./api-documentation";
+import { TemporaryDocumentChat } from "./temporary-document-chat";
+import { readPromptUpload, type PromptUpload } from "./prompt-upload";
 import {
   Activity,
+  Bot,
   ArrowDownToLine,
   ArrowRight,
   BookOpen,
@@ -50,25 +64,34 @@ type View =
   | "Home"
   | "Dashboard"
   | "Datasets"
-  | "Ask Aegis"
+  | "Aegis Agent"
+  | "Aegis agent V2"
   | "Extract"
-  | "Templates"
+  | "Re-extract"
+  | "Prompt templates"
   | "Index inspector"
   | "Jobs & activity"
   | "Connections"
+  | "Model Registration"
+  | "Model Mapping"
   | "Services & migration"
+  | "API Documentation"
   | "Setup";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Home", icon: Database, group: "WORKSPACE" },
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Datasets", icon: BookOpen },
-  { name: "Ask Aegis", icon: MessageSquare },
-  { name: "Extract", icon: FileSearch },
-  { name: "Templates", icon: FileJson },
+  { name: "Aegis Agent", icon: MessageSquare },
+  { name: "Aegis agent V2", icon: Bot },
+  { name: "Re-extract", icon: RefreshCw },
+  { name: "Prompt templates", icon: FileText },
   { name: "Index inspector", icon: Layers, group: "OPERATIONS" },
   { name: "Jobs & activity", icon: Activity },
   { name: "Connections", icon: Settings2 },
+  { name: "Model Registration", icon: Layers },
+  { name: "Model Mapping", icon: BookOpen },
   { name: "Services & migration", icon: Cloud },
+  { name: "API Documentation", icon: FileJson },
   { name: "Setup", icon: Cog },
 ];
 const descriptions: Record<View, string> = {
@@ -77,16 +100,21 @@ const descriptions: Record<View, string> = {
     "Your documents, processing activity, and connected services at a glance.",
   "Datasets":
     "Onboard your data, map its models, and put a trusted source to work.",
-  "Ask Aegis": "Ask across your knowledge, with evidence you can inspect.",
+  "Aegis Agent": "Ask across your knowledge, with evidence you can inspect.",
+  "Aegis agent V2": "Describe your document task. The agent connects upload, extraction, and re-extraction.",
   Extract: "Turn document content into structured, reviewable data.",
-  Templates: "Define the fields and structure your extraction needs.",
+  "Prompt templates": "Describe what to find and choose the fields you need.",
+  "Re-extract": "Find a document and choose how to extract it again.",
   "Index inspector":
     "Inspect document chunks and the retrieval layer behind your answers.",
   "Jobs & activity": "Follow processing work and resolve what needs attention.",
   Connections: "Manage shared model connections and deployment infrastructure.",
+  "Model Registration": "Register model connections for Embedding, Chat, and Extraction.",
+  "Model Mapping": "Choose the three required models for each dataset.",
   "Services & migration":
     "A clear path from local deployment to your cloud environment.",
   Setup: "Get your workspace ready, one deliberate step at a time.",
+  "API Documentation": "Learn the FastAPI endpoints behind Aegis, with requests, schemas, and workflow guides.",
 };
 const byteSize = (n: number) =>
   n > 1048576
@@ -183,16 +211,25 @@ function Download({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("Home");
+  const [view, setView] = useState<View>("Aegis Agent");
+  const [agentTab,setAgentTab]=useState("Chat");
   const [user, setUser] = useState<Entity | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [csrf, setCsrf] = useState("");
+  const authSession = useRef({ userId: user?.id as string | undefined, csrf });
+  authSession.current = { userId: user?.id, csrf };
   const [bootstrap, setBootstrap] = useState(false);
   const [bootstrapToken, setBootstrapToken] = useState("");
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [signInErrors, setSignInErrors] = useState<{ username?: string; password?: string; code?: string }>({});
   const [busy, setBusy] = useState(false);
+  const operationLock=useRef(false);
   const [loading, setLoading] = useState(false);
+  const [requests, setRequests] = useState<{id:string;label:string}[]>([]);
+  const [uploadWorkflowVisible,setUploadWorkflowVisible]=useState(false);
+  const [visibleExtractionJobId,setVisibleExtractionJobId]=useState<string|null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [mobile, setMobile] = useState(false);
@@ -234,15 +271,19 @@ export default function App() {
     };
   }, [drawerOpen, user]);
   const [adminNavigation, setAdminNavigation] = useState(false);
-  const [connectionTab, setConnectionTab] = useState("Models");
+  const [connectionTab, setConnectionTab] = useState("Profiles");
   const [extractionTab, setExtractionTab] = useState("Create");
   const [refresh, setRefresh] = useState(0);
   const [overview, setOverview] = useState<Entity>({});
   const [docs, setDocs] = useState<Entity[]>([]);
+  // A list response started before an upload must not erase its accepted result.
+  const uploadRevision = useRef(0);
   const [kbs, setKbs] = useState<Entity[]>([]);
   const [kb, setKb] = useState("");
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<Entity[]>([]);
+  const [agentVisibleJobIds, setAgentVisibleJobIds] = useState<string[]>([]);
+  const onAgentJobs = useCallback((updates: Entity[]) => setJobs(previous => [...updates, ...previous.filter(job => !updates.some(update => update.id === job.id))]), []);
   const [caps, setCaps] = useState<Entity>({});
   const [settings, setSettings] = useState<Entity>({});
   const [modal, setModal] = useState<{
@@ -262,6 +303,8 @@ export default function App() {
   const [externalUpload, setExternalUpload] = useState(false);
   const [conversations, setConversations] = useState<Entity[]>([]);
   const [conversation, setConversation] = useState<Entity | null>(null);
+  const [temporary, setTemporary] = useState(false);
+  useEffect(() => { setTemporary(false); }, [user?.id]);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<string[]>([]);
   const [externalChat, setExternalChat] = useState(false);
@@ -273,21 +316,19 @@ export default function App() {
   const openingConversation = useRef(false);
   const [templates, setTemplates] = useState<Entity[]>([]);
   const [templateId, setTemplateId] = useState("");
-  const [templateName, setTemplateName] = useState("");
-  const [schema, setSchema] = useState(
-    json({
-      type: "object",
-      properties: {
-        invoice_number: { type: "string", description: "Invoice reference" },
-        total: { type: "number", description: "Total amount" },
-      },
-      required: ["invoice_number", "total"],
-      additionalProperties: false,
-    }),
-  );
+  const [templateAttachment,setTemplateAttachment]=useState<(PromptUpload & {datasetId:string})|null>(null);
+  const [promptPreview,setPromptPreview]=useState<(PromptUpload & {datasetId:string})|null>(null);
+  const [promptLoading,setPromptLoading]=useState(false);
+  const promptReadRequest=useRef(0);
+  const [templateFeedback,setTemplateFeedback]=useState('');
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
+  const reviewProgressJob = view === "Aegis Agent" && agentTab === "Extract" && extractionTab === "Review" && extraction?.status !== "ready" ? extractionProgressJob(extraction, jobs) : undefined;
   const [resultText, setResultText] = useState("");
+  const reviewDirty = useRef(false);
+  const templateDirty = useRef(false);
+  const onTemplateDirty = useCallback((dirty: boolean) => { templateDirty.current = dirty; }, []);
+  const onReviewDirty = useCallback((dirty: boolean) => { reviewDirty.current = dirty; }, []);
   const [externalExtract, setExternalExtract] = useState(false);
   const [indexDoc, setIndexDoc] = useState("");
   const [indexData, setIndexData] = useState<Entity>({});
@@ -306,12 +347,23 @@ export default function App() {
       method = "GET",
       body?: unknown,
       signal?: AbortSignal,
+      quiet = false,
     ) => {
+      const requestId=crypto.randomUUID();
+      const resource=path.split('/')[1]||'workspace';
+      const section=({overview:'workspace summary',jobs:'workflow status',settings:'workspace settings',conversations:'chats',models:'available models',templates:'prompt templates'} as Record<string,string>)[resource]||resource.replaceAll('-',' ');
+      const testingModel=path==='/model-registrations/test';
+      const planningAgent=path==='/agent-v2/plans'&&method==='POST';
+      const label=path==='/templates/validate'?'Validating prompt JSON…':path.startsWith('/temporary-chat/')?(path==='/temporary-chat/messages'?'Answering from the temporary document…':method==='DELETE'?'Clearing temporary document…':body instanceof FormData?'Reading temporary document…':'Loading temporary document…'):testingModel?'Testing model connection…':path.startsWith('/datasets/')&&path.endsWith('/models')&&method==='PUT'?'Applying dataset model mappings…':`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`;
+      if(!quiet)setRequests(previous=>[...previous,{id:requestId,label}]);
+      const timeout=AbortSignal.timeout(planningAgent?630000:testingModel?Math.min(630000,(Number((body as Entity)?.timeout)||60)*1000+30000):method==='GET'?30000:120000);
+      try {
       const headers: Record<string, string> = {};
       if (body && !(body instanceof FormData))
         headers["Content-Type"] = "application/json";
-      if (csrf) headers["X-CSRF-Token"] = csrf;
-      const r = await fetch(`/api${path}`, {
+      const session = authSession.current;
+      if (session.csrf) headers["X-CSRF-Token"] = session.csrf;
+      const r = await fetchWithSessionCsrf(`/api${path}`, {
         method,
         headers,
         credentials: "include",
@@ -321,8 +373,8 @@ export default function App() {
             : body
               ? JSON.stringify(body)
               : undefined,
-        signal,
-      });
+        signal: signal ? AbortSignal.any([signal,timeout]) : timeout,
+      }, session, token => { authSession.current = { ...authSession.current, csrf: token }; setCsrf(token); });
       let data;
       try {
         data = await r.json();
@@ -339,10 +391,18 @@ export default function App() {
         ), { status: r.status });
       }
       return data;
+      } catch(error) {
+        if(error instanceof Error&&error.name==='TimeoutError')throw new Error('The request timed out. Check the service and refresh to confirm whether your operation completed before retrying.');
+        throw error;
+      } finally {
+        if(!quiet)setRequests(previous=>previous.filter(r=>r.id!==requestId));
+      }
     },
-    [csrf],
+    [],
   );
   const run = async (fn: () => Promise<void>) => {
+    if(operationLock.current)return;
+    operationLock.current=true;
     setBusy(true);
     setError("");
     try {
@@ -350,6 +410,7 @@ export default function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
+      operationLock.current=false;
       setBusy(false);
     }
   };
@@ -358,7 +419,7 @@ export default function App() {
     setTimeout(() => setToast(""), 5500);
   };
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
+    fetch("/api/auth/me", { credentials: "include",signal:AbortSignal.timeout(15000) })
       .then(async (r) => {
         const d = await r.json();
         if (r.ok) {
@@ -366,9 +427,9 @@ export default function App() {
           setCsrf(d.csrf_token || "");
         }
       })
-      .catch(() => {})
+      .catch(() => setError('Could not reach Aegis. Check the API service, then reload this page.'))
       .finally(() => setAuthChecked(true));
-    fetch("/api/auth/status")
+    fetch("/api/auth/status",{signal:AbortSignal.timeout(15000)})
       .then((r) => (r.ok ? r.json() : {}))
       .then((d: Entity) =>
         setBootstrap(!!(d.setup_required || d.bootstrap_required)),
@@ -379,60 +440,64 @@ export default function App() {
     if (!user) return;
     let active = true;
     setLoading(true);
-    Promise.all([
-      api("/overview"),
-      api("/documents"),
-      api("/datasets"),
-      api("/jobs"),
-      api("/capabilities"),
-      api("/settings"),
-      api("/templates"),
-      api("/conversations"),
-      api("/extractions"),
-      api("/models"),
-      api("/settings/profiles"),
-    ])
-      .then(([o, d, k, j, c, s, t, co, e, m, p]) => {
-        if (!active) return;
-        setOverview(o);
-        setDocs(Array.isArray(d) ? d : d.documents || []);
-        setDocumentPollError(false);
-        setKbs(Array.isArray(k) ? k : k.datasets || []);
-        setJobs(Array.isArray(j) ? j : j.jobs || []);
-        setCaps(c);
-        setSettings(s);
-        setSettingsForm(s);
-        setTemplates(Array.isArray(t) ? t : t.templates || []);
-        setConversations(Array.isArray(co) ? co : co.conversations || []);
-        setExtractions(Array.isArray(e) ? e : e.extractions || []);
-        setModels(Array.isArray(m) ? m : m.models || []);
-        setProfiles(Array.isArray(p) ? p : p.profiles || []);
-      })
-      .catch((e) => active && setError(e.message))
-      .finally(() => active && setLoading(false));
+    const controller=new AbortController();
+    const revision=uploadRevision.current;
+    const list=(value:Entity|Entity[],key:string)=>Array.isArray(value)?value:value[key]||[];
+    const tasks:[string,(value:any)=>void][]=[
+      ['/overview',setOverview],['/documents',value=>{if(revision===uploadRevision.current)setDocs(list(value,'documents'));setDocumentPollError(false);}],
+      ['/datasets',value=>setKbs(list(value,'datasets'))],['/jobs',value=>{if(revision===uploadRevision.current)setJobs(list(value,'jobs'));}],
+      ['/settings',value=>{setSettings(value);setSettingsForm(value);}],['/templates',value=>setTemplates(list(value,'templates'))],
+      ['/conversations',value=>setConversations(list(value,'conversations'))],['/extractions',value=>setExtractions(list(value,'extractions'))],
+      ['/models',value=>setModels(list(value,'models'))],
+    ];
+    Promise.allSettled(tasks.map(async([path,update])=>{
+      try {const value=await api(path,'GET',undefined,controller.signal,true);if(active)update(value);}
+      catch(error){if(active)setError(error instanceof Error?error.message:'Could not refresh workspace.');}
+    })).finally(()=>{if(active)setLoading(false);});
     return () => {
       active = false;
+      controller.abort();
     };
   }, [user, refresh, api]);
+  useEffect(()=>{
+    if(!user||!['Connections','Model Registration','Services & migration','Setup','Dashboard'].includes(view))return;
+    let active=true;
+    api('/capabilities').then(value=>{if(active)setCaps(value);}).catch(error=>{if(active)setError(error.message);});
+    api('/settings/profiles').then(value=>{if(active)setProfiles(Array.isArray(value)?value:value.profiles||[]);}).catch(error=>{if(active)setError(error.message);});
+    return()=>{active=false;};
+  },[user,view,refresh,api]);
   useEffect(() => {
     if (!user) return;
-    const timer = setInterval(() => {
-      api("/jobs")
-        .then((d) => {
-          const next = Array.isArray(d) ? d : d.jobs || [];
-          setJobs(next);
-          api("/documents")
-            .then((d) => { setDocs(Array.isArray(d) ? d : d.documents || []); setDocumentPollError(false); })
-            .catch(() => setDocumentPollError(true));
-        })
-        .catch(() => setDocumentPollError(true));
-    }, 6000);
-    return () => clearInterval(timer);
+    let active=true, inFlight=false;
+    let previousJobs=jobs;
+    const controller=new AbortController();
+    const timer = setInterval(async () => {
+      if(inFlight)return;
+      inFlight=true;
+      const revision=uploadRevision.current;
+      try {
+        const d=await api('/jobs','GET',undefined,controller.signal,true);
+        if(!active||revision!==uploadRevision.current)return;
+        const next=Array.isArray(d)?d:d.jobs||[];
+        const changed=next.some((j:Entity)=>!previousJobs.some(p=>p.id===j.id&&p.status===j.status));
+        previousJobs=next;setJobs(next);
+        if(changed||next.some((j:Entity)=>['queued','running'].includes(j.status))){
+          const [documents,runs]=await Promise.all([api('/documents','GET',undefined,controller.signal,true),api('/extractions','GET',undefined,controller.signal,true)]);
+          if(active&&revision===uploadRevision.current){setDocs(Array.isArray(documents)?documents:documents.documents||[]);setExtractions(Array.isArray(runs)?runs:runs.extractions||[]);setDocumentPollError(false);}
+        }
+      }catch{if(active)setDocumentPollError(true);}finally{inFlight=false;}
+    }, 3000);
+    return () => {active=false;controller.abort();clearInterval(timer);};
   }, [user, api]);
   const navigate = (name: View) => {
-    window.location.hash = encodeURIComponent(name);
-    setView(name);
-    if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(name)) setAdminNavigation(true);
+    if ((reviewDirty.current || templateDirty.current) && !window.confirm("Discard unsaved changes before leaving?")) return;
+    reviewDirty.current = false; templateDirty.current = false;
+    const destination=name==="Extract"?"Aegis Agent":name;
+    if(name==="Extract")setAgentTab("Extract");
+    else if(name==="Aegis Agent")setAgentTab("Chat");
+    window.location.hash = encodeURIComponent(name==="Extract"?"Aegis Agent/extract":destination);
+    setView(destination);
+    if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(name)) setAdminNavigation(true);
     setDatasetModelsFocus(false);
     setError("");
     setMobile(false);
@@ -442,6 +507,27 @@ export default function App() {
   const extractionModels = eligibleModels(selectedDataset, "extraction");
   const selectedChatModel = chatModels.find(m => m.id === chatModelId);
   const selectedExtractModel = extractionModels.find(m => m.id === extractModelId);
+  const extractionNeedsConsent=!!selectedExtractModel&&!['ollama','mock'].includes(selectedExtractModel.provider);
+  const cancelPromptPreview = () => { promptReadRequest.current += 1; setPromptPreview(null); setPromptLoading(false); };
+  useEffect(() => { promptReadRequest.current += 1; setPromptPreview(null); setPromptLoading(false); setTemplateAttachment(null); }, [user?.id]);
+  const uploadPrompt = async (files: File[]) => {
+    if(busy || answering){setError('Wait for the current operation before uploading a prompt.');return;}
+    if(files.length!==1){setError('Upload one prompt JSON file at a time.');return;}
+    if(!kb){setError('Choose a dataset before uploading a prompt.');return;}
+    const request=++promptReadRequest.current;
+    setPromptPreview(null);setPromptLoading(true);setTemplateFeedback('');setError('');
+    try {
+      const parsed=await readPromptUpload(files[0]);
+      if(request!==promptReadRequest.current)return;
+      await api('/templates/validate','POST',{name:parsed.name,schema:parsed.schema,dataset_id:kb});
+      if(request===promptReadRequest.current)setPromptPreview({...parsed,datasetId:kb});
+    } catch(error){if(request===promptReadRequest.current)setError(error instanceof Error?error.message:'The prompt could not be validated.');}
+    finally {if(request===promptReadRequest.current)setPromptLoading(false);}
+  };
+  const confirmPrompt = () => {
+    if(!promptPreview || promptPreview.datasetId!==kb || busy || answering)return;
+    setTemplateAttachment(promptPreview);setPromptPreview(null);setTemplateFeedback('Prompt confirmed. Use Send to save it for this dataset.');setError('');
+  };
   const datasetEmbedding = selectedDataset?.active === false ? undefined : (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
   const datasetDocs = docs.filter(d => (d.dataset_id || d.kb_id) === kb);
   const readyDatasetDocs = datasetDocs.filter(d => d.status === "ready" && !d.requires_reindex);
@@ -451,6 +537,7 @@ export default function App() {
     conversationRequest.current += 1;
     openingConversation.current = false;
     setKb(id);
+    cancelPromptPreview();setTemplateAttachment(null);setTemplateFeedback('');setTemplateId('');
     setDatasetModelsFocus(false);
     setScope([]);
     setChatModelId("");
@@ -465,15 +552,21 @@ export default function App() {
   };
   const routeHandler = useRef<(hash: string) => void>(() => {});
   routeHandler.current = (hash: string) => {
+    if ((reviewDirty.current || templateDirty.current) && !window.confirm("Discard unsaved changes before leaving?")) { window.history.replaceState(null, "", "#" + encodeURIComponent(view)); return; }
+    reviewDirty.current = false; templateDirty.current = false;
     let route: string;
-    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Home"; }
-    if (route.startsWith("dataset/")) {
+    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Aegis Agent"; }
+    if (["extract","aegis agent/extract"].includes(route.toLowerCase())) {
+      setAgentTab("Extract");setView("Aegis Agent");
+    } else if (route.startsWith("dataset/")) {
       changeDataset(route.slice(8));
       setView("Datasets");
     } else {
-      const next = sections.find(s => s.name.toLowerCase() === route.toLowerCase())?.name || "Home";
+      if(route.toLowerCase()==="ask aegis")route="Aegis Agent";
+      if(route==="Aegis Agent")setAgentTab("Chat");
+      const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Aegis Agent";
       setView(next);
-      if (!["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(next)) setAdminNavigation(true);
+      if (!["Home", "Datasets", "Aegis Agent", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(next)) setAdminNavigation(true);
     }
     setMobile(false);
     setError("");
@@ -505,7 +598,7 @@ export default function App() {
   ]);
   useEffect(() => { setExternalUpload(false); }, [uploadContextKey, csrf]);
   const externalProvider =
-    ["openai", "oci"].includes(selectedDataset?.embedding_selection?.embedding_provider || datasetEmbedding?.provider) ||
+    !["ollama", "mock", "sentence_transformers"].includes(selectedDataset?.embedding_selection?.embedding_provider || datasetEmbedding?.provider || "mock") ||
     selectedDataset?.embedding_selection?.search_provider === "oci" ||
     settings.search_provider === "oci" ||
     settings.storage_provider === "oci";
@@ -525,7 +618,7 @@ export default function App() {
         setBootstrap(false);
       }
       const d = await api("/auth/login", "POST", { username, password });
-      navigate("Home");
+      navigate("Aegis Agent");
       setUser(d.user);
       setCsrf(d.csrf_token || "");
       setPassword("");
@@ -533,11 +626,13 @@ export default function App() {
   const documentUpload = useDocumentUpload({
     dataset: selectedDataset, enabled: !!datasetEmbedding, externalRequired: externalProvider,
     consent: externalUpload, setConsent: setExternalUpload, maxMb: Number(settings.max_upload_mb || 25),
-    sessionKey: user ? csrf : "",
+    // Token recovery for this account must not discard in-flight upload tracking.
+    sessionKey: user?.id || "",
     contextKey: uploadContextKey,
     documents: docs, jobs, api, refresh: reload, pollError: documentPollError,
     onManage: () => navigate("Datasets"),
     onUploaded: data => {
+      uploadRevision.current+=1;
       setDocs(previous => [...(data.documents || []), ...previous.filter(d => !(data.documents || []).some((next: Entity) => next.id === d.id))]);
       setJobs(previous => [...(data.jobs || []), ...previous.filter(j => !(data.jobs || []).some((next: Entity) => next.id === j.id))]);
     },
@@ -583,18 +678,44 @@ export default function App() {
     const available = eligibleModels(dataset, "chat");
     setChatModelId(available.some(m => m.id === historicalModel) ? historicalModel : available.some(m => m.id === dataset?.default_chat_model_id) ? dataset!.default_chat_model_id : available.length === 1 ? available[0].id : "");
     setExternalChat(false);
+    setTemporary(false);
     setConversation(d);
     setLastPrompt([...(d.messages || [])].reverse().find((m: Entity) => m.role === "user")?.text || "");
     } catch (error) { if (request === conversationRequest.current) throw error; }
     finally { if (request === conversationRequest.current) openingConversation.current = false; }
   };
   const sendMessage = async (text = prompt) => {
+    if(promptLoading || promptPreview)return;
+    if(templateAttachment){
+      if(sending.current||busy||answering)return;
+      if(!kb){setError('Choose a dataset before sending this prompt template.');return;}
+      if(templateAttachment.datasetId&&templateAttachment.datasetId!==kb){setError('Attach the template again for the selected dataset.');return;}
+      sending.current=true;setBusy(true);setError('');setTemplateFeedback('');
+      try {
+        const imported:Entity=await api('/templates','POST',{name:templateAttachment.name,schema:templateAttachment.schema,dataset_id:kb});
+        setTemplates(previous=>[imported!,...previous.filter(t=>t.id!==imported!.id)]);setTemplateId(imported.id);setTemplateAttachment(null);setPrompt('');
+        setTemplateFeedback(`Saved “${imported.name}” for ${selectedDataset?.name}. This template is selected for extraction.`);
+        const wantsExtraction=/\b(?:run|start|perform)\s+(?:an?\s+)?(?:extraction|re-extraction)\b|\b(?:extract|re-extract|reextract)\b.*\b(?:documents?|files?|fields?|data)\b|\buse\b.*\btemplate\b.*\b(?:extract|extraction|re-extract|re-extraction)\b/i.test(text);
+        if(wantsExtraction){
+          const documents=scope.length?readyDatasetDocs.filter(d=>scope.includes(d.id)):readyDatasetDocs;
+          if(!documents.length)throw new Error('Template saved. Upload documents and wait for indexing before extracting.');
+          if(!selectedExtractModel)throw new Error('Template saved. Set the dataset default extraction model before extracting.');
+          const external=!['ollama','mock'].includes(selectedExtractModel.provider);
+          if(external&&!externalExtract)throw new Error('Template saved. Approve the external provider in Extract & review before running extraction.');
+          const result=await api('/extractions','POST',{dataset_id:kb,model_id:selectedExtractModel.id,document_ids:documents.map(d=>d.id),template_id:imported.id,allow_external:externalExtract});
+          setExtraction(result);setExtractions(previous=>[result,...previous]);setJobs(previous=>[result.job,...previous.filter(j=>j.id!==result.job.id)]);setExtractionTab('Review');setAgentTab('Extract');
+          setTemplateFeedback(`Saved “${imported.name}”. Extraction started with this template; results will appear when ready.`);
+        }
+      }catch(error){setError(error instanceof Error?error.message:'Template import failed.');}
+      finally{sending.current=false;setBusy(false);}
+      return;
+    }
     if (!text.trim() || answering || sending.current || openingConversation.current) return;
     if (!kb || !selectedChatModel || !readyDatasetDocs.length) {
       setError("Choose a dataset with ready documents and an eligible chat model.");
       return;
     }
-    if (!externalChat) {
+    if (selectedChatModel?.provider !== "ollama" && !externalChat) {
       setError("Approve the provider notice before sending a question.");
       return;
     }
@@ -643,67 +764,40 @@ export default function App() {
       }
       if (!response.body)
         throw new Error("The server did not return an answer stream.");
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "",
-        answer = "";
-      const baseMessages = [
-        ...(c!.messages || []),
-        { id: "pending-user", role: "user", text },
-      ];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || "";
-        for (const event of events) {
-          const type = event
-            .split("\n")
-            .find((l) => l.startsWith("event:"))
-            ?.slice(6)
-            .trim();
-          const raw = event
-            .split("\n")
-            .filter((l) => l.startsWith("data:"))
-            .map((l) => l.slice(5).trim())
-            .join("\n");
-          if (!raw) continue;
-          const payload = JSON.parse(raw);
-          if (type === "error")
-            throw new Error(payload.detail || "Answer interrupted.");
-          if (type === "delta") {
-            answer += payload.text;
-            setConversation({
-              ...c,
-              messages: [
-                ...baseMessages,
-                {
-                  id: "streaming-answer",
-                  role: "assistant",
-                  text: answer,
-                  mock: selectedChatModel?.provider === "mock",
-                  model_selection: { model_id: chatModelId, model_name: modelLabel(selectedChatModel), provider_model: selectedChatModel?.provider_model },
-                },
-              ],
-            });
-          }
-          if (type === "done")
-            setConversation({
-              ...c,
-              messages: [...baseMessages, payload.message],
-            });
+      let answer = "";
+      const baseMessages = [...(c!.messages || []), { id: "pending-user", role: "user", text }];
+      await readChatStream(response.body, ({ type, payload }) => {
+        if (type === "delta") {
+          answer += payload.text;
+          setConversation({ ...c, messages: [...baseMessages, {
+            id: "streaming-answer", role: "assistant", text: answer, status: "streaming",
+            mock: selectedChatModel?.provider === "mock",
+            model_selection: { model_id: chatModelId, model_name: modelLabel(selectedChatModel), provider_model: selectedChatModel?.provider_model },
+          }] });
         }
-      }
-      await openConversation(c!.id, true);
+        if (type === "done" || type === "error") {
+          if (payload.message) setConversation({ ...c, messages: [...baseMessages.slice(0,-1), payload.user_message || baseMessages.at(-1), payload.message] });
+          if (type === "error") throw new Error(payload.detail || "The model could not complete this answer.");
+        }
+      });
       const cs = await api("/conversations");
       setConversations(Array.isArray(cs) ? cs : cs.conversations || []);
     } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") {
-        setError(
-          "Stopped waiting for the answer. Server or provider processing may continue. Refresh this conversation before retrying.",
-        );
-      } else setError(e instanceof Error ? e.message : "Question failed.");
+      const stopped = e instanceof Error && e.name === "AbortError";
+      const detail = stopped ? "Generation stopped. Any partial response is kept below. The model may take a moment to finish stopping." : e instanceof Error ? e.message : "The question could not be completed. Try again.";
+      setError(detail);
+      setPrompt(text);
+      setConversation(current => {
+        if (!current) return current;
+        const messages = [...(current.messages || [])];
+        const last = messages.at(-1);
+        if (last?.role === "assistant" && last.status === "failed") return current;
+        const failed = { id: crypto.randomUUID(), role: "assistant", text: last?.id === "streaming-answer" ? last.text : "", status: stopped ? "aborted" : "failed", error: { detail, retryable: true } };
+        if (last?.id === "streaming-answer") messages[messages.length-1] = failed;
+        else if (last?.role === "user") messages.push(failed);
+        else return current;
+        return { ...current, messages };
+      });
     } finally {
       sending.current = false;
       setAnswering(false);
@@ -717,45 +811,20 @@ export default function App() {
       setError("Clipboard is unavailable. Select and copy the text manually.");
     }
   };
-  const chooseTemplate = (id: string) => {
-    setTemplateId(id);
-    const t = templates.find((t) => t.id === id);
-    if (t) {
-      setTemplateName(t.name);
-      setSchema(json(t.schema || t.schema_json || {}));
-    }
-  };
-  const saveTemplate = () =>
-    run(async () => {
-      let parsed;
-      try {
-        parsed = JSON.parse(schema);
-      } catch {
-        throw new Error("The schema must be valid JSON.");
-      }
-      if (!templateName.trim()) throw new Error("Give the template a name.");
-      const d = await api(
-        `/templates${templateId ? "/" + templateId : ""}`,
-        templateId ? "PUT" : "POST",
-        { name: templateName, schema: parsed },
-      );
-      setTemplateId(d.id);
-      notify(`Template saved${d.version ? " · version " + d.version : ""}.`);
-      reload();
-    });
+  const chooseTemplate = (id: string) => setTemplateId(id);
   const extract = () =>
     run(async () => {
       if (!kb || !selectedExtractModel) throw new Error("Choose a dataset and an eligible extraction model.");
       if (!scope.length || !templateId)
         throw new Error("Select at least one document and a template.");
-      if (!externalExtract)
+      if (extractionNeedsConsent && !externalExtract)
         throw new Error("Approve the external processing notice first.");
       const d = await api("/extractions", "POST", {
         dataset_id: kb,
         model_id: extractModelId,
         document_ids: scope,
         template_id: templateId,
-        allow_external: true,
+        allow_external: externalExtract,
       });
       setExtraction(d);
       setExtractionTab("Review");
@@ -797,7 +866,7 @@ export default function App() {
               onChange={() => selectDoc(d.id)}
             />
             <span>
-              {d.name} <span className="muted">· {d.requires_reindex ? "reindex required" : d.status}</span>
+              {d.name} <span className="muted">· {d.status === "ready" && d.requires_reindex ? "reindex required" : d.status}</span>
             </span>
           </label>
         ))
@@ -808,7 +877,7 @@ export default function App() {
       )}
     </div>
   );
-  const externalNotice = (model: Entity | undefined) => `I approve sending this request and relevant document content to ${modelLabel(model)} (${model?.provider || "model provider"}), with the dataset’s pinned embedding model ${selectedDataset?.embedding_selection?.provider_model || datasetEmbedding?.provider_model || "not configured"} and configured retrieval connection. External API usage is billed separately by those providers; ChatGPT does not cover these charges.`;
+  const externalNotice = (model: Entity | undefined) => model?.provider === "ollama" && !externalProvider ? `I approve running this question and selected document content with ${modelLabel(model)} locally through Ollama. No paid model API is used.` : `I approve sending this request and relevant document content to ${modelLabel(model)} (${model?.provider || "model provider"}), with the dataset’s pinned embedding model ${selectedDataset?.embedding_selection?.provider_model || datasetEmbedding?.provider_model || "not configured"} and configured retrieval connection. External API usage is billed separately by those providers; ChatGPT does not cover these charges.`;
   const datasetSelect = (label: string) => <select aria-label={label} value={kb} onChange={e => changeDataset(e.target.value)} disabled={answering}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>;
   const configureDataset = () => { navigate("Datasets"); setDatasetModelsFocus(true); };
 
@@ -820,136 +889,74 @@ export default function App() {
     );
   if (!user)
     return (
-      <div className="auth-shell">
-        <section className="auth-brand">
-          <div className="brand">
-            <span className="brandmark">
-              <img src="/aegis-logo.png" alt="" width={40} height={40} />
-            </span>
-            Aegis
-          </div>
-          <div className="auth-art">
-            <div className="eyebrow" style={{ color: "#2563eb" }}>
-              DOCUMENT INTELLIGENCE, GROUNDED.
+      <main className="login-shell"><div className="login-layout"><section className="login-story" aria-label="Aegis AI Data Platform"><figure className="login-illustration"><Image className="login-artwork" src="/aegis-login-data-platform-refined.png" alt="Aegis AI Data Platform with AI Agent, datasets, AI chat, prompt templates, upload, extraction, and review" width={1448} height={1086} sizes="(max-width: 760px) calc(100vw - 36px), (max-width: 1000px) 55vw, (max-height: 820px) 640px, 680px" priority /><span className="login-illustration-logo"><Image src="/aegis-logo.png" alt="Aegis emblem" width={96} height={96} sizes="96px" priority /></span></figure></section>
+        <section className="login-card" aria-labelledby="login-heading">
+          <div className="login-brand"><img src="/aegis-logo.png" alt="" width={38} height={38} /><span>Aegis</span></div>
+          <h1 id="login-heading">{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
+          <p className="login-description">{bootstrap ? "Set up your first account to get started." : "Sign in to your workspace."}</p>
+          {error && <div className="login-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}
+          <form noValidate aria-busy={busy} onSubmit={e => {
+            e.preventDefault();
+            if (busy) return;
+            const next: { username?: string; password?: string; code?: string } = {};
+            if (!username.trim()) next.username = "Enter your username.";
+            if (!password) next.password = "Enter your password.";
+            else if (bootstrap && password.length < 12) next.password = "Use at least 12 characters.";
+            if (bootstrap && !bootstrapToken) next.code = "Enter your setup code.";
+            setSignInErrors(next);
+            if (Object.keys(next).length) {
+              document.getElementById(next.code ? "login-code" : next.username ? "login-username" : "login-password")?.focus();
+              return;
+            }
+            setShowPassword(false);
+            authenticate();
+          }}>
+            {bootstrap && <div className="field">
+              <label htmlFor="login-code">Bootstrap token</label>
+              <input id="login-code" autoComplete="off" type="password" value={bootstrapToken} required
+                aria-invalid={!!signInErrors.code} aria-describedby={signInErrors.code ? "login-code-error" : "login-code-help"}
+                onChange={e => { setBootstrapToken(e.target.value); setSignInErrors(current => ({ ...current, code: undefined })); setError(""); }} />
+              <small id="login-code-help">Use the one-time setup code from your installation.</small>
+              {signInErrors.code && <small className="field-error" id="login-code-error">{signInErrors.code}</small>}
+            </div>}
+            <div className="field">
+              <label htmlFor="login-username">Username</label>
+              <input id="login-username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} required
+                aria-invalid={!!signInErrors.username} aria-describedby={signInErrors.username ? "login-username-error" : undefined}
+                onChange={e => { setUsername(e.target.value); setSignInErrors(current => ({ ...current, username: undefined })); setError(""); }} />
+              {signInErrors.username && <small className="field-error" id="login-username-error">{signInErrors.username}</small>}
             </div>
-            <h1>
-              Your knowledge.
-              <br />
-              Clear answers.
-              <br />A source for each.
-            </h1>
-            <p>
-              A private workspace for document search, grounded conversations,
-              and structured extraction. Originals stay safely stored,
-              independent of your search index.
-            </p>
-            <div className="row" style={{ marginTop: 34, color: "#4a6387" }}>
-              <Shield size={18} />
-              <span className="small">
-                Local-first · Your providers · Your control
-              </span>
-            </div>
-          </div>
-          <span className="small" style={{ color: "#7085a7" }}>
-            AEGIS / DOCUMENT INTELLIGENCE WORKSPACE
-          </span>
-        </section>
-        <section className="auth-form">
-          <div>
-            <div className="eyebrow">WELCOME TO AEGIS</div>
-            <h1>{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
-            <p className="muted" style={{ marginBottom: 30 }}>
-              {bootstrap
-                ? "Set up your first administrator account."
-                : "Sign in to your document intelligence workspace."}
-            </p>
-            {error && <Notice tone="error">{error}</Notice>}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                authenticate();
-              }}
-            >
-              {bootstrap && (
-                <Field
-                  label="Bootstrap token"
-                  help="Use AEGIS_BOOTSTRAP_TOKEN from your deployment environment."
-                >
-                  <input
-                    aria-label="Bootstrap token"
-                    type="password"
-                    autoComplete="off"
-                    value={bootstrapToken}
-                    onChange={(e) => setBootstrapToken(e.target.value)}
-                    required
-                  />
-                </Field>
-              )}
-              <Field label="Username">
-                <input
-                  aria-label="Username"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                />
-              </Field>
-              <Field
-                label="Password"
-                help={bootstrap ? "Use a strong, unique password." : ""}
-              >
-                <input
-                  aria-label="Password"
-                  autoComplete={bootstrap ? "new-password" : "current-password"}
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={bootstrap ? 12 : 1}
-                />
-              </Field>
-              <button
-                className="btn primary"
-                type="submit"
-                disabled={busy}
-                style={{ width: "100%", padding: 13 }}
-              >
-                {busy ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <ArrowRight size={16} />
-                )}{" "}
-                {bootstrap ? "Create administrator" : "Sign in"}
-              </button>
-            </form>
-            <div className="notice" style={{ marginTop: 26 }}>
-              <KeyRound size={17} />
-              <div>
-                No API key is needed to store documents. Add your own provider
-                key in Connections when you’re ready. Keys stay encrypted on the
-                server.
+            <div className="field">
+              <label htmlFor="login-password">Password</label>
+              <div className="login-password-entry">
+                <input id="login-password" autoComplete={bootstrap ? "new-password" : "current-password"} type={showPassword ? "text" : "password"}
+                  value={password} required minLength={bootstrap ? 12 : 1} maxLength={200}
+                  aria-invalid={!!signInErrors.password} aria-describedby={signInErrors.password ? "login-password-error" : undefined}
+                  onChange={e => { setPassword(e.target.value); setSignInErrors(current => ({ ...current, password: undefined })); setError(""); }} />
+                <button type="button" className="login-password-toggle" aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-controls="login-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)} disabled={busy}>
+                  {showPassword ? "Hide" : "Show"}
+                </button>
               </div>
+              {signInErrors.password && <small className="field-error" id="login-password-error">{signInErrors.password}</small>}
             </div>
-            <button
-              className="btn"
-              style={{ width: "100%" }}
-              onClick={() => {
-                setBootstrap(!bootstrap);
-                setError("");
-              }}
-            >
-              {bootstrap
-                ? "Already configured? Sign in"
-                : "First run? Set up administrator"}
+            <button className="btn primary login-submit" type="submit" disabled={busy}>
+              {busy && <Loader2 size={17} className="animate-spin" aria-hidden="true" />}
+              {busy ? (bootstrap ? "Creating account..." : "Signing in...") : (bootstrap ? "Create administrator" : "Sign in")}
             </button>
-          </div>
-        </section>
-      </div>
+          </form>
+          {!bootstrap && <a className="recovery-entry" href="/recover-password">Forgot password?</a>}
+          {bootstrap && <button className="login-switch" type="button" onClick={() => {
+            setBootstrap(false); setPassword(""); setShowPassword(false); setSignInErrors({}); setError("");
+          }}>Already configured? Sign in</button>}
+        </section></div>
+      </main>
     );
+
   return (
     <>
       {drawerOpen && <div className="navigation-backdrop" aria-hidden="true" onClick={() => setMobile(false)} />}
-      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === "Ask Aegis" ? "chat-rail" : ""} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={compactNavigation && !drawerOpen}>
+      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === "Aegis Agent" ? "chat-rail" : ""} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={compactNavigation && !drawerOpen}>
         <button
           className="btn icon mobile-close"
           onClick={() => setMobile(false)}
@@ -963,14 +970,14 @@ export default function App() {
           </span>
           <span className="brand-name">Aegis</span>
         </div>
-        <div className="brand-sub">Document intelligence</div>
+        <div className="brand-sub">AI Data Platform</div>
         <nav>
-          {sections.filter(s => ["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => (
+          {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => (
             <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{s.name}</span></button>
           ))}
           <button className="nav-item nav-more" aria-label="Manage workspace" title="Manage workspace" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} /><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
           {adminNavigation && <div id="admin-navigation" className="admin-navigation">
-            {sections.filter(s => !["Home", "Datasets", "Ask Aegis", "Extract", "Templates"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
+            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
           </div>}
         </nav>
         <div className="nav-footer">
@@ -981,7 +988,7 @@ export default function App() {
           Originals protected. Insights grounded.
         </div>
       </aside>
-      <div className={`shell ${view === "Ask Aegis" ? "chat-shell" : ""}`} inert={drawerOpen}>
+      <div className={`shell ${view === "Aegis Agent" ? "chat-shell" : ""}`} inert={drawerOpen}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -1023,7 +1030,7 @@ export default function App() {
           </div>
         </header>
         <main className="workspace">
-          {view !== "Ask Aegis" && <div className="page-head">
+          {view !== "Aegis Agent" && <div className="page-head">
             <div>
               <div className="eyebrow">
                 {view === "Connections" || view === "Services & migration"
@@ -1034,7 +1041,7 @@ export default function App() {
               <p className="muted small">{descriptions[view]}</p>
             </div>
             <div className="row">
-              <button
+              {view !== "API Documentation" && <button
                 className="btn"
                 onClick={reload}
                 disabled={loading}
@@ -1045,7 +1052,7 @@ export default function App() {
                   className={loading ? "animate-spin" : ""}
                 />
                 <span>Refresh</span>
-              </button>
+              </button>}
               {view === "Dashboard" && (
                 <button
                   className="btn primary"
@@ -1057,7 +1064,7 @@ export default function App() {
               )}
             </div>
           </div>}
-          {error && view !== "Home" && (
+          {error && view !== "Home" && view !== "Aegis Agent" && (
             <Notice tone="error">
               {error}
               <button
@@ -1169,7 +1176,7 @@ export default function App() {
                                     <br />
                                     <span
                                       className="muted"
-                                      style={{ fontSize: 10 }}
+                                      style={{ fontSize: "var(--text-small)" }}
                                     >
                                       {date(d.created_at)}
                                     </span>
@@ -1260,7 +1267,7 @@ export default function App() {
                     {
                       name: "Ask your knowledge",
                       text: "Get answers grounded in your selected documents.",
-                      view: "Ask Aegis" as View,
+                      view: "Aegis Agent" as View,
                       icon: MessageSquare,
                     },
                     {
@@ -1303,13 +1310,15 @@ export default function App() {
               </section>
             </>
           )}
-          {view === "Home" && <DatasetHome api={api} refresh={refresh} onLoaded={setKbs} onBrowse={() => navigate("Datasets")} />}
+          {view === "Home" && <DatasetHome datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis Agent"); }} />}
+          {view === "API Documentation" && <ApiDocumentation api={api} />}
+          {view === "Aegis agent V2" && <AgentV2 api={api} username={user.username} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onReview={id => run(async () => { const result = await api(`/extractions/${id}`); changeDataset(result.dataset_id || result.parent_id); setExtraction(result); setExtractionTab('Review'); navigate('Extract'); })} />}
           {view === "Datasets" && (
             <>
-            <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus}
+            <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus} onUploadWorkflowVisible={setUploadWorkflowVisible}
               onSelect={changeDataset} onCreated={d => { setKbs(current => [...current, d]); changeDataset(d.id); }}
               api={api} run={run} busy={busy || answering} reload={reload} notify={notify}
-              onConnections={() => navigate("Connections")} onUse={navigate}
+              onConnections={() => navigate("Model Registration")} onUse={navigate}
               uploadPanel={<DocumentUploadPanel upload={documentUpload} />}
               documentsPanel={
               <section className="panel flush">
@@ -1367,7 +1376,7 @@ export default function App() {
                               </div>
                             </td>
                             <td>
-                              <Status value={d.requires_reindex ? "reindex_required" : d.status} />
+                              <Status value={d.status === "ready" && d.requires_reindex ? "reindex_required" : d.status} />
                             </td>
                             <td className="muted">{byteSize(d.size)}</td>
                             <td className="muted">{date(d.created_at)}</td>
@@ -1424,41 +1433,46 @@ export default function App() {
             </section>}
             </>
           )}
-          {view === "Ask Aegis" && (
-            <FocusedChat upload={documentUpload} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
-              answering={answering} lastPrompt={lastPrompt} canSend={!busy && externalChat && !!selectedChatModel && !!readyDatasetDocs.length}
-              externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
+          {view === "Aegis Agent" && <section className="agent-header"><div><h1>Aegis Agent</h1></div><div className="tabs" role="tablist" aria-label="Agent task">{["Chat","Extract"].map(tab=><button key={tab} role="tab" aria-selected={agentTab===tab} className={agentTab===tab?"active":""} onClick={()=>{if((reviewDirty.current||templateDirty.current)&&!window.confirm("Discard unsaved changes before switching tasks?"))return;setAgentTab(tab);}}>{tab==="Chat"?"Chat":"Extract & review"}</button>)}</div></section>}
+          {view === "Aegis Agent" && agentTab === "Chat" && temporary && <TemporaryDocumentChat models={models} initialModelId={chatModelId} settings={settings} api={api} onExit={() => setTemporary(false)} />}
+          {view === "Aegis Agent" && agentTab === "Chat" && !temporary && (
+            <FocusedChat
+              onTemporary={() => { conversationRequest.current += 1; setTemporary(true); cancelPromptPreview(); setTemplateAttachment(null); setPrompt(""); setLastPrompt(""); setError(""); }}
+              upload={documentUpload} onUploadWorkflowVisible={setUploadWorkflowVisible} templateAttachment={templateAttachment?.fileName||''} templateFeedback={templateFeedback} promptPreview={promptPreview} promptLoading={promptLoading} onConfirmPrompt={confirmPrompt} onCancelPrompt={cancelPromptPreview} onTemplateRemove={()=>{setTemplateAttachment(null);setTemplateFeedback('');}} onTemplateAttach={files=>void uploadPrompt(files)} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
+              error={error} onDismissError={() => setError("")} datasetName={selectedDataset?.name || "Choose a dataset"} localProcessing={settings.local_only || (selectedChatModel?.provider === "ollama" && !externalProvider)} reranker={settings.reranker || {}}
+              answering={answering} lastPrompt={lastPrompt} canSend={!busy && !promptLoading && !promptPreview && (!!templateAttachment || ((selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length))}
+              externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={settings.local_only ? "Questions and document content are processed locally through Ollama with a compatible dataset embedding index. Choose an installed mapped model to continue." : externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
               scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}
               datasetControl={datasetSelect("Chat dataset")} modelControl={<ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />}
-              exportControl={conversation?.id ? <Download path={`/conversations/${conversation.id}/export`}>Export</Download> : null}
+              exportControl={!temporary && conversation?.id ? <Download path={`/conversations/${conversation.id}/export`}>Export</Download> : null}
               onNew={() => { conversationRequest.current += 1; openingConversation.current = false; setConversation(null); setPrompt(""); setLastPrompt(""); setExternalChat(false); setError(""); }}
               onOpen={id => run(() => openConversation(id))} onSend={sendMessage} onStop={() => abort.current?.abort()}
-              onReload={() => run(() => openConversation(conversation!.id))} onRefresh={reload} loading={loading} onCopy={copy}
+              onReload={() => { if (!temporary) run(() => openConversation(conversation!.id)); }} onRefresh={reload} loading={loading} onCopy={copy}
               onFeedback={(id, rating) => run(async () => { await api(`/messages/${id}/feedback`, "POST", { rating }); notify("Feedback saved."); })}
             />
           )}
-          {view === "Extract" && (
+          {view === "Aegis Agent" && agentTab === "Extract" && (
             <>
               <div className="section-tabs" aria-label="Extraction sections">
-                {["Create", "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => setExtractionTab(tab)}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
+                {["Create", "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => { if (reviewDirty.current && !window.confirm("Discard unsaved changes before changing sections?")) return; setExtractionTab(tab); }}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
               </div>
               <div className="extraction-focus">
                 <section className="panel" hidden={extractionTab !== "Create"}>
                   <h2>Create an extraction</h2>
                   <p className="muted small">
-                    Select a schema and documents. Review extracted values and
+                    Select a prompt template and documents. Review extracted values and
                     their evidence.
                   </p>
                   <Field label="Dataset">{datasetSelect("Extraction dataset")}</Field>
                   <ModelPicker dataset={selectedDataset} capability="extraction" value={extractModelId} onChange={setExtractModelId} onConfigure={configureDataset} />
-                  <Field label="Extraction template">
+                  <Field label="Prompt template">
                     <select
-                      aria-label="Extraction template"
+                      aria-label="Prompt template"
                       value={templateId}
                       onChange={(e) => chooseTemplate(e.target.value)}
                     >
-                      <option value="">Select a template</option>
-                      {templates.map((t) => (
+                      <option value="">Select a prompt template</option>
+                      {templates.filter(t=>!t.dataset_id||t.dataset_id===kb).map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name} · v{t.version || 1}
                         </option>
@@ -1466,18 +1480,18 @@ export default function App() {
                     </select>
                   </Field>
                   <Field label="Source documents">{docSelection}</Field>
-                  <label className="check" style={{ marginBottom: 20 }}>
+                  {extractionNeedsConsent && <label className="check" style={{ marginBottom: 20 }}>
                     <input
                       type="checkbox"
                       checked={externalExtract}
                       onChange={(e) => setExternalExtract(e.target.checked)}
                     />
                     <span className="muted small">{externalNotice(selectedExtractModel)}</span>
-                  </label>
+                  </label>}
                   <button
                     className="btn primary"
                     disabled={
-                      busy || !externalExtract || !templateId || !scope.length || !selectedExtractModel
+                      busy || (extractionNeedsConsent && !externalExtract) || !templateId || !scope.length || !selectedExtractModel
                     }
                     onClick={extract}
                   >
@@ -1532,220 +1546,11 @@ export default function App() {
                   )}
                 </section>
               </div>
-              {extraction && (
-                <section className="panel" hidden={extractionTab !== "Review"}>
-                  <div className="panel-head">
-                    <div>
-                      <h2>Review extraction</h2>
-                      <p className="small muted">Dataset: {kbs.find(d => d.id === (extraction.model_selection?.dataset_id || extraction.dataset_id || extraction.kb_id))?.name || "Recorded extraction dataset"}</p>
-                      {recordedModel(extraction) && <p className="small muted">Recorded model: {recordedModel(extraction)}</p>}
-                      <p className="small muted">
-                        Review all values against the source before exporting.
-                        Edits are saved to this result.
-                      </p>
-                    </div>
-                    <div className="row">
-                      <Status value={extraction.status} />
-                      <button
-                        className="btn icon"
-                        title="Reload extraction"
-                        onClick={() =>
-                          run(async () => {
-                            const d = await api(
-                              `/extractions/${extraction.id}`,
-                            );
-                            setExtraction(d);
-                                setExtractionTab("Review");
-                            setResultText(json(d.result || {}));
-                          })
-                        }
-                      >
-                        <RefreshCw size={14} />
-                      </button>
-                      <Download
-                        path={`/extractions/${extraction.id}/export?format=json`}
-                      >
-                        JSON
-                      </Download>
-                      <Download
-                        path={`/extractions/${extraction.id}/export?format=csv`}
-                      >
-                        CSV
-                      </Download>
-                    </div>
-                  </div>
-                  {extraction.mock && (
-                    <Notice tone="warn">
-                      MOCK TEST OUTPUT · Synthetic development data, not model
-                      extraction. Review against the original source.
-                    </Notice>
-                  )}
-                  {extraction.error && (
-                    <Notice tone="error">{extraction.error}</Notice>
-                  )}
-                  <textarea
-                    className="mono"
-                    style={{ minHeight: 280 }}
-                    aria-label="Extraction result JSON"
-                    value={resultText}
-                    onChange={(e) => setResultText(e.target.value)}
-                  />
-                  {(extraction.evidence ||
-                    extraction.citations ||
-                    extraction.sources) && (
-                    <details style={{ marginTop: 15 }}>
-                      <summary>Source evidence</summary>
-                      <pre className="code mono">
-                        {json({
-                          field_evidence: extraction.evidence || [],
-                          sources:
-                            extraction.citations || extraction.sources || [],
-                        })}
-                      </pre>
-                    </details>
-                  )}
-                  <button
-                    className="btn primary"
-                    style={{ marginTop: 16 }}
-                    disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        const result = JSON.parse(resultText);
-                        const d = await api(
-                          `/extractions/${extraction.id}`,
-                          "PATCH",
-                          { result },
-                        );
-                        setExtraction(d);
-                                setExtractionTab("Review");
-                        notify("Reviewed result saved.");
-                        reload();
-                      })
-                    }
-                  >
-                    <Check size={14} />
-                    Save reviewed result
-                  </button>
-                </section>
-              )}
+              {extraction && extractionTab === "Review" && <ExtractionReview extraction={extraction} documents={docs} jobs={jobs} api={api} onDirty={onReviewDirty} onSaved={d => { setExtraction(d); setResultText(json(d.result || {})); setExtractions(previous=>[d,...previous.filter(e=>e.id!==d.id)]); }} />}
             </>
           )}
-          {view === "Templates" && (
-            <div className="grid2">
-              <section className="panel">
-                <div className="panel-head">
-                  <h2>Extraction schemas</h2>
-                  <button
-                    className="btn"
-                    onClick={() => {
-                      setTemplateId("");
-                      setTemplateName("");
-                      setSchema(
-                        json({
-                          type: "object",
-                          properties: {},
-                          required: [],
-                          additionalProperties: false,
-                        }),
-                      );
-                    }}
-                  >
-                    <Plus size={14} />
-                    New template
-                  </button>
-                </div>
-                {templates.length ? (
-                  templates.map((t) => (
-                    <div className="item row between" key={t.id}>
-                      <div>
-                        <h3>{t.name}</h3>
-                        <span className="muted small">
-                          Version {t.version || 1} ·{" "}
-                          {date(t.updated_at || t.created_at)}
-                        </span>
-                      </div>
-                      <div className="row">
-                        <button
-                          className="btn"
-                          onClick={() =>
-                            run(async () => {
-                              const versions = await api(
-                                `/templates/${t.id}/versions`,
-                              );
-                              setModal({
-                                title: `${t.name} · version history`,
-                                data: { versions },
-                              });
-                            })
-                          }
-                        >
-                          Versions
-                        </button>
-                        <button
-                          className="btn"
-                          onClick={() => chooseTemplate(t.id)}
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <Empty
-                    icon={FileJson}
-                    title="Reusable structure, consistent results"
-                    detail="Create a template to define what Aegis should extract."
-                  />
-                )}
-                <Notice>
-                  Use JSON Schema to define field names, types, required fields,
-                  nested objects, and arrays. Saving an existing template
-                  creates a new version.
-                </Notice>
-              </section>
-              <section className="panel">
-                <h2>{templateId ? "Edit template" : "New template"}</h2>
-                <Field label="Template name">
-                  <input
-                    aria-label="Template name"
-                    placeholder="e.g. Invoice summary"
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                  />
-                </Field>
-                <Field
-                  label="JSON Schema"
-                  help="Supported structure is validated by the server before saving. Use additionalProperties: false on every object and mark every property required. Use nullable types for values that may be missing."
-                >
-                  <textarea
-                    className="mono"
-                    aria-label="Template JSON schema"
-                    style={{ minHeight: 340 }}
-                    value={schema}
-                    onChange={(e) => setSchema(e.target.value)}
-                  />
-                </Field>
-                <div className="row">
-                  <button
-                    className="btn primary"
-                    disabled={busy}
-                    onClick={saveTemplate}
-                  >
-                    <Check size={14} />
-                    Save {templateId ? "new version" : "template"}
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={!templateId}
-                    onClick={() => navigate("Extract")}
-                  >
-                    <Play size={14} />
-                    Test with documents
-                  </button>
-                </div>
-              </section>
-            </div>
-          )}
+          {view === "Prompt templates" && <PromptTemplates templates={templates} datasets={kbs} selectedDataset={kb} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={d => { setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)]); chooseTemplate(d.id); notify("Prompt template saved."); }} onUse={id => { const saved=templates.find(t=>t.id===id); if(saved?.dataset_id&&saved.dataset_id!==kb)changeDataset(saved.dataset_id); chooseTemplate(id); setExtractionTab("Create"); navigate("Extract"); }} />}
+          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setExtractionTab("Review"); navigate("Extract"); }} />}
           {view === "Index inspector" && (
             <>
               <section className="panel">
@@ -1802,7 +1607,7 @@ export default function App() {
                   <div className="stat-card" key={s.label}>
                     <div className="stat-label">{s.label}</div>
                     <div
-                      style={{ fontSize: 20, fontWeight: 650, marginTop: 9 }}
+                      style={{ fontSize: "var(--text-section)", fontWeight: 600, marginTop: 9 }}
                     >
                       {s.value}
                     </div>
@@ -1868,6 +1673,7 @@ export default function App() {
                         {retrievalResult.duration_ms} ms
                       </span>
                       <span className="pill">{retrievalResult.provider}</span>
+                      {retrievalResult.reranking?.enabled && <span className="pill">Local reranking · {retrievalResult.reranking.candidate_count} → {retrievalResult.count} chunks · {retrievalResult.reranking.rerank_ms} ms</span>}
                       <span className="muted small">
                         {retrievalResult.ready_documents} ready /{" "}
                         {retrievalResult.scoped_documents} scoped documents
@@ -1889,9 +1695,9 @@ export default function App() {
                             {m.document_name} {m.page ? `· page ${m.page}` : ""}
                           </strong>
                           <span>
-                            Score{" "}
-                            {typeof m.score === "number"
-                              ? m.score.toFixed(4)
+                            {typeof m.rerank_score === "number" ? "Rerank" : "Similarity"}{" "}
+                            {typeof (m.rerank_score ?? m.score) === "number"
+                              ? (m.rerank_score ?? m.score).toFixed(4)
                               : "—"}
                           </span>
                         </div>
@@ -1996,7 +1802,7 @@ export default function App() {
                               <div
                                 style={{
                                   color: "#ae4a5b",
-                                  fontSize: 11,
+                                  fontSize: "var(--text-caption)",
                                   maxWidth: 360,
                                   marginTop: 6,
                                 }}
@@ -2079,10 +1885,17 @@ export default function App() {
               )}
             </section>
           )}
+          {view === "Model Registration" && <ModelRegistration models={models} settings={settings} api={api} run={run} busy={busy || answering}
+            onSaved={model => { setModels(current => current.some(m => m.id === model.id) ? current.map(m => m.id === model.id ? model : m) : [model, ...current]); notify("Model saved. New runs use the updated connection; apply embedding changes in Model Mapping."); reload(); }}
+            onMapping={() => navigate("Model Mapping")} />}
+          {view === "Model Mapping" && <section className="panel model-mapping-screen">
+            <div className="field mapping-dataset-select"><label htmlFor="mapping-dataset">Dataset</label><select id="mapping-dataset" value={selectedDataset?.id || ""} onChange={e => changeDataset(e.target.value)} disabled={busy || answering}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}{d.active === false ? " · Inactive" : ""}</option>)}</select></div>
+            {selectedDataset ? <DatasetMappings key={selectedDataset.id} dataset={selectedDataset} models={models} api={api} run={run} busy={busy || answering} reload={reload} notify={notify} onConnections={() => navigate("Model Registration")} /> : <p className="muted">Choose a dataset to configure its Embedding, Chat, and Extraction models.</p>}
+            {!kbs.length && <button className="btn" onClick={() => navigate("Datasets")}>Open Datasets to create one</button>}
+          </section>}
           {view === "Connections" && (
             <>
-              <div className="section-tabs" aria-label="Connection sections">{["Models", "Profiles", "Providers", "Storage", "OCI", "Diagnostics"].map(tab => <button key={tab} className={`btn ${connectionTab === tab ? "primary" : ""}`} aria-pressed={connectionTab === tab} onClick={() => setConnectionTab(tab)}>{tab}</button>)}</div>
-              <div hidden={connectionTab !== "Models"}><ModelCatalog models={models} profiles={profiles} api={api} run={run} busy={busy} reload={reload} notify={notify} /></div>
+              <div className="section-tabs" aria-label="Connection sections"><button className="btn" onClick={() => navigate("Model Registration")}>Model Registration</button><button className="btn" onClick={() => navigate("Model Mapping")}>Model Mapping</button>{["Profiles", "Providers", "Storage", "OCI", "Diagnostics"].map(tab => <button key={tab} className={`btn ${connectionTab === tab ? "primary" : ""}`} aria-pressed={connectionTab === tab} onClick={() => setConnectionTab(tab)}>{tab}</button>)}</div>
               <div hidden={!["Providers", "Storage", "OCI"].includes(connectionTab)}><Notice tone="warn">
                 Provider keys are encrypted on the server and never saved in
                 browser storage. OpenAI usage is separate from a ChatGPT
@@ -2138,15 +1951,16 @@ export default function App() {
                         <h3>{p.name}</h3>
                         <span className="muted small">
                           Version {p.version} · {date(p.created_at)} ·{" "}
-                          {p.api_key_configured || p.oci_api_key_configured
+                          {p.api_key_configured || p.oci_api_key_configured || p.connection_credentials_configured
                             ? "Encrypted credentials saved"
                             : "No provider key saved"}
                         </span>
                       </div>
                       <div className="row wrap">
+                        {p.registration_model_id && <button className="btn" onClick={() => navigate("Model Registration")}>Edit in Model Registration</button>}
                         <button
                           className="btn"
-                          disabled={busy}
+                          disabled={busy || !!p.registration_model_id}
                           onClick={() =>
                             setConfirm({
                               title: `Activate ${p.name}?`,
@@ -2175,7 +1989,7 @@ export default function App() {
                         </button>
                         <button
                           className="btn"
-                          disabled={busy}
+                          disabled={busy || !!p.registration_model_id}
                           onClick={() =>
                             setConfirm({
                               title: `Save a new version of ${p.name}?`,
@@ -2208,7 +2022,7 @@ export default function App() {
                     <h2>Connection configuration</h2>
                     <span className="pill">Server-side configuration</span>
                   </div>
-                  <Field label="Connection’s generation provider">
+                  <Field label="Connection's generation provider">
                     <select
                       value={settingsForm.model_provider || "openai"}
                       aria-label="Model provider"
@@ -2219,8 +2033,9 @@ export default function App() {
                         })
                       }
                     >
-                      <option value="openai">OpenAI</option>
-                      <option value="oci">
+                      <option value="ollama">Ollama — local, no API key</option>
+                      <option value="openai" disabled={settings.local_only}>OpenAI</option>
+                      <option value="oci" disabled={settings.local_only}>
                         OCI Generative AI · requires validation
                       </option>
                       <option value="mock">
@@ -2228,6 +2043,9 @@ export default function App() {
                       </option>
                     </select>
                   </Field>
+                  {settingsForm.model_provider === "ollama" && (
+                    <p className="muted small">Runs on this computer through Ollama. No API key is needed. Download the selected models before use.</p>
+                  )}
                   <Field label="Connection’s default generation model">
                     <input
                       aria-label="Answer model"
@@ -2238,7 +2056,7 @@ export default function App() {
                           model: e.target.value,
                         })
                       }
-                      placeholder="gpt-4.1-mini"
+                      placeholder={settingsForm.model_provider === "ollama" ? "qwen3:4b" : "gpt-4.1-mini"}
                     />
                   </Field>
                   <Field label="Embedding provider">
@@ -2258,7 +2076,8 @@ export default function App() {
                       <option value="sentence_transformers">
                         Local · Sentence Transformers
                       </option>
-                      <option value="openai">OpenAI</option>
+                      <option value="ollama">Ollama — local embeddings</option>
+                      <option value="openai" disabled={settings.local_only}>OpenAI</option>
                       <option value="mock">
                         Mock · explicit development test mode
                       </option>
@@ -2279,13 +2098,14 @@ export default function App() {
                   <Field
                     label="OpenAI API key"
                     help={
-                      settings.api_key_configured
+                      settings.local_only ? "Provider credentials are disabled in this local-only workspace." : settings.api_key_configured
                         ? "A key is configured. Leave blank to keep it unchanged."
                         : "No key configured. Enter your own provider key; it is encrypted by the server."
                     }
                   >
                     <input
                       aria-label="OpenAI API key"
+                      disabled={settings.local_only}
                       type="password"
                       autoComplete="off"
                       value={apiKey}
@@ -2780,22 +2600,22 @@ export default function App() {
                     to: "Setup" as View,
                   },
                   {
-                    title: "Connect your providers",
-                    text: "Choose local embeddings or add your own OpenAI key. Keys stay encrypted on the server.",
+                    title: settings.local_only ? "Configure local models" : "Connect your providers",
+                    text: settings.local_only ? "Use installed Qwen3 or SmolLM2 through Ollama and compatible Nomic embeddings. No paid API or cloud fallback is enabled." : "Choose local embeddings or add your own OpenAI key. Keys stay encrypted on the server.",
                     action: "Configure connections",
                     to: "Connections" as View,
                   },
                   {
-                    title: "Onboard a dataset",
+                    title: "Create a dataset",
                     text: "Name your dataset, map its chat, extraction, and embedding models, then upload PDF, DOCX, or TXT files.",
                     action: "Add documents",
                     to: "Datasets" as View,
                   },
                   {
                     title: "Verify your first answer",
-                    text: "Approve external processing, ask a focused question, and inspect the cited excerpts.",
-                    action: "Ask Aegis",
-                    to: "Ask Aegis" as View,
+                    text: settings.local_only ? "Ask a focused question locally and inspect its clickable source evidence." : "Approve external processing, ask a focused question, and inspect the cited excerpts.",
+                    action: "Aegis Agent",
+                    to: "Aegis Agent" as View,
                   },
                   {
                     title: "Protect your workspace",
@@ -2824,10 +2644,7 @@ export default function App() {
                 ))}
               </section>
               <Notice tone="warn">
-                Before using an external provider, review what content is sent
-                and who is billed. Aegis asks for approval for document
-                processing, chat, and extraction. Always review generated
-                answers against their original sources.
+                {settings.local_only ? "This workspace runs inference locally through Ollama. No paid API or cloud fallback is enabled. Review generated answers against their original sources." : "Before using an external provider, review what content is sent and who is billed. Aegis asks for approval for document processing, chat, and extraction. Always review generated answers against their original sources."}
               </Notice>
             </>
           )}
@@ -2931,6 +2748,7 @@ export default function App() {
           </section>
         </div>
       )}
+      <OperationProgress workspaceLoading={loading} requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobIds={view === "Aegis agent V2" ? agentVisibleJobIds : []} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
     </>
   );
 }

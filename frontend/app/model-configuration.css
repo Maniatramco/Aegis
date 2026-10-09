@@ -1,0 +1,37 @@
+.registration-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+.registration-full { grid-column: 1 / -1; }
+.model-registration fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.model-registration h2 { font-size:var(--text-section); }
+.registration-form-panel { max-width: 920px; }
+.registration-credentials { margin: 12px 0 20px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.registration-credentials h3 { margin: 0; font-size:var(--text-subheading); }
+.registration-credentials textarea { width: 100%; resize: vertical; }
+.registration-options { margin: 18px 0; }
+.registration-extra { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.registration-extra summary { cursor: pointer; font-weight: 600; }
+.registration-extra .field { margin: 12px 0 0; }
+.registration-extra textarea { width: 100%; min-height: 100px; resize: vertical; margin-top: 8px; }
+.registration-extra small { overflow-wrap: anywhere; }
+.registration-extra [role="alert"] { color: #b42318; margin-top: 6px; }
+.registration-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin: 24px 0 18px; }
+.registration-search { display: flex; align-items: center; gap: 10px; max-width: 460px; color: var(--muted); margin-bottom: 18px; }
+.registration-list { display: grid; gap: 10px; }
+.registration-row { display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+.registration-name { flex: 1; min-width: 0; }
+.registration-name strong, .registration-name small { display: block; overflow-wrap: anywhere; }
+.registration-name small { color: var(--muted); margin-top: 5px; font-size:var(--text-caption); }
+.registration-name .registration-endpoint { font-size:var(--text-small); }
+.registration-footer { margin-top: 22px; }
+.model-mapping-screen .dataset-mappings { margin-top: 20px; }
+.model-mapping-screen .mapping-defaults { padding: 20px; border: 1px solid var(--line); border-radius: 10px; margin: 20px 0; }
+.model-mapping-screen .mapping-defaults .field { margin-bottom: 0; }
+.mapping-role-header { margin-bottom: 9px; font-size:var(--text-body); }
+.mapping-dataset-select { max-width: 520px; }
+@media (max-width: 760px) {
+  .registration-fields { grid-template-columns: minmax(0, 1fr); }
+  .registration-row { flex-wrap: wrap; }
+  .registration-row .registration-name { flex-basis: calc(100% - 52px); }
+  .registration-row .model-chips { flex: 1; }
+  .model-mapping-screen .mapping-defaults { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .registration-test-consent { align-items: flex-start; }
+}

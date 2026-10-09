@@ -1,0 +1,45 @@
+import {test,expect} from "@playwright/test";
+import {checked,seedMockCatalog,seedDataset,seedTemplate,uploadReady} from "./fixtures";
+
+test("document Re-extract options preserve reviewed versions and the original through real jobs",async({page})=>{
+ const password=process.env.AEGIS_SMOKE_PASSWORD;if(!password)throw new Error('Disposable smoke password required');
+ const session=await checked(await page.request.post('/api/auth/login',{data:{username:process.env.AEGIS_SMOKE_USERNAME||'smoke',password}})),headers={'X-CSRF-Token':session.csrf_token};
+ const models=await seedMockCatalog(page.request,headers,'Re-extract regression'),dataset=await seedDataset(page.request,headers,'Re-extract synthetic '+Date.now(),[models.fast],models.embedding),doc=await uploadReady(page.request,headers,dataset,'Re-extract-safe-'+Date.now()+'.txt','Alice owns the project. Safe original reference INV-2026.'),template=await seedTemplate(page.request,headers,'Re-extract fields '+Date.now());
+ const original=await (await page.request.get(`/api/documents/${doc.id}/download`)).body();
+ await page.goto('/#Re-extract');const row=page.getByRole('article',{name:`Extraction document ${doc.name}`,exact:true});await row.getByRole('button',{name:'Extract',exact:true}).click();
+ const options=page.getByRole('dialog',{name:'Document extraction options'});await options.getByLabel('Re-extract prompt template').selectOption(template.id);
+ const creating=page.waitForResponse(r=>r.url().endsWith('/api/extractions')&&r.request().method()==='POST');await options.getByRole('button',{name:'Start extraction',exact:true}).click();const result=await checked(await creating);
+ await expect(options.getByRole('button',{name:'Review results',exact:true})).toBeVisible({timeout:90000});await options.getByRole('button',{name:'Review results',exact:true}).click();
+ await page.getByLabel('Value /reference',{exact:true}).fill('Reviewed safe reference');await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();
+ await page.goto('/#Re-extract');await row.getByRole('button',{name:'Re-extract',exact:true}).click();
+ await expect(options.getByRole('combobox')).toHaveCount(1);await expect(options.getByRole('radio')).toHaveCount(0);
+ await options.getByLabel('Re-extract prompt template').selectOption(template.id);
+ const rerunning=page.waitForResponse(r=>r.url().endsWith('/api/extractions')&&r.request().method()==='POST');
+ await options.getByRole('button',{name:'Start extraction',exact:true}).click();const replacement=await checked(await rerunning);expect(replacement.id).not.toBe(result.id);
+ await expect(options.getByRole('button',{name:'Review results',exact:true})).toBeVisible({timeout:90000});
+ await expect(options.getByRole('progressbar')).toHaveAttribute('value','100');
+ const saved=await checked(await page.request.get(`/api/extractions/${result.id}`));expect(saved.version).toBe(2);expect(saved.result.reference).toBe('Reviewed safe reference');
+ const versions=await checked(await page.request.get(`/api/extractions/${result.id}/versions`));expect(versions).toHaveLength(2);
+ expect(await (await page.request.get(`/api/documents/${doc.id}/download`)).body()).toEqual(original);
+ expect((await checked(await page.request.get(`/api/documents/${doc.id}`))).version).toBe(1);
+});
+test("saved review, source fallback, conflict, cancel and downloads use the real backend",async({page})=>{
+ const password=process.env.AEGIS_SMOKE_PASSWORD;if(!password)throw new Error("Disposable smoke password required");
+ const session=await checked(await page.request.post('/api/auth/login',{data:{username:process.env.AEGIS_SMOKE_USERNAME||'smoke',password}}));const headers={'X-CSRF-Token':session.csrf_token};
+ const models=await seedMockCatalog(page.request,headers,'Review regression');const d=await seedDataset(page.request,headers,'Synthetic review '+Date.now(),[models.fast],models.embedding);
+ const doc=await uploadReady(page.request,headers,d,'Synthetic-review.txt','Reference INV-4242. Alice reviews this safe synthetic document.');const t=await seedTemplate(page.request,headers,'Review export '+Date.now());
+ const e=await checked(await page.request.post('/api/extractions',{headers,data:{dataset_id:d.id,document_ids:[doc.id],template_id:t.id}}));
+ await expect.poll(async()=> (await checked(await page.request.get(`/api/extractions/${e.id}`))).status,{timeout:90000}).toBe('ready');
+ await page.goto('/#Home');const directory=page.getByRole('article',{name:`Dataset ${d.name}`,exact:true});await directory.getByRole('button',{name:'Open chat',exact:true}).click();await expect(page.getByLabel('Chat dataset',{exact:true})).toHaveValue(d.id);
+ await page.getByRole('tab',{name:'Extract & review',exact:true}).click();await page.getByRole('button',{name:'Extraction history',exact:true}).click();await page.locator('.panel .item').filter({hasText:t.name}).getByRole('button',{name:'Review',exact:true}).click();
+ const field=page.getByLabel('Value /reference',{exact:true});await expect(field).toHaveValue('MOCK TEST VALUE');await page.getByRole('button',{name:'Show source for /reference',exact:true}).click();await expect(page.getByText(/Region coordinates are unavailable/)).toBeVisible();
+ await field.fill('Café 東京, INV-reviewed');await expect(page.getByRole('status').filter({hasText:'Unsaved changes'})).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();await expect(field).toHaveValue('MOCK TEST VALUE');
+ await field.fill('Café 東京, INV-reviewed');await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();await page.getByRole('button',{name:'Reload extraction',exact:true}).click();await expect(field).toHaveValue('Café 東京, INV-reviewed');
+ const latest=await checked(await page.request.get(`/api/extractions/${e.id}`));expect(latest.version).toBe(2);
+ await checked(await page.request.patch(`/api/extractions/${e.id}`,{headers,data:{version:latest.version,result:{reference:'Concurrent saved edit'}}}));await field.fill('My unsaved draft');await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'changed in another session'})).toBeVisible();await expect(field).toHaveValue('My unsaved draft');
+ await page.locator('.download-results summary').click();await expect(page.getByText('Latest saved values only. Unsaved edits are not exported.')).toBeVisible();
+ const download=page.waitForEvent('download');await page.getByRole('link',{name:'Excel (.xlsx)',exact:true}).click();expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
+ const json=await page.request.get(`/api/extractions/${e.id}/export?format=json`);expect((await json.json()).result.reference).toBe('Concurrent saved edit');const csv=await page.request.get(`/api/extractions/${e.id}/export?format=csv`);expect(await csv.text()).toContain('Concurrent saved edit');expect(await csv.text()).not.toContain('My unsaved draft');
+ page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'Home',exact:true}).click();await expect(field).toHaveValue('My unsaved draft');await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(page.getByRole('button',{name:'Show source for /reference',exact:true})).toBeVisible();
+});
