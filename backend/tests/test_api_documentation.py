@@ -17,7 +17,8 @@ def test_catalog_covers_every_live_operation_and_has_no_stale_notes():
     assert not metadata['GET /api/documents']['csrf_required']
     assert metadata['POST /api/auth/recovery/reset']['authentication'] == 'Local recovery challenge'
     recovery = spec['paths']['/api/auth/recovery/reset']['post']['requestBody']['content']['application/json']['schema']
-    assert set(recovery['required']) == {'token', 'password', 'confirmation'}
+    assert set(recovery['required']) == {'password', 'confirmation'}
+    assert 'token' in recovery['properties']  # optional legacy private-grant flow
     assert recovery['properties']['password']['minLength'] == 12
 
 

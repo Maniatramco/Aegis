@@ -1,0 +1,147 @@
+name: aegis-oracle
+
+x-backend: &backend
+  build:
+    context: ./backend
+    args:
+      INSTALL_ORACLE: 'true'
+      INSTALL_LOCAL_EMBEDDINGS: 'false'
+      INSTALL_CLOUD_MODELS: 'false'
+  restart: unless-stopped
+  environment:
+    DATABASE_PROVIDER: oracle
+    ORACLE_HOST: oracle
+    ORACLE_PORT: '1521'
+    ORACLE_SERVICE_NAME: FREEPDB1
+    ORACLE_USER: AEGIS
+    ORACLE_PASSWORD_FILE: /run/secrets/aegis_oracle_password
+    AEGIS_STORAGE_ROOT: /data
+    AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Generate the Oracle configuration first}
+    AEGIS_BOOTSTRAP_TOKEN: ${AEGIS_BOOTSTRAP_TOKEN:?Generate the Oracle configuration first}
+    QDRANT_URL: http://qdrant:6333
+    SEARCH_PROVIDER: qdrant
+    MODEL_PROVIDER: ${MODEL_PROVIDER:-ollama}
+    EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
+    AEGIS_MODEL: ${AEGIS_MODEL:-qwen3:4b}
+    EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+    AEGIS_OLLAMA_URL: http://ollama:11434
+    AEGIS_OLLAMA_ENDPOINT_HOSTS: ollama
+    AEGIS_ALLOW_MOCK: ${AEGIS_ALLOW_MOCK:-false}
+    AEGIS_TIMEOUT: '300'
+    API_INTERNAL_URL: http://api:8000
+    ALLOWED_ORIGINS: ${AEGIS_PUBLIC_ORIGIN:-http://localhost:3003},http://localhost:${AEGIS_PORT:-3003},http://127.0.0.1:${AEGIS_PORT:-3003}
+  secrets: [aegis_oracle_password]
+  volumes: [storage:/data]
+  networks: [private, outbound]
+  depends_on:
+    oracle:
+      condition: service_healthy
+    qdrant:
+      condition: service_started
+    ollama:
+      condition: service_healthy
+
+services:
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - '${AEGIS_BIND_ADDRESS:-127.0.0.1}:${AEGIS_PORT:-3003}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/auth/status').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+    networks: [private, edge]
+  api:
+    <<: *backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready',timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 30s
+  worker:
+    <<: *backend
+    command: python -m app.worker
+    depends_on:
+      api:
+        condition: service_healthy
+  oracle:
+    image: ${ORACLE_IMAGE:-container-registry.oracle.com/database/free:23.26.3.0}
+    restart: unless-stopped
+    shm_size: 1gb
+    secrets: [oracle_pwd, aegis_oracle_password, aegis_oracle_test_password]
+    volumes:
+      - oracle:/opt/oracle/oradata
+      - ./docker/oracle/startup:/opt/oracle/scripts/startup:ro
+      - ./docker/oracle/healthcheck.sh:/opt/oracle/checkAegisDB.sh:ro
+    healthcheck:
+      test: ['CMD', 'bash', '/opt/oracle/checkAegisDB.sh']
+      interval: 10s
+      timeout: 10s
+      retries: 90
+      start_period: 60s
+    networks: [private]
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    restart: unless-stopped
+    volumes: [qdrant:/qdrant/storage]
+    networks: [private]
+  ollama:
+    image: ollama/ollama:0.35.1
+    restart: unless-stopped
+    environment:
+      OLLAMA_NO_CLOUD: '1'
+      OLLAMA_NUM_PARALLEL: '1'
+      OLLAMA_MAX_LOADED_MODELS: '1'
+      OLLAMA_CONTEXT_LENGTH: '4096'
+    volumes: [ollama:/root/.ollama]
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [private, outbound]
+  oracle-test:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: docker/oracle/Dockerfile.tests
+    environment:
+      DATABASE_PROVIDER: oracle
+      ORACLE_HOST: oracle
+      ORACLE_USER: AEGIS_TEST
+      ORACLE_PASSWORD_FILE: /run/secrets/aegis_oracle_test_password
+      ORACLE_SERVICE_NAME: FREEPDB1
+      AEGIS_STORAGE_ROOT: /tmp/aegis-oracle-test
+    secrets: [aegis_oracle_test_password]
+    depends_on:
+      oracle:
+        condition: service_healthy
+    command: python scripts/oracle_check.py
+    networks: [private]
+
+volumes:
+  oracle:
+  storage:
+  qdrant:
+  ollama:
+secrets:
+  oracle_pwd:
+    file: ${AEGIS_ORACLE_SECRET_DIR:-./secrets/oracle}/admin-password
+  aegis_oracle_password:
+    file: ${AEGIS_ORACLE_SECRET_DIR:-./secrets/oracle}/app-password
+  aegis_oracle_test_password:
+    file: ${AEGIS_ORACLE_SECRET_DIR:-./secrets/oracle}/test-password
+networks:
+  private:
+    internal: true
+  outbound: {}
+  edge: {}

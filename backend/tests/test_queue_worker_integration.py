@@ -21,6 +21,7 @@ def harness(monkeypatch, tmp_path):
     core.Base.metadata.create_all(engine)
     session = sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(worker, 'Session', session)
+    monkeypatch.setattr(core, 'Session', session)
     monkeypatch.setattr(main, 'Session', session)
     monkeypatch.setattr(worker, 'document_lock', lambda target: nullcontext())
     monkeypatch.setattr(worker, 'settings', lambda: {'queue_provider': 'oci'})

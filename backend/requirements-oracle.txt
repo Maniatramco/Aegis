@@ -1,0 +1,2 @@
+# Optional Oracle thin driver; no Oracle Instant Client is required.
+oracledb==26.0.1

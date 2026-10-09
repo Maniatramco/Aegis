@@ -9,10 +9,23 @@ from app import core, main, providers, worker, agent_workspace as agent
 from test_dataset_models import system, dataset, template, upload, post
 
 def proposal(tools=('upload', 'extract'), **values):
-    return {'explanation': 'I will connect the requested document tools.', 'dataset_name': '', 'document_names': [], 'template_name': '', 'calls': [{'tool': tool, 'title': tool.title()} for tool in tools], **values}
+    return {'explanation': 'I will connect the requested document tools.', 'answer_mode':'documents', 'dataset_name': '', 'document_names': [], 'template_name': '', 'calls': [{'tool': tool, 'title': tool.title()} for tool in tools], **values}
 
 def planner(monkeypatch, value):
     monkeypatch.setattr(providers, 'plan', lambda *args: copy.deepcopy(value))
+
+
+def test_capability_question_returns_reply_without_document_actions(system, monkeypatch):
+    s = system
+    d = dataset(s)
+    reply = providers.AGENT_CAPABILITIES
+    monkeypatch.setattr(providers,'plan',lambda *args:pytest.fail('Capabilities must come from the supported app features.'))
+    p = plan(s, d, text='hi what and all u can do')
+    assert p['explanation'] == reply
+    assert p['calls'] == []
+    assert call(s, p, 0).status_code == 404
+    assert s.api.get('/api/jobs').json() == []
+    assert s.api.get('/api/documents').json() == []
 
 def plan(s, d, **values):
     model = next(m for m in d['models'] if 'chat' in m['capabilities'])

@@ -6,11 +6,12 @@ from contextvars import ContextVar
 from sqlalchemy import create_engine, String, Integer, Float, Text, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from cryptography.fernet import Fernet
+from .database import database_url, engine_options, StoredString, timestamp_type
 
 DATA = Path(os.getenv('AEGIS_STORAGE_ROOT', os.getenv('DATA_DIR', './data'))).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
-URL = os.getenv('DATABASE_URL', 'sqlite:///' + str(DATA / 'control.db'))
-engine = create_engine(URL, pool_pre_ping=True, connect_args={'check_same_thread':False} if URL.startswith('sqlite') else {})
+URL = database_url(DATA)
+engine = create_engine(URL, **engine_options(URL))
 Session = sessionmaker(engine, expire_on_commit=False)
 class Base(DeclarativeBase): pass
 class Record(Base):
@@ -18,15 +19,15 @@ class Record(Base):
     id:Mapped[str]=mapped_column(String(80),primary_key=True)
     kind:Mapped[str]=mapped_column(String(32),index=True)
     owner:Mapped[str]=mapped_column(String(80),index=True)
-    name:Mapped[str]=mapped_column(String(250),default='')
+    name:Mapped[str]=mapped_column(StoredString(250),default='')
     status:Mapped[str]=mapped_column(String(32),default='ready')
-    ref:Mapped[str]=mapped_column(String(500),default='')
-    parent_id:Mapped[str]=mapped_column(String(80),default='',index=True)
-    created_at:Mapped[float]=mapped_column(Float,default=time.time)
-    updated_at:Mapped[float]=mapped_column(Float,default=time.time)
+    ref:Mapped[str]=mapped_column(StoredString(500),default='')
+    parent_id:Mapped[str]=mapped_column(StoredString(80),default='',index=True)
+    created_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
+    updated_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
     size:Mapped[int]=mapped_column(Integer,default=0)
     version:Mapped[int]=mapped_column(Integer,default=1)
-    error:Mapped[str]=mapped_column(String(500),default='')
+    error:Mapped[str]=mapped_column(StoredString(500),default='')
 class Job(Base):
     __tablename__='jobs'
     id:Mapped[str]=mapped_column(String(80),primary_key=True)
@@ -36,11 +37,11 @@ class Job(Base):
     status:Mapped[str]=mapped_column(String(32),default='queued',index=True)
     progress:Mapped[int]=mapped_column(Integer,default=0)
     attempts:Mapped[int]=mapped_column(Integer,default=0)
-    lease_until:Mapped[float]=mapped_column(Float,default=0)
-    lease_token:Mapped[str]=mapped_column(String(80),default='')
-    error:Mapped[str]=mapped_column(String(500),default='')
-    created_at:Mapped[float]=mapped_column(Float,default=time.time)
-    updated_at:Mapped[float]=mapped_column(Float,default=time.time)
+    lease_until:Mapped[float]=mapped_column(timestamp_type(),default=0)
+    lease_token:Mapped[str]=mapped_column(StoredString(80),default='')
+    error:Mapped[str]=mapped_column(StoredString(500),default='')
+    created_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
+    updated_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
 class User(Base):
     __tablename__='users'
     id:Mapped[str]=mapped_column(String(80),primary_key=True)
@@ -50,7 +51,7 @@ class Login(Base):
     __tablename__='sessions'
     id:Mapped[str]=mapped_column(String(100),primary_key=True)
     owner:Mapped[str]=mapped_column(String(80))
-    expires:Mapped[float]=mapped_column(Float)
+    expires:Mapped[float]=mapped_column(timestamp_type())
     csrf:Mapped[str]=mapped_column(String(100))
 
 class FileStorage:
@@ -89,12 +90,16 @@ def password_hash(value,salt=None):
     return salt+':'+hashlib.scrypt(value.encode(),salt=salt.encode(),n=16384,r=8,p=1).hex()
 def password_valid(value,hashed): return secrets.compare_digest(password_hash(value,hashed.split(':')[0]),hashed)
 def init():
-    if URL.startswith('postgresql'):
+    if engine.dialect.name == 'postgresql':
         from sqlalchemy import text
         with engine.begin() as connection:
             connection.execute(text('SELECT pg_advisory_xact_lock(741936)'))
             Base.metadata.create_all(connection)
-    else:Base.metadata.create_all(engine)
+    else:
+        # API and worker share this volume. Oracle DDL auto-commits; serialize
+        # first-start schema creation rather than relying on transaction locks.
+        with document_lock('database-schema'):
+            Base.metadata.create_all(engine)
 def secret_cipher():
     key=os.getenv('AEGIS_MASTER_KEY', os.getenv('MASTER_KEY'))
     if not key: raise ValueError('MASTER_KEY is required to save provider credentials (generate a Fernet key)')

@@ -1,5 +1,5 @@
 "use client";
-import {Loader2} from "lucide-react";
+import {AlertCircle, CheckCircle2, Loader2} from "lucide-react";
 import { BatchProgress } from "./batch-progress";
 import { currentUploadStep, readableUploadError, type UploadProgressItem } from "./batch-workflow";
 type Entity=Record<string,any>;
@@ -15,6 +15,19 @@ export function extractionProgressJob(extraction:Entity|null,jobs:Entity[]):Enti
 }
 export function JobProgress({job}:{job:Entity}) {
  const stages=Object.entries(job.workflow?.stages||{}) as [string,Entity][];
+ if(job.kind==='extract') {
+  const completed=stages.filter(([,stage])=>stage.status==='completed').length;
+  const progress=stages.length?Math.round(completed/stages.length*100):0;
+  const failed=['failed','cancelled'].includes(job.status);
+  const summary=job.status==='completed'?'Extraction completed. Your result is ready to review.':failed?'Extraction stopped. Check the reason below.':job.workflow?.current==='generate'?'The model is extracting your fields. Progress follows completed stages.':stages.length?'Preparing and validating your extraction. Progress follows completed stages.':'Stage details are unavailable for this job. Check its status.';
+  return <div className="job-progress" aria-label="Processing workflow"><section className="batch-progress is-compact" aria-label="Extraction workflow">
+   <div className="batch-progress-heading"><strong>Extraction workflow</strong><span>{job.status==='completed'?'Ready':failed?'Needs attention':job.status==='running'?'In progress':'Queued'}</span></div>
+   <div className="batch-progress-track" role="progressbar" aria-label="Extraction progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={stages.length?`${completed} of ${stages.length} stages completed`:'Stage details unavailable'}><span style={{width:`${progress}%`}}/></div>
+   {stages.length>0&&<ol className="workflow-stages batch-stages">{stages.map(([name,stage])=><li key={name} className={`stage-${stage.status==='completed'?'completed':stage.status==='running'?'running':stage.status==='failed'?'failed':'waiting'}`}><span className="stage-symbol">{stage.status==='completed'?<CheckCircle2 size={21}/>:stage.status==='running'?<Loader2 size={21} className="animate-spin"/>:stage.status==='failed'?<AlertCircle size={21}/>:<span className="stage-dot"/>}</span><strong>{labels[name]||name}</strong><small>{stage.status==='blocked'?'Waiting':stage.status==='completed'?'Done':stage.status==='running'?'Active':stage.status}</small></li>)}</ol>}
+   <p className="batch-progress-summary" role="status">{summary}</p>
+   {job.error&&<p role="alert" className="review-error">{job.error}</p>}
+  </section></div>;
+ }
  return <div className="job-progress" aria-label="Processing workflow">
   <div className="row between"><strong>{job.kind==='extract'?'Extraction':'Document processing'}</strong><span>{job.status==='running'?'In progress':job.status}</span></div>
   <progress max={100} value={job.progress||0} aria-label="Processing progress" />

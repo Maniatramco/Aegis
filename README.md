@@ -4,6 +4,11 @@ A storage-first document knowledge and structured extraction workspace. Aegis ru
 
 ## Run locally
 
+For the optional **Oracle AI Database 26ai Free + Ollama** container setup,
+colleague account provisioning, and verification status, see
+[the Oracle integration guide](docs/ORACLE.md). The existing PostgreSQL and native
+SQLite configurations remain available.
+
 Requirements: Docker Engine/Desktop with Compose v2, Python 3 for one-time secret generation, and enough memory/disk for the optional local embedding model. Docker Desktop may require virtualization enabled. Windows users can run these commands in WSL.
 
 ```sh

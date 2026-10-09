@@ -1,0 +1,8 @@
+{
+  "name": "Invalid schema QA",
+  "schema": {
+    "type": "object",
+    "properties": { "total": { "type": "number" } },
+    "required": ["total"]
+  }
+}

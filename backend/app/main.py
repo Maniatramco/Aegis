@@ -4,11 +4,12 @@ from typing import Any
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 from sqlalchemy import select, text, update
-from jsonschema import Draft202012Validator, validate, ValidationError
+from jsonschema import Draft202012Validator, validate, ValidationError, SchemaError
 from .core import *
 from . import providers, reranker, workflow, temporary_files, dataset_models as routing
+from .json_documents import json_document_text
 
 @asynccontextmanager
 async def lifespan(app):
@@ -121,7 +122,7 @@ def health():return {'status':'ok'}
 @app.get('/ready')
 def ready():
     try:
-        with engine.connect() as c:c.execute(text('SELECT 1'))
+        with engine.connect() as c:c.execute(select(1))
         if settings()['search_provider']=='qdrant':providers.client().get_collections()
         if settings()['search_provider']=='oci':providers.oci_vector().test_connection()
         from . import reranker
@@ -155,10 +156,13 @@ async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:
     external_check(allow_external,True,snapshot['settings']);result=[];jobs=[]
     for file in files:
         name=(file.filename or 'document').replace('\\','/').split('/')[-1][:200]
-        if name.rsplit('.',1)[-1].lower() not in ('txt','pdf','docx'):raise HTTPException(400,'Only PDF, DOCX and UTF-8 TXT files are supported')
+        if name.rsplit('.',1)[-1].lower() not in ('txt','pdf','docx','json'):raise HTTPException(400,'Only PDF, DOCX, UTF-8 TXT and JSON files are supported')
         limit=settings()['max_upload_mb']*1024*1024;raw=await file.read(limit+1)
         if len(raw)>limit:raise HTTPException(413,'File exceeds configured upload size')
         if not raw:raise HTTPException(400,'Empty file')
+        if name.rsplit('.',1)[-1].lower()=='json':
+            try:json_document_text(raw)
+            except ValueError as exc:raise HTTPException(400,str(exc)) from exc
         id=uid();ref='documents/'+id+'/original';store.put(ref,raw)
         r=Record(id=id,kind='document',owner=owner,name=name,ref=ref,parent_id=kb_id,status='queued',size=len(raw),created_at=time.time(),updated_at=time.time())
         with Session.begin() as s:s.add(r)
@@ -179,8 +183,8 @@ def download(id:str,owner=Depends(auth)):
 def source_document(id:str,owner=Depends(auth)):
     from urllib.parse import quote
     r=get_record(id,owner,'document');ext=r.name.rsplit('.',1)[-1].lower()
-    if ext not in ('pdf','txt'):raise HTTPException(415,'Inline original preview supports PDF and UTF-8 TXT. Download DOCX to review its original layout.')
-    return Response(store.get(r.ref),media_type='application/pdf' if ext=='pdf' else 'text/plain; charset=utf-8',headers={'Content-Disposition':"inline; filename*=UTF-8''"+quote(r.name),'Content-Security-Policy':"sandbox"})
+    if ext not in ('pdf','txt','json'):raise HTTPException(415,'Inline original preview supports PDF, UTF-8 TXT and JSON. Download DOCX to review its original layout.')
+    return Response(store.get(r.ref),media_type={'pdf':'application/pdf','json':'application/json'}.get(ext,'text/plain; charset=utf-8'),headers={'Content-Disposition':"inline; filename*=UTF-8''"+quote(r.name),'Content-Security-Policy':"sandbox"})
 class Consent(BaseModel):allow_external:bool=False
 @app.post('/api/documents/{id}/reindex')
 def reindex(id:str,body:Consent,owner=Depends(auth)):
@@ -223,12 +227,14 @@ def delete_document(id:str,owner=Depends(auth)):
             for suffix in ('parsed.json','chunks.json','index.json','index-execution.json'):store.delete(f'documents/{id}/versions/v{n}/{suffix}')
         with Session.begin() as s:s.delete(s.get(Record,id))
     return {'ok':True}
-class ConversationInput(BaseModel):title:str='New conversation';kb_id:str='';dataset_id:str='';document_ids:list[str]=Field(default_factory=list)
+from typing import Literal
+class ConversationInput(BaseModel):title:str='New conversation';kb_id:str='';dataset_id:str='';document_ids:list[str]=Field(default_factory=list);mode:Literal['documents','general']='documents'
 @app.get('/api/conversations')
 def conversations(owner=Depends(auth)):return [representation(r)|{'title':r.name} for r in records(owner,'conversation')]
 @app.post('/api/conversations')
 def create_conversation(body:ConversationInput,owner=Depends(auth)):
     dataset_id=body.dataset_id or body.kb_id
+    if body.mode=='general' and (dataset_id or body.document_ids):raise HTTPException(422,'General chat cannot include document references. Choose a document conversation.')
     if body.dataset_id and body.kb_id and body.dataset_id!=body.kb_id:raise HTTPException(400,'Conflicting dataset identifiers')
     if dataset_id or body.document_ids:dataset,_=routing.documents_scope(owner,dataset_id,body.document_ids);dataset_id=dataset.id
     for id in body.document_ids:temporary_files.keep(id)
@@ -236,12 +242,24 @@ def create_conversation(body:ConversationInput,owner=Depends(auth)):
 @app.get('/api/conversations/{id}')
 def conversation(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');return representation(r)|store.json(r.ref)
-class MessageInput(BaseModel):text:str=Field(min_length=1,max_length=12000);document_ids:list[str]|None=None;kb_id:str|None=None;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
+class MessageInput(BaseModel):
+    text:str=Field(min_length=1,max_length=12000);document_ids:list[str]|None=None;kb_id:str|None=None;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
+    # Only the agent reply route can set verified application state. Public
+    # message bodies cannot supply this private attribute or invent successes.
+    _agent_context:dict|None=PrivateAttr(default=None)
 _locks={}
 def message_execution(body,owner,data):
     if body.dataset_id and body.kb_id and body.dataset_id!=body.kb_id:raise HTTPException(400,'Conflicting dataset identifiers')
     ids=body.document_ids if body.document_ids is not None else data.get('document_ids',[])
     dataset_id=body.dataset_id if body.dataset_id is not None else body.kb_id if body.kb_id is not None else data.get('dataset_id') or data.get('kb_id','')
+    if data.get('mode')=='general':
+        if dataset_id or ids:raise HTTPException(409,'Start a document conversation to use a dataset.')
+        from .temporary_chat import chat_snapshot
+        snapshot=chat_snapshot(owner,body.model_id or '')
+        snapshot['settings']['general_chat']=True
+        if body._agent_context is not None:snapshot['settings']['agent_context']=body._agent_context
+        external_check(body.allow_external,cfg=snapshot['settings'])
+        return [],snapshot
     pinned=data.get('dataset_id') or data.get('kb_id')
     if not pinned and data.get('document_ids'):
         try:previous,_=routing.documents_scope(owner,'',data['document_ids']);pinned=previous.id
@@ -250,6 +268,7 @@ def message_execution(body,owner,data):
     dataset,docs=routing.documents_scope(owner,dataset_id,ids)
     if pinned and dataset.id!=pinned:raise HTTPException(409,'A conversation stays within its original dataset. Start a new conversation for another dataset.')
     snapshot=routing.execution_snapshot(dataset,'chat',body.model_id);routing.require_indexes(docs,snapshot)
+    snapshot['settings'].pop('general_chat',None)
     data['dataset_id']=dataset.id;data['kb_id']=dataset.id
     external_check(body.allow_external,cfg=snapshot['settings']);external_check(body.allow_external,True,snapshot['embedding_execution']['settings'])
     return [d for d in docs if d.status=='ready'],snapshot
@@ -266,7 +285,9 @@ def message(id:str,body:MessageInput,owner=Depends(auth)):
         request_id=uid();store.put_json('executions/'+request_id+'.json',snapshot)
         data['messages'].append({'id':request_id,'role':'user','text':body.text,'created_at':time.time(),'model_selection':selection});store.put_json(r.ref,data)
         try:
-            with execution_context(snapshot['embedding_execution']):sources=providers.search(body.text,owner,docs,settings()['top_k'])
+            sources=[]
+            if not snapshot['settings'].get('general_chat'):
+                with execution_context(snapshot['embedding_execution']):sources=providers.search(body.text,owner,docs,settings()['top_k'])
             with execution_context(snapshot):text_answer=providers.answer(body.text,sources,data['messages'][:-1])
         except providers.ProviderError as e:raise HTTPException(502,str(e))
         except Exception:raise HTTPException(502,'Retrieval or generation failed; check configured provider connectivity')
@@ -289,49 +310,82 @@ def feedback(id:str,body:Feedback,owner=Depends(auth)):
 @app.get('/api/conversations/{id}/export')
 def export_conversation(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'conversation');return Response(store.get(r.ref),media_type='application/json',headers={'Content-Disposition':'attachment; filename="conversation.json"'})
-class TemplateInput(BaseModel):name:str=Field(min_length=1,max_length=200);schema_:dict=Field(alias='schema');dataset_id:str|None=None
+class TemplateInput(BaseModel):
+    name:str=Field(min_length=1,max_length=200)
+    schema_:dict=Field(alias='schema')
+    dataset_id:str|None=None
+    source_filename:str|None=Field(default=None,max_length=200,pattern=r'(?i)^[^/\\\x00-\x1f\x7f]+\.json$')
+
+def uploaded_template(body,owner):
+    if not body.source_filename:return None
+    matches=[r for r in records(owner,'template') if r.parent_id==(body.dataset_id or '') and (store.json(r.ref).get('source_filename') or '').casefold()==body.source_filename.casefold()]
+    if len(matches)>1:raise HTTPException(409,'Multiple templates have this filename in the selected dataset. Resolve the duplicate filenames before uploading again.')
+    return matches[0] if matches else None
 def check_schema(schema):
+    def location(path):return '$'+''.join('['+str(part)+']' if isinstance(part,int) else '.'+str(part) for part in path)
     try:Draft202012Validator.check_schema(schema)
+    except SchemaError as exc:raise HTTPException(400,'Invalid JSON Schema at '+location(exc.absolute_path)+': '+exc.message) from exc
     except Exception:raise HTTPException(400,'Invalid JSON Schema')
-    if schema.get('type')!='object':raise HTTPException(400,'Extraction schema must be an object')
-    def safe_refs(node):
+    if schema.get('type')!='object':raise HTTPException(400,'Extraction schema at $ must have type:"object"')
+    def safe_refs(node,path=()):
         if isinstance(node,dict):
             for key,value in node.items():
-                if key in ('$ref','$dynamicRef') and (not isinstance(value,str) or not value.startswith('#')):raise HTTPException(400,'Only local JSON Schema references are supported')
-                safe_refs(value)
+                if key in ('$ref','$dynamicRef') and (not isinstance(value,str) or not value.startswith('#')):raise HTTPException(400,'Only local JSON Schema references are supported at '+location((*path,key)))
+                safe_refs(value,(*path,key))
         elif isinstance(node,list):
-            for child in node:safe_refs(child)
+            for index,child in enumerate(node):safe_refs(child,(*path,index))
     safe_refs(schema)
-    def strict(node):
+    def strict(node,path=()):
         if not isinstance(node,dict):return
-        if node.get('type')=='object':
-            if node.get('additionalProperties') is not False:raise HTTPException(400,'Strict extraction requires additionalProperties:false on every object')
-            if set(node.get('required',[]))!=set(node.get('properties',{})):raise HTTPException(400,'Strict extraction requires every property in required. Use a nullable type for optional values.')
+        kind=node.get('type')
+        if kind=='object' or isinstance(kind,list) and 'object' in kind:
+            if node.get('additionalProperties') is not False:raise HTTPException(400,'Strict extraction requires additionalProperties:false at '+location(path))
+            if set(node.get('required',[]))!=set(node.get('properties',{})):raise HTTPException(400,'Strict extraction requires every property in required at '+location(path)+'. Use a nullable type for optional values.')
         for key,value in node.items():
             if key in ('properties','$defs','definitions'):
-                for child in value.values():strict(child)
-            elif key=='items':strict(value)
+                for name,child in value.items():strict(child,(*path,key,name))
+            elif key=='items':strict(value,(*path,key))
             elif key in ('anyOf','oneOf','allOf'):
-                for child in value:strict(child)
+                for index,child in enumerate(value):strict(child,(*path,key,index))
     strict(schema)
 @app.get('/api/templates')
-def templates(owner=Depends(auth)):return [representation(r)|store.json(r.ref) for r in records(owner,'template')]
+def templates(owner=Depends(auth)):
+    result=[]
+    for r in records(owner,'template'):
+        data=store.json(r.ref)
+        result.append(representation(r)|data|{'name':data.get('source_filename') or data['name']})
+    return result
 @app.post('/api/templates/validate')
 def validate_template(body:TemplateInput,owner=Depends(auth)):
     if body.dataset_id:get_record(body.dataset_id,owner,'knowledge_base')
     check_schema(body.schema_)
-    return {'valid':True,'name':body.name,'schema':body.schema_,'dataset_id':body.dataset_id}
+    existing=uploaded_template(body,owner)
+    return {'valid':True,'name':body.source_filename or body.name,'schema':body.schema_,'dataset_id':body.dataset_id}|({'existing_template_id':existing.id if existing else None} if body.source_filename else {})
 @app.post('/api/templates')
 def create_template(body:TemplateInput,owner=Depends(auth)):
     if body.dataset_id:get_record(body.dataset_id,owner,'knowledge_base')
-    check_schema(body.schema_);r=new_record('template',owner,body.name,parent=body.dataset_id or '',data={'name':body.name,'schema':body.schema_,'version':1,'dataset_id':body.dataset_id});return representation(r)|store.json(r.ref)
+    check_schema(body.schema_)
+    def save():
+        existing=uploaded_template(body,owner)
+        if existing:return update_template(existing.id,body,owner)
+        name=body.source_filename or body.name
+        r=new_record('template',owner,name,parent=body.dataset_id or '',data={'name':name,'schema':body.schema_,'version':1,'dataset_id':body.dataset_id,'source_filename':body.source_filename})
+        return representation(r)|store.json(r.ref)
+    if not body.source_filename:return save()
+    key=hashlib.sha256(json.dumps([owner,body.dataset_id or '',body.source_filename.casefold()]).encode()).hexdigest()
+    with document_lock('template-import-'+key):return save()
 @app.put('/api/templates/{id}')
 def update_template(id:str,body:TemplateInput,owner=Depends(auth)):
-    check_schema(body.schema_);r=get_record(id,owner,'template');version=r.version+1;ref=f'template/{id}/v{version}.json'
-    if body.dataset_id and body.dataset_id!=r.parent_id:raise HTTPException(400,'Template dataset association cannot be changed. Import a new template for the destination dataset.')
-    store.put_json(ref,{'name':body.name,'schema':body.schema_,'version':version,'dataset_id':r.parent_id or None})
-    with Session.begin() as s:r=s.get(Record,id);r.version=version;r.ref=ref;r.name=body.name;r.updated_at=time.time()
-    return representation(r)|store.json(ref)
+    check_schema(body.schema_)
+    get_record(id,owner,'template')
+    with document_lock('template-'+id):
+        r=get_record(id,owner,'template');version=r.version+1;ref=f'template/{id}/v{version}.json'
+        if body.dataset_id and body.dataset_id!=r.parent_id:raise HTTPException(400,'Template dataset association cannot be changed. Import a new template for the destination dataset.')
+        source_filename=body.source_filename or store.json(r.ref).get('source_filename')
+        name=source_filename or body.name
+        store.put_json(ref,{'name':name,'schema':body.schema_,'version':version,'dataset_id':r.parent_id or None,'source_filename':source_filename})
+        with Session.begin() as s:r=s.get(Record,id);r.version=version;r.ref=ref;r.name=name;r.updated_at=time.time()
+        return representation(r)|store.json(ref)
 @app.get('/api/templates/{id}/versions')
 def template_versions(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'template');return [store.json(f'template/{id}/v{n}.json') for n in range(1,r.version+1)]
@@ -342,8 +396,8 @@ def export_template(id:str,version:int|None=None,owner=Depends(auth)):
     r=get_record(id,owner,'template');number=r.version if version is None else version
     if number<1 or number>r.version:raise HTTPException(404,'Template version not found')
     data=store.json(r.ref if number==r.version else f'template/{id}/v{number}.json')
-    name=data['name'];safe=re.sub(r'[<>:"/\\|?*\x00-\x1f]','-',name.strip())[:100].rstrip('. ') or 'prompt-template'
-    filename=f'{safe}-v{number}.json'
+    name=data.get('source_filename') or data['name'];safe=re.sub(r'[<>:"/\\|?*\x00-\x1f]','-',name.strip())[:100].rstrip('. ') or 'prompt-template'
+    filename=data.get('source_filename') or f'{safe}-v{number}.json'
     disposition=f"attachment; filename=\"prompt-template-v{number}.json\"; filename*=UTF-8''{quote(filename,safe='')}"
     return Response(json.dumps({'name':name,'schema':data['schema']},ensure_ascii=False,indent=2)+'\n',media_type='application/json',headers={'Content-Disposition':disposition})
 class ExtractInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=20);template_id:str;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
@@ -574,7 +628,9 @@ async def stream_message(id:str,body:MessageInput,request:Request,owner=Depends(
         data=store.json(r.ref);docs,snapshot=message_execution(body,owner,data);selection=routing.public_selection(snapshot)
         for doc in docs:temporary_files.keep(doc.id)
         data['document_ids']=[doc.id for doc in docs]
-        with execution_context(snapshot['embedding_execution']):sources=await asyncio.to_thread(providers.search,body.text,owner,docs,settings()['top_k'])
+        sources=[]
+        if not snapshot['settings'].get('general_chat'):
+            with execution_context(snapshot['embedding_execution']):sources=await asyncio.to_thread(providers.search,body.text,owner,docs,settings()['top_k'])
         request_id=uid();store.put_json('executions/'+request_id+'.json',snapshot)
         data['messages'].append({'id':request_id,'role':'user','text':body.text,'created_at':time.time(),'model_selection':selection});store.put_json(r.ref,data)
     except HTTPException:lock.release();raise
@@ -737,8 +793,8 @@ temporary_files.install(app,auth)
 from . import temporary_chat
 temporary_chat.install(app,auth)
 
-from . import api_documentation
-api_documentation.install(app,auth)
-
 from . import agent_workspace
 agent_workspace.install(app, auth, __import__(__name__, fromlist=['app']))
+
+from . import api_documentation
+api_documentation.install(app,auth)

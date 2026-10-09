@@ -6,10 +6,15 @@ REPO = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('action', choices=['start', 'stop'])
 parser.add_argument('--mock', action='store_true')
+parser.add_argument('--web-port', type=int, default=3000)
+parser.add_argument('--api-port', type=int, default=8000)
+parser.add_argument('--reuse-ollama', action='store_true', help='Reuse the already-running local model server')
 parser.add_argument('--ollama-executable',type=Path,default=REPO.parent/'.local-tools/ollama/ollama.exe')
 parser.add_argument('--ollama-models',type=Path,default=REPO.parent/'.local-tools/ollama-models')
 parser.add_argument('--runtime-dir', type=Path, default=REPO / 'data/native-windows')
 args = parser.parse_args()
+if not all(1 <= port <= 65535 for port in (args.web_port, args.api_port)) or args.web_port == args.api_port:
+    parser.error('Choose distinct web and API ports between 1 and 65535.')
 STATE = args.runtime_dir.resolve()
 STATE.mkdir(parents=True,exist_ok=True)
 pidfile = STATE / 'processes.json'
@@ -28,7 +33,7 @@ if args.action == 'stop':
     raise SystemExit
 if pidfile.exists():
     raise SystemExit('Recorded processes exist. Run stop before restarting.')
-for port in (3000, 8000):
+for port in (args.web_port, args.api_port):
     with socket.socket() as s:
         if s.connect_ex(('127.0.0.1', port)) == 0:
             raise SystemExit(f'Port {port} already in use; existing service preserved.')
@@ -52,12 +57,18 @@ env.update(MODEL_PROVIDER='mock' if args.mock else 'ollama', EMBEDDING_PROVIDER=
            STORAGE_PROVIDER='local', QUEUE_PROVIDER='database',
            AEGIS_OLLAMA_PORT='11435', AEGIS_ALLOW_MOCK='true' if args.mock else 'false', AEGIS_LOCAL_ONLY='true', AEGIS_MODEL='qwen3:4b', EMBEDDING_MODEL='nomic-embed-text', AEGIS_TIMEOUT='180', PYTHONPATH=str(REPO / 'backend'),
            AEGIS_STORAGE_ROOT=str(STATE / 'demo-data'),
-           API_INTERNAL_URL='http://127.0.0.1:8000', NEXT_TELEMETRY_DISABLED='1')
+           API_INTERNAL_URL=f'http://127.0.0.1:{args.api_port}',
+           ALLOWED_ORIGINS=f'http://127.0.0.1:{args.web_port},http://localhost:{args.web_port}',
+           NEXT_TELEMETRY_DISABLED='1', PYTHONDONTWRITEBYTECODE='1')
 env.pop('DATABASE_URL', None)
 for key in ('OPENAI_API_KEY', 'OCI_GENAI_API_KEY'):
     env.pop(key, None)
 py = str(REPO / '.venv/Scripts/python.exe')
 node = shutil.which('node')
+if not node:
+    bundled_node = Path.home() / '.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe'
+    if bundled_node.is_file():
+        node = str(bundled_node)
 if not node or not Path(py).exists() or not (REPO / 'frontend/node_modules/next/dist/bin/next').exists():
     raise SystemExit('Install Node, the project .venv, and frontend dependencies before starting.')
 processes = []
@@ -72,17 +83,22 @@ def launch(name, command, cwd, process_env):
 if not args.mock:
     import httpx
     with socket.socket() as probe:
-        if probe.connect_ex(('127.0.0.1',11435))==0:
+        occupied = probe.connect_ex(('127.0.0.1',11435))==0
+        if occupied and not args.reuse_ollama:
             raise SystemExit('Aegis model port 11435 is occupied; preserve that process and inspect ownership before starting.')
-    executable=args.ollama_executable.resolve(strict=True)
-    models=args.ollama_models.resolve(strict=True)
-    ollama_env=env|{'OLLAMA_HOST':'127.0.0.1:11435','OLLAMA_MODELS':str(models),'OLLAMA_NO_CLOUD':'1',
-                    'OLLAMA_NUM_PARALLEL':'1','OLLAMA_MAX_LOADED_MODELS':'1','OLLAMA_CONTEXT_LENGTH':'4096'}
-    daemon=launch('ollama',[str(executable),'serve'],REPO,ollama_env)
+    if args.reuse_ollama and not occupied:
+        raise SystemExit('Start the local Ollama server before using --reuse-ollama.')
+    daemon = None
+    if not args.reuse_ollama:
+        executable=args.ollama_executable.resolve(strict=True)
+        models=args.ollama_models.resolve(strict=True)
+        ollama_env=env|{'OLLAMA_HOST':'127.0.0.1:11435','OLLAMA_MODELS':str(models),'OLLAMA_NO_CLOUD':'1',
+                        'OLLAMA_NUM_PARALLEL':'1','OLLAMA_MAX_LOADED_MODELS':'1','OLLAMA_CONTEXT_LENGTH':'4096'}
+        daemon=launch('ollama',[str(executable),'serve'],REPO,ollama_env)
     ready=False
     with httpx.Client(timeout=2,trust_env=False,follow_redirects=False) as client:
         for _ in range(40):
-            if daemon.poll() is not None:break
+            if daemon is not None and daemon.poll() is not None:break
             try:
                 response=client.get('http://127.0.0.1:11435/api/tags');response.raise_for_status()
                 names={model['name'] for model in response.json()['models']}
@@ -93,13 +109,13 @@ if not args.mock:
         raise SystemExit('Isolated Ollama did not become ready with the existing models. Inspect ollama.log; use stop before retrying.')
 
 commands = [
-    ('api', [py, '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'], REPO),
+    ('api', [py, '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', str(args.api_port)], REPO),
     ('worker', [py, '-m', 'app.worker'], REPO),
-    ('web', [node, str(REPO / 'frontend/node_modules/next/dist/bin/next'), 'dev', '-H', '127.0.0.1', '-p', '3000'], REPO / 'frontend'),
+    ('web', [node, str(REPO / 'scripts/local-web.cjs'), str(args.web_port)], REPO / 'frontend'),
 ]
 for name, command, cwd in commands:
     launch(name,command,cwd,env)
-print('Started Aegis local-only development mode: http://127.0.0.1:3000')
-print('Backend health: http://127.0.0.1:8000/health')
+print(f'Started Aegis local-only development mode: http://127.0.0.1:{args.web_port}')
+print(f'Backend health: http://127.0.0.1:{args.api_port}/health')
 print('Local process logs:', STATE)
 print('Aegis model endpoint: http://127.0.0.1:11435 (separate from Ollama desktop)')

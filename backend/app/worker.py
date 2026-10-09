@@ -4,10 +4,17 @@ from sqlalchemy import select, update, or_, and_
 from .core import Session, Record, Job, store, settings, uid, init, document_lock, execution_context
 from . import core, dataset_models as routing
 from . import providers, workflow
+from .json_documents import json_document_text
 
 MAX_ATTEMPTS=3
 _last_reconcile=0.0
 _last_cleanup=0.0
+
+def claim_query(now, job_id=None, dialect='sqlite'):
+    query=select(Job).where(or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now)),Job.attempts<MAX_ATTEMPTS,Job.id==job_id if job_id else True).order_by(Job.created_at,Job.id).limit(1)
+    # Oracle disallows FETCH FIRST together with FOR UPDATE. The conditional
+    # UPDATE below still grants exactly one lease when workers race for a row.
+    return query if dialect=='oracle' else query.with_for_update(skip_locked=True)
 
 def claim(job_id=None):
     now=time.time();token=uid()
@@ -17,9 +24,9 @@ def claim(job_id=None):
             target=s.get(Record,expired.target_id)
             if target:target.status='failed';target.error=expired.error
             workflow.fail(expired.id,expired.error)
-        candidate=s.scalar(select(Job).where(or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now)),Job.attempts<MAX_ATTEMPTS,Job.id==job_id if job_id else True).order_by(Job.created_at).limit(1).with_for_update(skip_locked=True))
+        candidate=s.scalar(claim_query(now,job_id,s.get_bind().dialect.name))
         if not candidate:return None
-        result=s.execute(update(Job).where(Job.id==candidate.id,or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now))).values(status='running',attempts=Job.attempts+1,lease_until=now+900,lease_token=token,updated_at=now))
+        result=s.execute(update(Job).where(Job.id==candidate.id,Job.attempts<MAX_ATTEMPTS,or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now))).values(status='running',attempts=Job.attempts+1,lease_until=now+900,lease_token=token,updated_at=now))
         if result.rowcount!=1:return None
         return candidate.id,token
 
@@ -34,6 +41,7 @@ def checkpoint(jid,token,progress):
 def parse_document(name,raw):
     ext=name.rsplit('.',1)[-1].lower()
     if ext=='txt':return [{'page':1,'text':raw.decode('utf-8-sig')}]
+    if ext=='json':return [{'page':1,'text':json_document_text(raw)}]
     if ext=='pdf':
         from pypdf import PdfReader
         reader=PdfReader(io.BytesIO(raw))
@@ -52,9 +60,9 @@ def parse_document(name,raw):
         except zipfile.BadZipFile:raise ValueError('This DOCX file is invalid or damaged. Upload a valid DOCX copy.') from None
         with archive:
             entries=archive.infolist();names=[e.filename for e in entries]
-            if '[Content_Types].xml' not in names or 'word/document.xml' not in names:raise ValueError('This file is not a valid DOCX document. Export it as DOCX and upload it again.')
             if len(names)!=len(set(names)) or any(n.startswith('/') or '..' in n.replace('\\','/').split('/') for n in names):raise ValueError('Unsafe DOCX archive entries')
             if sum(e.file_size for e in entries)>100*1024*1024 or any(e.file_size>25*1024*1024 for e in entries):raise ValueError('DOCX decompressed content exceeds safety limits')
+            if '[Content_Types].xml' not in names or 'word/document.xml' not in names:raise ValueError('This file is not a valid DOCX document. Export it as DOCX and upload it again.')
         doc=Document(io.BytesIO(raw));lines=[p.text for p in doc.paragraphs]
         lines += [' | '.join(c.text for c in row.cells) for t in doc.tables for row in t.rows]
         text='\n'.join(lines)

@@ -42,8 +42,9 @@ def validate_endpoint(endpoint, protocol):
     except ValueError:
         raise ConnectionError('Enter a base endpoint URL without credentials, query parameters, or a fragment.')
     if protocol == 'ollama':
-        if parsed.scheme != 'http' or host not in ('127.0.0.1', 'localhost', '::1') or port not in (11434, 11435) or parsed.path.strip('/'):
-            raise ConnectionError('Ollama requires a loopback endpoint on port 11434 or 11435.')
+        internal = {h.strip().lower() for h in os.getenv('AEGIS_OLLAMA_ENDPOINT_HOSTS', '').split(',') if h.strip()}
+        if parsed.scheme != 'http' or host not in ({'127.0.0.1', 'localhost', '::1'} | internal) or port not in (11434, 11435) or parsed.path.strip('/'):
+            raise ConnectionError('Ollama requires a loopback or server-approved container endpoint on port 11434 or 11435.')
         return endpoint.rstrip('/')
     if parsed.scheme != 'https' or port not in (None, 443):
         raise ConnectionError('Remote model endpoints require HTTPS on port 443.')

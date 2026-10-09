@@ -1,4 +1,27 @@
-# Private browser recovery (local SQLite)
+# Password reset from the local app
+
+In the local desktop app, choose **Forgot password?**, enter your existing
+username, enter and confirm a new password (12-200 characters), then choose
+**Reset password**. The username is prefilled. No terminal command, old password,
+email, recovery code or private link is required. Return to sign in afterwards.
+
+This is an explicit **trust-this-computer** policy: anyone able to use the local
+installation can reset its administrator password. It is available only with
+`AEGIS_LOCAL_ONLY=true`, SQLite, a direct loopback API connection, and a matching
+configured local frontend origin. It is unavailable for remote and PostgreSQL
+deployments. Forwarded/proxied recovery requests are refused. Do not enable this
+mode for shared or remotely exposed installations.
+
+The page discovers the configured local API port instead of assuming ports
+3000/8000. An automatic, signed, five-minute CSRF challenge protects the form;
+users do not handle it. Opening the page does not change the account. Invalid
+fields, an unknown username, an expired form or a failed transaction leave the
+password unchanged. The API replaces the password hash, revokes the
+administrator's old sessions and invalidates any older private recovery links in
+one transaction. Login and reset hold the same lock. Documents and account
+identity are preserved, and services keep running throughout the reset.
+
+## Legacy private browser recovery (local SQLite)
 
 The trusted installation operator can open a private reset page while the local app runs:
 

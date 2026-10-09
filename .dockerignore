@@ -1,5 +1,8 @@
 .git
 .env
+.env.*
+!.env.example
+!.env.oracle.example
 secrets
 backups
 data

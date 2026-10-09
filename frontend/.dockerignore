@@ -2,3 +2,7 @@ node_modules
 .next
 *.tsbuildinfo
 .env*
+test-results
+playwright-report
+screenshots
+coverage

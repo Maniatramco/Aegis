@@ -5,12 +5,14 @@ Run using backend dependencies with api/worker/web stopped and the same database
 local /data mount, OCI identity and settings as the application. See docs.
 """
 import argparse
+import csv
 from contextlib import contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import time
 
@@ -99,11 +101,23 @@ def source_keys(source, descriptor, local_root):
     return sorted(set(keys))
 
 
+def restrict_manifest(path):
+    """Protect the empty temporary file before writing any manifest content."""
+    if os.name!='nt':
+        os.chmod(path,0o600)
+        return
+    result=subprocess.run(['whoami','/user','/fo','csv','/nh'],capture_output=True,text=True,check=True)
+    sid=next(csv.reader(result.stdout.splitlines()))[1]
+    if not sid.startswith('S-1-'):raise ValueError('Cannot determine manifest owner')
+    subprocess.run(['icacls',str(path),'/inheritance:r','/grant:r',f'*{sid}:F'],capture_output=True,check=True)
+
+
 def write_manifest(path, value):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     fd,tmp=tempfile.mkstemp(prefix='.migration-',dir=path.parent)
     try:
         with os.fdopen(fd,'w') as out:
+            restrict_manifest(tmp)
             json.dump(value,out,indent=2);out.flush();os.fsync(out.fileno())
         os.replace(tmp,path)
     finally:

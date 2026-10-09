@@ -18,9 +18,23 @@ function load(filename){
  compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
  return compiled.exports;
 }
-const {OperationProgress,extractionProgressJob}=load(path.resolve(__dirname,'../app/operation-progress.tsx'));
+const {OperationProgress,extractionProgressJob,JobProgress}=load(path.resolve(__dirname,'../app/operation-progress.tsx'));
 const {DocumentUploadPanel}=load(path.resolve(__dirname,'../app/document-upload.tsx'));
 const {explainPlan}=load(path.resolve(__dirname,'../app/agent-v2.tsx'));
+const {AgentChatAnswer,AgentAnswerText,conversationExchanges}=load(path.resolve(__dirname,'../app/agent-v2-chat.tsx'));
+
+test('V2 shares saved chat history and canonical sources without fabricating unfinished answers',()=>{
+ const conversation={id:'saved-chat',mode:'documents',dataset_id:'dataset-a',document_ids:['doc-a'],messages:[{id:'q1',role:'user',text:'Question',model_selection:{model_id:'m',model_name:'Local model'}},{id:'a1',role:'assistant',text:'Supported answer [1]',status:'completed',citations:[{index:1,document_id:'doc-a',document_name:'Evidence.txt',text:'Canonical excerpt',page:2}]},{id:'q2',role:'user',text:'Follow-up'}]};
+ const exchanges=conversationExchanges(conversation);assert.equal(exchanges.length,2);assert.equal(exchanges[0].conversation_id,'saved-chat');assert.equal(exchanges[1].chat,undefined);assert.deepEqual(exchanges[0].calls,[]);
+ const html=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:exchanges[0].chat,api:()=>{},onError:()=>{}}));
+ assert.match(html,/Sources · 1/);assert.match(html,/Canonical excerpt/);assert.match(html,/\/api\/documents\/doc-a\/source#page=2/);assert.match(html,/Copy agent answer/);assert.match(html,/Helpful agent answer/);
+});
+test('compact chat formatting escapes HTML and preserves readable code',()=>{
+ const html=renderToStaticMarkup(React.createElement(AgentAnswerText,{text:'**Bold** and `value`\n```python\nprint("hello")\n```\n<script>alert(1)</script>'}));
+ assert.match(html,/<strong>Bold<\/strong>/);assert.match(html,/<code>value<\/code>/);assert.match(html,/<pre><code>/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
+ const failed=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:{text:'Partial',status:'failed',error:{detail:'Offline'}},api:()=>{},onError:()=>{}}));
+ assert.match(failed,/role="alert"/);assert.match(failed,/Offline/);assert.match(failed,/Helpful agent answer[^>]*disabled/);
+});
 const items=Array.from({length:10},(_,i)=>({id:'row-'+i,name:'invoice-'+i+'.txt',status:'submitted',processing:true,document:{id:'doc-'+i,status:'processing'},job:{status:'running',workflow:{current:'extract',stages:{extract:{status:'running'}}}}}));
 const jobs=items.map((item,i)=>({...item.job,id:'job-'+i,kind:'index',document_id:item.document.id}));
 test('closing the upload panel gives ten documents one background workflow',()=>{
@@ -48,7 +62,30 @@ test('V2 describes selected tools without repeating invented pre-execution resul
  assert.match(text,/confirm each tool/);
  assert.match(text,/after indexing finishes/);
  assert.doesNotMatch(text,/are valid|completed!/);
- assert.match(explainPlan({calls:[],explanation:'I changed all model settings.'}),/No document action is queued/);
+ const reply='Hi! I can upload documents, extract fields, and re-extract while keeping previous results. What would you like to do?';
+ assert.equal(explainPlan({calls:[],explanation:reply}),reply);
+ assert.match(explainPlan({calls:[],explanation:''}),/What would you like to do/);
+});
+
+const {AgentJobProgress,AgentResult}=load(path.resolve(__dirname,'../app/agent-v2-output.tsx'));
+test('compact agent progress retains real stage counts and visible failures',()=>{
+ const job={kind:'extract',status:'failed',progress:80,error:'Model unavailable',workflow:{current:'generate',stages:{prepare:{status:'completed'},generate:{status:'failed'},validate:{status:'blocked'},ready:{status:'blocked'}}}};
+ const html=renderToStaticMarkup(React.createElement(AgentJobProgress,{job}));
+ assert.match(html,/Extraction stopped.*25%/);
+ assert.match(html,/aria-label="Agent extraction progress"[^>]*aria-valuenow="25"/);
+ assert.doesNotMatch(html,/<details[^>]* open/);
+ assert.match(html,/<\/details>.*role="alert".*Model unavailable/);
+ const unknown=renderToStaticMarkup(React.createElement(AgentJobProgress,{job:{kind:'extract',status:'running',progress:80}}));
+ assert.doesNotMatch(unknown,/Agent extraction progress|80%/);
+});
+test('compact results keep full JSON expandable and retain the review action',()=>{
+ const html=renderToStaticMarkup(React.createElement(AgentResult,{tool:{status:'completed',result:{extraction_id:'saved-result',data:{reference:'QA-001',nested:{amount:42}}}},onReview:()=>{}}));
+ assert.match(html,/<details><summary>Extracted fields<\/summary>/);
+ assert.match(html,/QA-001/);assert.match(html,/amount/);
+ assert.match(html,/Review result and evidence/);
+ assert.doesNotMatch(html,/Extraction completed\. Open the result/);
+ const pending=renderToStaticMarkup(React.createElement(AgentResult,{tool:{status:'waiting',result:{extraction_id:'queued-result'}},onReview:()=>{}}));
+ assert.doesNotMatch(pending,/Review result and evidence|Extracted fields/);
 });
 test('an open upload panel suppresses duplicate background workflows without suppressing extraction jobs',()=>{
  const hidden=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs,uploadItems:items,uploadWorkflowVisible:true}));
@@ -171,4 +208,15 @@ test('Home does not add another loading announcement or flash an empty dataset m
  assert.doesNotMatch(partial,/No documents|0 ready/);
  const empty=renderToStaticMarkup(React.createElement(DatasetHome,{datasets:[],documents:[],loading:false,onBrowse:()=>{},onChat:()=>{}}));
  assert.match(empty,/No registered datasets yet/);
+});
+
+test('extraction uses the shared horizontal workflow and real completed-stage progress',()=>{
+ const stages={prepare:{status:'completed'},generate:{status:'running'},validate:{status:'blocked'},ready:{status:'blocked'}};
+ const html=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'running',progress:80,workflow:{current:'generate',stages}}}));
+ assert.match(html,/aria-label="Extraction workflow"/);assert.match(html,/workflow-stages batch-stages/);assert.match(html,/aria-valuenow="25"/);assert.match(html,/stage-running/);assert.match(html,/Prepare sources/);assert.match(html,/Validate and save/);assert.doesNotMatch(html,/job-stage-list/);
+ const failed=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'failed',error:'Model unavailable',workflow:{current:'generate',stages:{...stages,generate:{status:'failed'}}}}}));
+ assert.match(failed,/Needs attention/);assert.match(failed,/stage-failed/);assert.match(failed,/Model unavailable/);assert.match(failed,/aria-valuenow="25"/);
+ const done=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'completed',workflow:{stages:Object.fromEntries(Object.keys(stages).map(name=>[name,{status:'completed'}]))}}}));
+ assert.match(done,/aria-valuenow="100"/);assert.match(done,/Your result is ready to review/);
+ const legacy=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'running'}}));assert.match(legacy,/Stage details are unavailable/);assert.match(legacy,/aria-valuenow="0"/);
 });

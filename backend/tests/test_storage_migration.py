@@ -1,5 +1,7 @@
 """No cloud requests: migration safety and interruption contracts."""
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import Mock
@@ -104,13 +106,36 @@ def test_remote_listing_pagination_filters_secrets():
 def test_manifest_written_private_and_reload_validates(fixture,tmp_path):
     _,_,plan,_=fixture;path=tmp_path/'private-manifest.json'
     m.write_manifest(path,plan)
-    assert path.stat().st_mode & 0o777==0o600
+    if os.name=='nt':
+        acl=subprocess.run(['icacls',str(path)],capture_output=True,text=True,check=True).stdout
+        assert '(I)' not in acl
+        assert acl.count('(F)')==1
+    else:
+        assert path.stat().st_mode & 0o777==0o600
     assert m.validate_manifest(m.json.loads(path.read_text()))['object_count']==6
 
 
-def test_symlinks_rejected(fixture):
-    root,source,_,_=fixture;(root/'documents'/'unsafe').symlink_to(root/'secrets'/'provider.enc')
+def test_symlinks_rejected(fixture,monkeypatch):
+    root,source,_,_=fixture;unsafe=root/'documents'/'unsafe'
+    try:
+        unsafe.symlink_to(root/'secrets'/'provider.enc')
+    except OSError as exc:
+        if os.name!='nt' or exc.winerror!=1314:raise
+        # Windows may deny creating links. Still exercise the rejection contract
+        # without requiring Developer Mode or elevated test privileges.
+        unsafe.write_bytes(b'link fixture')
+        is_symlink=Path.is_symlink
+        monkeypatch.setattr(Path,'is_symlink',lambda path:path==unsafe or is_symlink(path))
     with pytest.raises(ValueError,match='Symlink'):m.source_keys(source,{'provider':'local'},root)
+
+
+def test_manifest_permission_failure_preserves_existing(fixture,tmp_path,monkeypatch):
+    _,_,plan,_=fixture;path=tmp_path/'manifest.json';path.write_bytes(b'previous manifest')
+    def denied(path):raise PermissionError('Synthetic permission failure')
+    monkeypatch.setattr(m,'restrict_manifest',denied)
+    with pytest.raises(PermissionError):m.write_manifest(path,plan)
+    assert path.read_bytes()==b'previous manifest'
+    assert not list(tmp_path.glob('.migration-*'))
 
 
 def test_named_configuration_profile_does_not_block_migration(fixture):

@@ -10,8 +10,8 @@ NOTES = {
     'POST /api/auth/login': 'Verify credentials, set the HTTP-only session cookie, and return the user and CSRF token. Login attempts are rate limited.',
     'GET /api/auth/me': 'Read the signed-in user and the CSRF token used for subsequent cookie-authenticated changes.',
     'POST /api/auth/logout': 'Invalidate the current session and clear its cookie.',
-    'POST /api/auth/recovery/prepare': 'Prepare the loopback-only browser recovery challenge using a privately issued short-lived grant token. This is a local recovery flow, not a general remote password-reset API. The application API proxy blocks this route; use the private recovery page.',
-    'POST /api/auth/recovery/reset': 'Complete local recovery using the prepared grant token, recovery cookie, X-CSRF-Token, and matching new passwords. Loopback and same-origin checks still apply. The application API proxy blocks this route.',
+    'POST /api/auth/recovery/prepare': 'Prepare a loopback-only native SQLite recovery challenge. A private legacy grant token is optional; direct desktop recovery uses the recovery cookie and CSRF challenge. The application API proxy blocks this route. Oracle and network deployments do not enable it.',
+    'POST /api/auth/recovery/reset': 'Complete native SQLite desktop recovery with its recovery cookie, X-CSRF-Token, and matching new passwords; supply a token only for the legacy private-grant flow. Loopback and origin checks apply. Oracle and network deployments do not enable this route.',
     'GET /health': 'Basic process liveness check. A running API does not by itself prove that its dependencies are ready.',
     'GET /ready': 'Check the database, the vector service when configured, and the reranker when enabled. This is not a full model-inference test. Inspect the response before sending processing work.',
     'GET /api/overview': 'Read workspace totals and recent activity for the dashboard.',
@@ -34,11 +34,11 @@ NOTES = {
     'POST /api/model-registrations/test': 'Send a small synthetic probe using the same adapter as processing. This does not save the registration or transmit document content. Remote probes require consent and an enabled cloud deployment.',
     'GET /api/local-models': 'List models installed in the configured local Ollama service. This call does not install or download anything.',
     'GET /api/documents': 'List owned documents, optionally scoped by dataset_id or the older kb_id parameter, with processing and reindex status.',
-    'POST /api/documents/upload': 'Upload up to 20 PDF, DOCX, or UTF-8 TXT files using multipart form data: repeated files fields plus dataset_id. Per-file size uses max_upload_mb from deployment settings. Originals are stored, document records are created, and indexing jobs are queued. Upload acceptance is not indexing completion; follow /api/jobs.',
+    'POST /api/documents/upload': 'Upload up to 20 PDF, DOCX, UTF-8 TXT, or JSON files using multipart form data: repeated files fields plus dataset_id. Per-file size uses max_upload_mb from deployment settings. Originals are stored, document records are created, and indexing jobs are queued. Upload acceptance is not indexing completion; follow /api/jobs.',
     'GET /api/documents/{id}': 'Read document metadata, processing status, and dataset/index compatibility.',
     'GET /api/documents/{id}/preview': 'Read a JSON text preview containing text, chunks, and document metadata. Before processing finishes, the text explains that it is not available yet. Use /source to view supported original files.',
     'GET /api/documents/{id}/download': 'Download the original uploaded file with a download filename.',
-    'GET /api/documents/{id}/source': 'Return an original PDF or UTF-8 TXT file inline for source viewing. DOCX inline viewing is rejected with 415; download DOCX to inspect its original layout.',
+    'GET /api/documents/{id}/source': 'Return an original PDF, UTF-8 TXT, or JSON file inline for source viewing. DOCX inline viewing is rejected with 415; download DOCX to inspect its original layout.',
     'POST /api/documents/{id}/reindex': 'Queue a new index build using the dataset’s selected embedding configuration. Follow the returned job rather than assuming immediate readiness.',
     'POST /api/documents/{id}/reextract': 'Reprocess the original document into a new document version and index. This is source reprocessing, not template-based structured extraction; use /api/extractions for that.',
     'DELETE /api/documents/{id}': 'Cancel active document jobs and remove the original, parsed content, index files, and vectors. Vector cleanup must succeed before deletion finishes.',
@@ -61,6 +61,14 @@ NOTES = {
     'POST /api/templates': 'Create a template with an object JSON Schema. Every object must set additionalProperties:false and require every property; nullable fields represent optional values. Only local schema references are allowed.',
     'PUT /api/templates/{id}': 'Save a new template version. The dataset association cannot be changed on an existing template.',
     'GET /api/templates/{id}/versions': 'Read the saved versions of a template.',
+    'GET /api/templates/{id}/export': 'Download a saved prompt template as portable JSON; uploaded templates use their original filename. The optional version selects an earlier saved schema.',
+    'GET /api/agent-v2/catalog': 'Read owned datasets, eligible models, documents and saved templates for Aegis Assistant.',
+    'POST /api/agent-v2/plans': 'Plan a general or document question, or propose upload/extraction tools. Planning does not authorize document execution.',
+    'GET /api/agent-v2/plans/{id}': 'Read an owned assistant plan, its saved conversation and the current tool progress.',
+    'GET /api/agent-v2/plans/{id}/events': 'Stream changes to an owned assistant plan using server-sent events.',
+    'POST /api/agent-v2/plans/{id}/reply': 'Stream an assistant answer for a plan without document tools, using its pinned model and document scope.',
+    'POST /api/agent-v2/plans/{id}/calls/{index}': 'Execute the next confirmed extraction or re-extraction tool. Earlier tool results and source documents are preserved.',
+    'POST /api/agent-v2/plans/{id}/calls/{index}/upload': 'Upload attached documents for the next confirmed upload tool, with explicit dataset scope and any required external-processing consent.',
     'GET /api/extractions': 'List structured extraction records and their review/model metadata.',
     'POST /api/extractions': 'Queue structured extraction for 1–20 ready documents from one dataset using a saved template and the mapped Extraction model. Returns the queued extraction with its job; poll before reading the final result.',
     'GET /api/extractions/{id}': 'Read an extraction, its current version, structured result, and saved source evidence when available.',
@@ -137,9 +145,10 @@ def install(app, auth):
             if route.path.endswith('/reset'):
                 properties.update(password={'type': 'string', 'minLength': 12, 'maxLength': 200},
                                   confirmation={'type': 'string', 'description': 'Must match password.'})
+            required = ['password', 'confirmation'] if route.path.endswith('/reset') else []
             route.openapi_extra = {'requestBody': {'required': True, 'content': {
                 'application/json': {'schema': {'type': 'object', 'properties': properties,
-                                               'required': list(properties)}}}}}
+                                               'required': required}}}}}
     app.openapi_schema = None
 
 
