@@ -5,6 +5,7 @@ from .core import Session, Record, Job, store, settings, uid, init, document_loc
 from . import core, dataset_models as routing
 from . import providers, workflow
 from .json_documents import json_document_text
+from .relational import audit_as
 
 MAX_ATTEMPTS=3
 _last_reconcile=0.0
@@ -16,7 +17,24 @@ def claim_query(now, job_id=None, dialect='sqlite'):
     # UPDATE below still grants exactly one lease when workers race for a row.
     return query if dialect=='oracle' else query.with_for_update(skip_locked=True)
 
+@audit_as('worker')
+def reconcile_dependencies():
+    # Jobs waiting for indexing survive API/worker restarts in SQL.
+    with Session.begin() as session:
+        for job in session.scalars(select(Job).where(Job.status=='blocked',Job.kind=='extract')):
+            target=session.get(Record,job.target_id)
+            if not target:job.status='cancelled';continue
+            data=store.json(target.ref)
+            documents=[session.get(Record,id) for id in data['document_ids']]
+            if any(not d or d.status in ('failed','deleting') for d in documents):
+                job.status='failed';job.error='Source indexing failed. Correct/retry the source job, then retry this extraction.'
+                target.status='failed';target.error=job.error;workflow.fail(job.id,job.error)
+            elif all(d.status=='ready' for d in documents):
+                job.status='queued';target.status='queued';workflow.transition(job.id,'prepare','queued')
+
+@audit_as('worker')
 def claim(job_id=None):
+    reconcile_dependencies()
     now=time.time();token=uid()
     with Session.begin() as s:
         for expired in s.scalars(select(Job).where(Job.status=='running',Job.lease_until<now,Job.attempts>=MAX_ATTEMPTS)):
@@ -30,6 +48,7 @@ def claim(job_id=None):
         if result.rowcount!=1:return None
         return candidate.id,token
 
+@audit_as('worker')
 def checkpoint(jid,token,progress):
     with Session.begin() as s:
         j=s.get(Job,jid)
@@ -38,7 +57,7 @@ def checkpoint(jid,token,progress):
         if not r or r.status=='deleting':raise InterruptedError('Target deleted')
         j.progress=progress;j.lease_until=time.time()+900;j.updated_at=time.time()
 
-def parse_document(name,raw):
+def parse_document(name,raw,*,ocr_enabled=True,progress=None,cache_id=None):
     ext=name.rsplit('.',1)[-1].lower()
     if ext=='txt':return [{'page':1,'text':raw.decode('utf-8-sig')}]
     if ext=='json':return [{'page':1,'text':json_document_text(raw)}]
@@ -49,10 +68,36 @@ def parse_document(name,raw):
         if len(reader.pages)>1000:raise ValueError('PDF exceeds 1000 page limit')
         pages=[];total=0
         for i,p in enumerate(reader.pages):
-            text=p.extract_text() or '';total+=len(text)
+            text=p.extract_text() or ''
+            # Image XObjects include scans even on pages with a selectable header.
+            # Sparse text may also be a vector outline scan; try page OCR there.
+            resources=p.get('/Resources',{})
+            if hasattr(resources,'get_object'):resources=resources.get_object()
+            objects=resources.get('/XObject',{})
+            if hasattr(objects,'get_object'):objects=objects.get_object()
+            def contains_image(objects,depth=0):
+                if depth>8:raise ValueError('PDF image nesting exceeds the processing limit')
+                for obj in objects.values():
+                    obj=obj.get_object()
+                    if obj.get('/Subtype')=='/Image':return True
+                    if obj.get('/Subtype')=='/Form':
+                        nested_resources=obj.get('/Resources',{})
+                        if hasattr(nested_resources,'get_object'):nested_resources=nested_resources.get_object()
+                        nested=nested_resources.get('/XObject',{})
+                        if hasattr(nested,'get_object'):nested=nested.get_object()
+                        if contains_image(nested,depth+1):return True
+                return False
+            visual=contains_image(objects) or bool(p.images.keys()) or len(text.strip())<20 or '\ufffd' in text
+            value={'text':text,'text_origin':'native'}
+            if visual and ocr_enabled:
+                from . import ocr
+                value=ocr.read_page(raw,i,text,progress=progress,cache_id=cache_id)
+                text=value['text']
+            elif visual:value['ocr_pending']=True
+            total+=len(text)
             if total>5000000:raise ValueError('Document exceeds 5 million character text limit')
-            pages.append({'page':i+1,'text':text})
-        if sum(len(p['text'].strip()) for p in pages)<20:raise ValueError('No extractable text. Scanned PDFs require OCR, which is not supported in this release.')
+            pages.append({'page':i+1,**value})
+        if ocr_enabled and not any(p['text'].strip() for p in pages):raise ValueError('No readable text was found after OCR. Upload a clearer scan or searchable PDF.')
         return pages
     if ext=='docx':
         from docx import Document
@@ -66,8 +111,38 @@ def parse_document(name,raw):
         doc=Document(io.BytesIO(raw));lines=[p.text for p in doc.paragraphs]
         lines += [' | '.join(c.text for c in row.cells) for t in doc.tables for row in t.rows]
         text='\n'.join(lines)
+        # DOCX image pagination cannot be inferred. Preserve the native text and
+        # include every embedded raster image with an explicit image reference.
+        if ocr_enabled:
+            from . import ocr
+            image_results=[]
+            visible_images={}
+            for part in doc.part.package.parts:
+                # Package thumbnails and orphan media are not displayed content.
+                if not str(part.partname).startswith('/word/') or not hasattr(part,'_element'):continue
+                for relation_id in part._element.xpath('//@r:embed | //@r:id | //@r:link'):
+                    relation=part.rels.get(relation_id)
+                    if not relation:continue
+                    if any(kind in relation.reltype for kind in ('/chart','/diagram','/oleObject')):
+                        raise ValueError('DOCX contains a chart, diagram or embedded object. Export as PDF so its visual content can be read accurately.')
+                    if not relation.reltype.endswith('/image'):continue
+                    if relation.is_external:raise ValueError('DOCX has linked external images. Embed them or export as PDF; external image URLs are not fetched.')
+                    visible_images[str(relation.target_part.partname)]=relation.target_part
+            for n,part in enumerate(visible_images.values()):
+                if part.content_type not in ('image/png','image/jpeg','image/bmp','image/tiff'):
+                    raise ValueError('DOCX contains an unsupported image format. Export as PDF to OCR all visual content.')
+                from PIL import Image
+                image=Image.open(io.BytesIO(part.blob))
+                if image.width*image.height>16000000:raise ValueError('DOCX image exceeds OCR pixel limit. Export as a smaller PDF.')
+                image.load()
+                if image.width<32 or image.height<32:continue
+                out=io.BytesIO();image.convert('RGB').save(out,format='PNG')
+                if progress:progress(n+1)
+                result,meta=ocr.transcribe(out.getvalue(),ocr.available())
+                image_results.append(meta|{'image':str(part.partname),'page':None})
+                text+='\n[Embedded image '+str(part.partname)+'; page unknown]\n'+result
         if len(text)>5000000:raise ValueError('Document exceeds 5 million character text limit')
-        return [{'page':None,'text':text}]
+        return [{'page':None,'text':text,**({'text_origin':'native+ocr','ocr':{'model':ocr.config()['model'],'images':image_results,'verified':False,'notice':'DOCX image transcription; page location unavailable.'}} if ocr_enabled and image_results else {})}]
     raise ValueError('Unsupported document format')
 
 def chunk_pages(did,pages,size,overlap):
@@ -79,7 +154,7 @@ def chunk_pages(did,pages,size,overlap):
             content=text[start:start+size]
             if not content.strip():continue
             ident=str(uuid.uuid5(uuid.NAMESPACE_URL,f'{did}:{page["page"]}:{start}:{providers.fingerprint()}:{content}'))
-            chunks.append({'id':ident,'document_id':did,'page':page['page'],'offset':start,'text':content})
+            chunks.append({'id':ident,'document_id':did,'page':page['page'],'offset':start,'text':content,**{k:page[k] for k in ('source_key','source_filename','source_page','text_origin','ocr') if k in page}})
     if settings()['embedding_provider']=='sentence_transformers' and settings()['search_provider']!='oci':
         model=providers.local_model('sentence-transformers/all-MiniLM-L6-v2');tokenizer=model.tokenizer;limit=model.max_seq_length-2;safe=[]
         for chunk in chunks:
@@ -99,6 +174,7 @@ def chunk_pages(did,pages,size,overlap):
         chunks=safe
     return chunks
 
+@audit_as('worker')
 def process(jid,token):
     payload=store.json('jobs/'+jid+'.json');snapshot=payload.get('execution')
     if not snapshot:raise ValueError('Legacy job has no model snapshot. Configure its dataset and submit a new indexing or extraction job.')
@@ -130,10 +206,21 @@ def _process(jid,token,snapshot):
             chunks=store.json('documents/'+did+'/chunks.json')['chunks']
         else:
             workflow.transition(jid,'extract','running')
-            pages=parse_document(name,store.get(ref));chunks=chunk_pages(did,pages,cfg['chunk_size'],cfg['chunk_overlap'])
+            from . import merged_documents
+            merged=merged_documents.manifest(did)
+            def ocr_progress(page):
+                checkpoint(jid,token,15)
+                state=workflow.read(jid)
+                state['stages']['extract'].update(detail='Reading/OCR page '+str(page),ocr_page=page)
+                store.put_json('jobs/'+jid+'/workflow.json',state)
+            if merged and (merged.get('ocr_pending') or any(p.get('ocr') for p in merged.get('pages',[]))):
+                pages=merged_documents.read_sources(did,merged,progress=ocr_progress)
+            else:pages=merged['pages'] if merged else parse_document(name,store.get(ref),progress=ocr_progress,cache_id=did)
+            chunks=chunk_pages(did,pages,cfg['chunk_size'],cfg['chunk_overlap'])
         if not chunks:raise ValueError('Document has no usable text')
         if len(chunks)>5000:raise ValueError('Document exceeds 5000 chunk processing limit')
-        store.put_json('documents/'+did+'/parsed.json',{'pages':pages})
+        from . import ocr
+        store.put_json('documents/'+did+'/parsed.json',{'pages':pages,'ocr':ocr.summary(pages)})
         store.put_json('documents/'+did+'/chunks.json',{'chunks':chunks,'fingerprint':providers.fingerprint(),'chunk_size':cfg['chunk_size'],'chunk_overlap':cfg['chunk_overlap']})
         workflow.transition(jid,'extract','completed')
         workflow.transition(jid,'index','running')
@@ -170,22 +257,22 @@ def _process(jid,token,snapshot):
         with Session() as s:
             for doc_id in data['document_ids']:
                 d=s.get(Record,doc_id)
-                if not d or d.owner!=owner or d.status!='ready' or d.parent_id!=snapshot['dataset_id']:raise ValueError('An extraction document is unavailable, outside the dataset, or not ready')
+                from . import dataset_access
+                if not d or not dataset_access.allowed(d,owner,s) or d.status!='ready' or d.parent_id!=snapshot['dataset_id']:raise ValueError('An extraction document is unavailable, outside the dataset, or not ready')
                 if not routing.index_matches(d,snapshot):raise ValueError('Dataset index changed since extraction was submitted; run extraction again.')
                 for c in store.json('documents/'+doc_id+'/chunks.json')['chunks']:sources.append({'document_id':doc_id,'document_name':d.name,**c})
-        text='\n\n'.join(f'Document: {c["document_name"]}; chunk {c["id"]}; page {c["page"]}\n{c["text"]}' for c in sources)
-        if len(text)>200000:raise ValueError('Extraction exceeds 200,000 character context limit; choose fewer documents')
-        checkpoint(jid,token,20)
         workflow.transition(jid,'prepare','completed')
-        workflow.transition(jid,'generate','running')
-        result,evidence=providers.extract_with_evidence(text,data['schema'],sources)
-        workflow.transition(jid,'generate','completed')
-        workflow.transition(jid,'validate','running')
-        from jsonschema import validate
-        validate(result,data['schema']);checkpoint(jid,token,90)
-        data.update(result=result,evidence=evidence,evidence_notice='Review all values. Evidence contains only validated verbatim source quotes; fields without evidence are unverified.',sources=[{'document_id':c['document_id'],'document_name':c['document_name'],'chunk_id':c['id'],'page':c['page'],'excerpt':c['text'][:1000]} for c in sources],review_status='unreviewed',completed_at=time.time(),mock=cfg['model_provider']=='mock')
+        from . import extractor_agent
+        with Session() as session:
+            extraction_record=session.get(Record,did)
+            documents=[session.get(Record,doc_id) for doc_id in data['document_ids']]
+        data=extractor_agent.run(jid,extraction_record,data,snapshot,documents,sources,
+            lambda:checkpoint(jid,token,20))
+        result=data['result'];evidence=data['evidence']
+        ocr_sources=[{'document_id':c['document_id'],'page':c['page'],'source_filename':c.get('source_filename',c['document_name']),'model':c['ocr']['model']} for c in sources if c.get('ocr')]
+        ocr_sources=list({(c['document_id'],c['page']):c for c in ocr_sources}.values())
+        data.update(result=result,evidence=evidence,ocr_sources=ocr_sources,evidence_notice='Review all values. Evidence contains only validated verbatim source quotes; fields without evidence are unverified.'+(' OCR was used: matching a transcription quote does not verify its accuracy against the original image. Check names, numbers and tables.' if ocr_sources else ''),sources=[{'document_id':c['document_id'],'document_name':c['document_name'],'chunk_id':c['id'],'page':c['page'],'excerpt':c['text'][:1000],**{k:c[k] for k in ('source_key','source_filename','source_page','text_origin') if k in c}} for c in sources],review_status='unreviewed',completed_at=time.time(),mock=cfg['model_provider']=='mock')
         store.put_json(ref,data)
-        workflow.transition(jid,'validate','completed')
         workflow.transition(jid,'ready','completed')
     else:raise ValueError('Unknown job type')
     with Session.begin() as s:
@@ -195,6 +282,7 @@ def _process(jid,token,snapshot):
         if r:r.status='ready';r.error='';r.updated_at=time.time()
         j.status='completed';j.progress=100;j.error='';j.updated_at=time.time();j.lease_until=0
 
+@audit_as('worker')
 def run_once():
     from .queue_transport import get_transport
     global _last_reconcile,_last_cleanup
@@ -206,6 +294,9 @@ def run_once():
         purge_expired()
     if now-_last_reconcile>=30:
         _last_reconcile=now;claimed=claim()
+        # Confirmed Assistant chains continue even when the browser closes.
+        from .agent_workspace import advance_workflows
+        advance_workflows()
     if not claimed:
         delivery=transport.receive(timeout=0)
         claimed=claim(delivery.job_id) if delivery else None
@@ -217,6 +308,7 @@ def run_once():
     if not claimed:return False
     jid,token=claimed
     stop=threading.Event()
+    @audit_as('worker')
     def heartbeat():
         while not stop.wait(20):
             try:
@@ -243,6 +335,10 @@ def run_once():
         workflow.fail(jid,message)
     finally:
         stop.set();thread.join(timeout=1)
+        with Session() as session:finished=session.get(Job,jid)
+        if finished and finished.status in ('completed','failed','cancelled'):
+            from .agent_workspace import advance_workflows
+            advance_workflows(job_id=jid)
         if delivery and delivery.job_id==jid:
             with Session() as session:finished=session.get(Job,jid)
             if finished:transport.ack_terminal(delivery,finished.status)

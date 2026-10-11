@@ -1,4 +1,12 @@
 type Template={id:string;name:string;parent_id?:string|null;dataset_id?:string|null};
+export function rememberAssistantDataset(storage:Pick<Storage,'setItem'>,username:string,datasetId:string){
+ storage.setItem(`aegis-agent-v2:${username}-dataset`,datasetId);
+}
+export function assistantDatasetPreference(storage:Pick<Storage,'getItem'>,username:string,datasets:{id:string}[],restoredDataset:string){
+ const preferred=storage.getItem(`aegis-agent-v2:${username}-dataset`);
+ if(preferred!==null&&(preferred===''||datasets.some(d=>d.id===preferred)))return preferred;
+ return datasets.some(d=>d.id===restoredDataset)?restoredDataset:'';
+}
 export function promptSelections(raw:string|null):Record<string,string>{
  try{const parsed=raw?JSON.parse(raw):{};if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return {};return Object.fromEntries(Object.entries(parsed).filter(([,id])=>typeof id==='string')) as Record<string,string>;}catch{return {};}
 }

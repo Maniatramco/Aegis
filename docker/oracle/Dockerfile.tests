@@ -4,7 +4,7 @@ COPY backend/requirements.lock backend/requirements-oracle.txt ./
 RUN pip install --no-cache-dir -r requirements.lock -r requirements-oracle.txt pytest==9.1.1
 COPY backend/app ./backend/app
 COPY backend/tests ./backend/tests
-COPY scripts/setup_oracle.py scripts/oracle_check.py scripts/oracle_model_check.py ./scripts/
+COPY scripts/setup_oracle.py scripts/oracle_check.py scripts/oracle_model_check.py scripts/reset_admin_password.py scripts/migrate_storage.py ./scripts/
 COPY .env.oracle.example ./
 ENV PYTHONPATH=/app/backend PYTHONUNBUFFERED=1
 CMD ["python", "scripts/oracle_check.py"]

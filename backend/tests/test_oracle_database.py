@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, delete, select
 from sqlalchemy.dialects import oracle, postgresql, sqlite
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import CreateTable
-from app import core, main, worker
+from app import core, main, worker, relational
 from app.database import database_url, engine_options, StoredString
 from app.provision_account import create_account
 
@@ -88,7 +88,8 @@ def test_colleague_account_logs_in_and_duplicate_never_changes_password(system, 
     assert login.status_code == 200
     system.api.headers['X-CSRF-Token'] = login.json()['csrf_token']
     d = system.api.post('/api/datasets', json={'name': 'Colleague data'})
-    assert d.status_code == 200
+    assert d.status_code == 403  # Dataset configuration is administrator-managed.
+    assert system.api.get('/api/datasets').json() == []
     with pytest.raises(ValueError, match='already exists'):
         create_account('colleague', 'Replacement-password-123')
     bad = system.api.post('/api/auth/login', json={'username': 'colleague', 'password': 'Replacement-password-123'})
@@ -171,7 +172,9 @@ def test_live_oracle_login_upload_extract_review_and_second_worker(tmp_path, mon
                 pytest.skip('Use an empty Oracle test schema, separate from the application schema.')
         provision_account.create_account(name, 'Disposable-test-password-123')
         with session() as db:
-            owner = db.scalar(select(core.User).where(core.User.username == name)).id
+            account = db.scalar(select(core.User).where(core.User.username == name))
+            owner = account.id
+            assert account.created_via == 'operator' and account.created_by is None
         with TestClient(main.app) as client:
             login = client.post('/api/auth/login', json={'username': name, 'password': 'Disposable-test-password-123'})
             assert login.status_code == 200
@@ -193,6 +196,20 @@ def test_live_oracle_login_upload_extract_review_and_second_worker(tmp_path, mon
             saved = client.patch(url, json={'version': 1, 'result': {'owner': 'Reviewed Alice'}})
             assert saved.status_code == 200 and saved.json()['version'] == 2
             assert client.get(url + '/export?format=json').json()['result']['owner'] == 'Reviewed Alice'
+            with session() as db:
+                mappings = db.scalars(select(relational.DatasetModel).where(
+                    relational.DatasetModel.dataset_id == d['id'])).all()
+                assert {m.category for m in mappings} == {'chat', 'extraction', 'embedding'}
+                assert all(m.is_default and m.created_by == owner for m in mappings)
+                ext = db.get(relational.Extraction, result.json()['id'])
+                assert ext.document_id == doc['id'] and ext.prompt_id == t['id']
+                assert ext.filename == doc['name']
+                assert ext.status == 'ready' and ext.updated_by == owner and ext.updated_via == 'api'
+                job = db.scalar(select(core.Job).where(core.Job.extract_id == ext.extract_id))
+                assert job.status == 'completed' and job.updated_via == 'worker'
+                review = db.scalar(select(relational.Review).where(relational.Review.extract_id == ext.extract_id))
+                assert review.extraction_version == 1 and review.review_version == 2
+                assert review.created_by == owner
             c = conversation(s, d, [doc['id']])
             assert client.post('/api/conversations/' + c['id'] + '/messages', json={'text': 'Who is the owner?', 'allow_external': True}).status_code == 200
             assert client.post('/api/auth/logout').status_code == 200

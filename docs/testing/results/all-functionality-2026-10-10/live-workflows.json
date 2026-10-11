@@ -1,0 +1,31 @@
+{
+  "phase": "workflows",
+  "steps": [
+    {
+      "name": "Real login and session",
+      "passed": true,
+      "seconds": 2.73
+    },
+    {
+      "name": "Malformed prompt validation, valid save, filename identity and update receipt",
+      "passed": true,
+      "seconds": 56.63
+    },
+    {
+      "name": "Assistant drag/drop attachment handoff, merge choice, completed two-record extraction",
+      "passed": true,
+      "seconds": 60.58
+    },
+    {
+      "name": "Review save/versioning, dirty guard, exports and re-extraction",
+      "passed": false,
+      "seconds": 0.9,
+      "error": "Re-extraction lost version/review state."
+    }
+  ],
+  "errors": [],
+  "started_at": "2026-10-10T16:24:37.023Z",
+  "passed": false,
+  "failure": "Re-extraction lost version/review state.",
+  "completed_at": "2026-10-10T16:26:41.551Z"
+}

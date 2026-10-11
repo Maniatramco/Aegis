@@ -44,6 +44,24 @@ test('syntax errors give correction guidance without exposing the file contents'
 });
 
 const {promptSelections,restoreSavedPrompt,rememberSavedPrompt}=load(path.resolve(__dirname,'../app/agent-prompt-selection.ts'));
+const {rememberAssistantDataset,assistantDatasetPreference}=load(path.resolve(__dirname,'../app/agent-prompt-selection.ts'));
+
+test('new workspace dataset takes precedence over old Assistant history and prompt selection',()=>{
+ const values=new Map();const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
+ rememberAssistantDataset(storage,'alice','old');
+ rememberSavedPrompt(storage,'prompts','old','old-prompt');
+ rememberAssistantDataset(storage,'alice','new');
+ const datasets=[{id:'old'},{id:'new'}];
+ const selected=assistantDatasetPreference(storage,'alice',datasets,'old');
+ assert.equal(selected,'new');
+ assert.equal(restoreSavedPrompt(storage.getItem('prompts'),[{id:'old-prompt',name:'sample_resume.json',parent_id:'old'}],selected),null);
+ rememberAssistantDataset(storage,'alice','');
+ assert.equal(assistantDatasetPreference(storage,'alice',datasets,'old'),'');
+ assert.equal(assistantDatasetPreference(storage,'bob',datasets,'old'),'old');
+ rememberAssistantDataset(storage,'alice','deleted');
+ assert.equal(assistantDatasetPreference(storage,'alice',datasets,'old'),'old');
+ assert.equal(assistantDatasetPreference(storage,'alice',datasets,'deleted'),'');
+});
 test('saved selection survives reload, remains scoped to its dataset, and can be cleared',()=>{
  const values=new Map();const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
  const templates=[{id:'a',name:'First',parent_id:'one'},{id:'b',name:'Second',parent_id:'two'}];

@@ -4,7 +4,7 @@ import time
 from fastapi import HTTPException, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from . import core, providers
+from . import core, providers, dataset_access as access
 
 CAPABILITIES={'chat','extraction','embedding'}
 ROUTING_DEFAULTS={'mappings':[], 'default_chat_model_id':None, 'default_extraction_model_id':None, 'embedding_model_id':None, 'index_generation':0}
@@ -12,12 +12,16 @@ MODEL_KEYS=('model_provider','model','model_connection','timeout','context_limit
 EMBED_KEYS=('embedding_provider','embedding_model','embedding_connection','embedding_context_limit','embedding_extra_parameters','search_provider','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_vector_store_id','timeout','chunk_size','chunk_overlap','top_k')
 
 def owned(id,owner,kind):
+    actor=access.request_actor.get()
+    if actor and core.is_administrator(actor) and kind in {'model','config_profile','knowledge_base','document','template','extraction'}:return access.get_record(id,actor,kind)
+    if actor==owner or core.is_administrator(owner):return access.get_record(id,owner,kind)
+    if access.request_actor.get() is None and kind not in {'model','config_profile'}:return access.get_record(id,owner,kind)
     with core.Session() as s:r=s.get(core.Record,id)
     if not r or r.owner!=owner or r.kind!=kind:raise HTTPException(404,'Not found')
     return r
 
 def rows(owner,kind):
-    with core.Session() as s:return list(s.scalars(select(core.Record).where(core.Record.owner==owner,core.Record.kind==kind).order_by(core.Record.created_at.desc())))
+    return access.rows(owner,kind)
 
 def write_version(record,data):
     version=record.version+1;ref=f'{record.kind}/{record.id}/v{version}.json'
@@ -52,10 +56,15 @@ def model_public(r):
     return core.representation(r)|data|{'provider':connection['protocol'] if connection else p,'connection_profile_version':snap['connection_profile_version'],'credential_configured':configured,'connection':copy.deepcopy(connection),'timeout':cfg.get('timeout',60),'context_limit':cfg.get('embedding_context_limit' if embedding else 'context_limit') or (8192 if embedding else 32768),'max_output_tokens':None if embedding else cfg.get('max_output_tokens') or 4096,'extra_parameters':copy.deepcopy(cfg.get('embedding_extra_parameters' if embedding else 'extra_parameters',{}))}
 
 def dataset_config(r):return core.store.json(r.ref)
+def mapped_model(dataset,id):
+    if not any(mapping['model_id']==id for mapping in dataset_config(dataset).get('mappings',[])):raise HTTPException(404,'Model is not mapped to this dataset.')
+    with core.Session() as session:model=session.get(core.Record,id)
+    if not model or model.kind!='model':raise HTTPException(404,'Mapped model not found.')
+    return model
 def routing_public(r):
     data=dataset_config(r);out=copy.deepcopy(ROUTING_DEFAULTS)|{k:data[k] for k in ROUTING_DEFAULTS if k in data};models=[]
     for mapping in out['mappings']:
-        try:models.append(model_public(owned(mapping['model_id'],r.owner,'model'))|{'mapping_enabled':mapping['enabled']})
+        try:models.append(model_public(mapped_model(r,mapping['model_id']))|{'mapping_enabled':mapping['enabled']})
         except HTTPException:continue
     selection=public_selection(data['embedding_snapshot']|{'dataset_id':r.id,'index_generation':out['index_generation']}) if data.get('embedding_snapshot') else None
     complete=all(out.get(key) and any(m['id']==out[key] and m.get('enabled',True) and m.get('mapping_enabled',True) and cap in m['capabilities'] for m in models) for cap,key in [('embedding','embedding_model_id'),('chat','default_chat_model_id'),('extraction','default_extraction_model_id')])
@@ -74,7 +83,7 @@ def resolve_model(r,capability,model_id=None):
     eligible=[]
     for mapping in mappings:
         if not mapping.get('enabled',True):continue
-        try:model=owned(mapping['model_id'],r.owner,'model')
+        try:model=mapped_model(r,mapping['model_id'])
         except HTTPException:continue
         data=model_data(model)
         if data.get('enabled',True) and capability in data['capabilities']:eligible.append(model)
@@ -83,7 +92,7 @@ def resolve_model(r,capability,model_id=None):
         selected=eligible[0].id
     model=next((m for m in eligible if m.id==selected),None)
     if not model:raise HTTPException(409,'Selected model is not an enabled, capable mapping for this dataset.')
-    data=model_data(model);profile=owned(data['connection_profile_id'],r.owner,'config_profile');snap=profile_snapshot(profile,data.get('connection_profile_version'))
+    data=model_data(model);profile=owned(data['connection_profile_id'],model.owner,'config_profile');snap=profile_snapshot(profile,data.get('connection_profile_version'))
     snap.update(model_id=model.id,model_name=model.name,model_version=model.version,provider_model=data['provider_model'],capability=capability)
     if capability=='embedding':
         snap['settings']['embedding_model']=data['provider_model']
@@ -150,10 +159,15 @@ def index_matches(d,snapshot):
     return index.get('dataset_id')==snapshot['dataset_id'] and index.get('index_generation')==snapshot['index_generation'] and index.get('fingerprint')==providers.fingerprint(snapshot.get('embedding_execution',snapshot)['settings'])
 
 def require_indexes(docs,snapshot):
-    if any(d.status=='ready' and not index_matches(d,snapshot) for d in docs):raise HTTPException(409,'Dataset index configuration changed. Reindex the selected documents before retrieval or extraction.')
+    if any(d.status=='ready' and not index_matches(d,snapshot) for d in docs):raise HTTPException(409,'Selected documents have outdated indexes after an embedding configuration or indexing update. Reindex them before retrieval or extraction.')
 
 def document_public(d,snapshots=None):
     result=core.representation(d)|{'dataset_id':d.parent_id or None,'requires_reindex':True}
+    try:result['ocr']=core.store.json('documents/'+d.id+'/parsed.json').get('ocr')
+    except FileNotFoundError:pass
+    from . import merged_documents
+    merged=merged_documents.manifest(d.id)
+    if merged:result['merge']=merged_documents.public(merged)
     from .temporary_files import marker
     result.update(marker(d.id))
     if not d.parent_id:return result
@@ -275,6 +289,7 @@ def install_routes(app,auth,write_profile):
     def migrate(id:str,owner=Depends(auth)):
         with core.document_lock('dataset-'+id):
             r=owned(id,owner,'knowledge_base')
+            owner=r.owner
             if dataset_config(r).get('mappings'):raise HTTPException(409,'Dataset already has model mappings; update them explicitly.')
             profile=write_profile(owner,r.name+' imported connection');cfg=core.settings()
             generation=cfg.get('oci_model') if cfg['model_provider']=='oci' else cfg['model']

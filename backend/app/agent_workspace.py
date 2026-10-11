@@ -3,6 +3,8 @@ import asyncio
 import json
 import re
 import time
+import os
+import threading
 from fastapi import Depends, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -45,18 +47,27 @@ class PlanInput(StrictInput):
     dataset_id: str = ''
     document_ids: list[str] = Field(default_factory=list, max_length=20)
     template_id: str = ''
+    submitted_prompt_id: str = ''
     allow_external: bool = False
     earlier_request: str = Field(default='', max_length=12000)
     completed_tools: list[Literal['upload', 'extract', 'reextract']] = Field(default_factory=list, max_length=5)
     attached_filenames: list[str] = Field(default_factory=list, max_length=20)
     conversation_id: str = ''
     answer_scope: Literal['auto','documents'] = 'auto'
+    stream_answers: bool = False
 
 class ExecuteInput(StrictInput):
     dataset_id: str = ''
     document_ids: list[str] = Field(default_factory=list, max_length=20)
     template_id: str = ''
     allow_external: bool = False
+    confirmed: bool = False
+    display_name: str = Field(default='',max_length=200)
+    extraction_mode: Literal['merge', 'independent'] | None = None
+    merge_strategy: Literal['records', 'single'] = 'records'
+
+class RecoveryInput(StrictInput):
+    action: Literal['retry', 'continue_ready', 'cancel']
     confirmed: bool = False
 
 class ReplyInput(StrictInput):
@@ -108,6 +119,15 @@ def knowledge_lookup(text):
     lookup=re.search(r'\b(?:find(?:\s+out)?|search|look\s+(?:up|for)|check)\b.*\b(?:information|info|documents?|files?|references?|anything|knowledge\s*base|dataset)\b|\b(?:is\s+there|are\s+there|any|have|has)\b.*\b(?:information|info|documents?|files?|references?)\b|\b(?:knowledge\s*base|dataset|(?:my|our|these|selected|uploaded)\s+documents?)\b',text,re.I)
     return bool(lookup and not action)
 
+def simple_extraction_request(text):
+    """Only unambiguous commands bypass model planning, never execution checks."""
+    text=text.strip().rstrip('.!?').casefold()
+    text=re.sub(r'^(?:please|pls|can you|could you|would you)\s+','',text)
+    match=re.fullmatch(r'(?:upload\s+(?:and|&|then)\s+)?(?:run\s+)?(extract|extraction|re-?extract|re-?extraction)(?:\s+(?:it|this|these|(?:(?:the|my|this|these)\s+)?(?:(?:attached|selected|uploaded)\s+)?(?:documents?|files?|resumes?|profiles?|invoices?|pdfs?)))?',text)
+    if not match:return None
+    if text.startswith('upload ') and match[1].startswith('re'):return None
+    return 'reextract' if match[1].startswith('re') else 'extract'
+
 def single_upload_request(text):
     """Narrow imperative requests only; questions/mixed actions remain separate."""
     text=text.strip().rstrip('.!?').casefold()
@@ -117,21 +137,39 @@ def single_upload_request(text):
 def upload_guidance_question(text):
     return bool(re.fullmatch(r'(?:can i|can we|how (?:do|can|should) (?:i|we)|do you support)\s+(?:upload(?:ing)?|import(?:ing)?|attach(?:ing)?|save|saving)\s+(?:a |an |the |my )?(?:json(?:\s+files?)?|files?|documents?|prompt(?:\s+template)?(?:\s+files?)?)[?.!\s]*',text.strip(),re.I))
 
+def prompt_save_request(text):
+    """Recognize simple prompt-save commands, without swallowing other actions."""
+    text=text.strip().rstrip('.!?').casefold()
+    text=re.sub(r'^(?:please|pls|can you|could you|would you)\s+','',text)
+    text=re.sub(r'\bprmpt\b','prompt',text)
+    return bool(re.fullmatch(r'(?:update|replace|overwrite|save|upload|import)(?:\s+(?:it|this|these|(?:(?:the|my|this|these)\s+)?(?:attached\s+)?(?:json\s+)?(?:prompt(?:\s+template)?|template|file)(?:\s+file)?))?',text))
+
 def application_context(data,owner):
     dataset=routing.owned(data['dataset_id'],owner,'knowledge_base') if data.get('dataset_id') else None
     template=routing.owned(data['template_id'],owner,'template') if data.get('template_id') else None
     if template and template.parent_id and (not dataset or template.parent_id!=dataset.id):
         raise HTTPException(422,'Choose a prompt template from the selected dataset.')
+    submitted=None
+    if data.get('submitted_prompt_id'):
+        if not template or data['submitted_prompt_id']!=template.id:
+            raise HTTPException(422,'The submitted prompt must match the selected saved template.')
+        submitted={'name':core.store.json(template.ref).get('source_filename') or template.name,'version':template.version}
     ready=[r for r in routing.rows(owner,'document') if dataset and r.parent_id==dataset.id and r.status=='ready']
     saved_prompts=[r for r in routing.rows(owner,'template') if not dataset or not r.parent_id or r.parent_id==dataset.id]
     return {'selected_dataset':dataset.name if dataset else None,'ready_document_count':len(ready),
         'saved_prompt_count':len(saved_prompts),
         'selected_prompt':{'name':core.store.json(template.ref).get('source_filename') or template.name,'saved':True} if template else None,
+        'submitted_prompt':submitted,
         'attached_documents':data.get('attached_filenames',[]),'document_filter_count':len(data.get('document_ids',[])),
         'tool_results':[{'tool':c['tool'],'status':c['status']} for c in data.get('calls',[])]}
 
 def application_reply(text,context):
     prompt=context['selected_prompt']
+    if context.get('submitted_prompt') and prompt_save_request(text):
+        saved=context['submitted_prompt']
+        return f'Saved prompt template "{saved["name"]}"'+(f' in "{context["selected_dataset"]}"' if context['selected_dataset'] else '')+f' — version {saved["version"]}. It is selected for extraction and available in Prompt templates. Earlier versions are retained.'
+    if prompt and not context['attached_documents'] and prompt_save_request(text) and re.search(r'\b(?:update|replace|overwrite)\b',text,re.I):
+        return f'To update "{prompt["name"]}", attach the revised JSON, choose Prompt template, review it and press Send. This request has not saved a new version.'
     if re.match(r'^(?:is|are|was|has|have|did|do|what|which)\b',text.strip(),re.I) and re.search(r'\b(?:prompt|template)\b',text,re.I) and re.search(r'\b(?:saved|selected|uploaded|imported)\b',text,re.I):
         if prompt:return f'Your prompt template "{prompt["name"]}" is saved and selected for extraction.'
         count=context.get('saved_prompt_count',0)
@@ -142,15 +180,16 @@ def application_reply(text,context):
     named_prompt=bool(re.search(r'\b(?:prompt|template)\b',text,re.I))
     prompt_reference=named_prompt or (not context['attached_documents'] and bool(re.search(r'\b(?:it|this)\b',text,re.I)))
     if prompt and prompt_reference and single_upload_request(text):
-        return f'Your prompt template "{prompt["name"]}" is already saved and selected for extraction'+(f' in "{context["selected_dataset"]}".' if context['selected_dataset'] else '.')+' Attach documents to upload them, or ask me to extract selected dataset documents with this prompt. I will show the workflow for you to confirm.'
+        return f'Your prompt template "{prompt["name"]}" is saved'+(f' in "{context["selected_dataset"]}"' if context['selected_dataset'] else '')+' and selected for extraction. Attach documents to upload them, or ask me to extract selected dataset documents with this prompt. I will show the workflow for you to confirm.'
     if upload_guidance_question(text) or (named_prompt and single_upload_request(text)):
         return 'Yes. Attach or drop a file into the chat box: PDF, DOCX and TXT go directly into the document upload flow. For JSON, choose Prompt template or Document; prompts are validated and reviewed, then saved with Send, while document uploads wait for Confirm upload.'
     return ''
 
 def catalog(owner):
+    snapshots={}
     return {'datasets': [routing.dataset_public(r) for r in routing.rows(owner, 'knowledge_base')],
         'models': [routing.model_public(r) for r in routing.rows(owner, 'model')],
-        'documents': [core.representation(r) | {'parent_id': r.parent_id} for r in routing.rows(owner, 'document')],
+        'documents': [routing.document_public(r,snapshots) | {'parent_id': r.parent_id} for r in routing.rows(owner, 'document')],
         'templates': [core.representation(r) | {'parent_id': r.parent_id,'name':core.store.json(r.ref).get('source_filename') or r.name} for r in routing.rows(owner, 'template')]}
 
 def plan_public(record, main):
@@ -168,39 +207,188 @@ def plan_public(record, main):
         with core.Session() as session:
             for id in call.get('job_ids', []):
                 job = session.get(core.Job, id)
-                if not job or job.owner != record.owner: raise HTTPException(409, 'A workflow job is no longer available.')
+                from .dataset_access import job_allowed
+                if not job_allowed(job,record.owner,session): raise HTTPException(409, 'A workflow job is no longer available or dataset access was removed.')
                 jobs.append(main.job_repr(job))
         call['jobs'] = jobs
-        if any(j['status'] in ('failed', 'cancelled') for j in jobs):
+        # Keep polling until every job finishes; a failed item must not hide
+        # other documents that are still queued or generating.
+        entries = call.get('result', {}).get('extractions', [])
+        for entry in entries:
+            if entry.get('superseded'): continue
+            job = next((j for j in jobs if j['target_id'] == entry['extraction_id']), None)
+            if job:
+                entry.update(status=job['status'], error=job.get('error'))
+                state=main.extraction(entry['extraction_id'], record.owner)
+                if state.get('record_progress'):entry['record_progress']=state['record_progress']
+                if job['status'] == 'completed':
+                    result = main.extraction(entry['extraction_id'], record.owner)
+                    entry.update(data=result.get('result'), evidence=result.get('evidence', []), merge=result.get('merge'))
+        terminal = jobs and all(j['status'] in ('completed', 'failed', 'cancelled') for j in jobs)
+        if terminal and (call.get('submission_error') or any(j['status'] in ('failed', 'cancelled') for j in jobs)):
             call['status'] = 'failed'
-            call['error'] = next((j.get('error') or 'Processing was cancelled.' for j in jobs if j['status'] in ('failed', 'cancelled')), 'Processing failed.')
+            call['error'] = call.get('submission_error') or next((j.get('error') or 'Processing was cancelled.' for j in jobs if j['status'] in ('failed', 'cancelled')), 'Processing failed.')
+            data['auto_continue'] = False
         elif jobs and all(j['status'] == 'completed' for j in jobs):
             call['status'] = 'completed'; call['finished_at'] = time.time()
             if call.get('result', {}).get('extraction_id'):
                 result = main.extraction(call['result']['extraction_id'], record.owner)
                 call['result'].update(data=result.get('result'), evidence=result.get('evidence', []), message='Extraction completed. Open the result to review its fields and evidence.')
+    if data.get('auto_continue') and not data.get('superseded'):
+        index = next((i for i, c in enumerate(data['calls']) if c['status'] != 'completed'), -1)
+        if index >= 0:
+            call = data['calls'][index]
+            if call['status']=='pending' and call['tool'] in ('extract','reextract') and all(c['status']=='completed' for c in data['calls'][:index]):
+                try:
+                    submit_extractions(record, data, call, ExecuteInput(confirmed=True, allow_external=data.get('workflow_allow_external',False),display_name=data.get('display_name','')), record.owner, main)
+                except HTTPException as exc:
+                    call['error']=str(exc.detail); data['auto_continue']=False
     core.store.put_json(record.ref, data)
-    return {'id': record.id, **data}
+    return {'id': record.id, **{key:value for key,value in data.items() if key!='deferred_input'}}
+
+def advance_workflows(owner=None, job_id=None):
+    """Reconcile confirmed chains after jobs finish or a worker restarts."""
+    from sqlalchemy import select
+    from . import main
+    with core.Session() as session:
+        query=select(core.Record).where(core.Record.kind=='agent_plan')
+        if owner: query=query.where(core.Record.owner==owner)
+        records=list(session.scalars(query))
+    for record in records:
+        try:
+            data=core.store.json(record.ref)
+            if not data.get('auto_continue') or data.get('superseded') or all(c['status']=='completed' for c in data['calls']): continue
+            if job_id and not any(job_id in c.get('job_ids',[]) for c in data['calls']): continue
+            token=core.relational.actor_override.set(record.owner)
+            try:
+                with core.document_lock('agent-'+record.id): plan_public(record, main)
+            finally:core.relational.actor_override.reset(token)
+        except Exception as exc:
+            # A missing/deleted plan must not stop unrelated durable jobs.
+            import logging
+            logging.getLogger(__name__).warning('Assistant reconciliation failed for %s (%s)',record.id,type(exc).__name__)
 
 def require_call(record, index, main):
     data = plan_public(record, main)
+    if data.get('superseded'): raise HTTPException(409, 'This request has ended. Send a new request to continue.')
     if not 0 <= index < len(data['calls']): raise HTTPException(404, 'Tool call not found')
     if any(c['status'] != 'completed' for c in data['calls'][:index]): raise HTTPException(409, 'Wait for the preceding tools to complete.')
     call = data['calls'][index]
     if call['status'] in ('completed', 'waiting'): return data, call, False
     if call['status'] != 'pending': raise HTTPException(409, 'This tool already started. Check its result before submitting again.')
-    if time.time() - data['created_at'] > 3600: raise HTTPException(409, 'This plan expired. Send the request again to use current configuration.')
+    # Expire unstarted proposals. Accepted CPU/OCR work can take longer than an
+    # hour; later calls still validate ownership, live permissions and scope.
+    if time.time() - data['created_at'] > 3600 and not any(c.get('started_at') for c in data['calls']):
+        raise HTTPException(409, 'This plan expired. Send the request again to use current configuration.')
     return data, call, True
 
 def scope(data, body, owner):
     dataset_id = body.dataset_id or data['dataset_id']
     if not dataset_id: raise HTTPException(422, 'Choose a dataset for this tool.')
     dataset = routing.owned(dataset_id, owner, 'knowledge_base')
+    if data.get('runtime')=='langgraph' and data.get('conversation_id'):
+        conversation=routing.owned(data['conversation_id'],owner,'conversation')
+        saved=core.store.json(conversation.ref)
+        if saved.get('dataset_id') and saved['dataset_id']!=dataset.id:
+            raise HTTPException(409,'Start a new assistant conversation to run a workflow in another dataset.')
+        if not saved.get('dataset_id'):
+            with core.document_lock('agent-turn-'+conversation.id):
+                saved['dataset_id']=dataset.id;core.store.put_json(conversation.ref,saved)
+                with core.Session.begin() as session:
+                    row=session.get(core.Record,conversation.id);row.parent_id=dataset.id;row.updated_at=time.time()
+                    plan=session.get(core.Record,data['id']) if data.get('id') else None
+                    if plan:plan.parent_id=dataset.id
     # A chain consumes the exact references returned by its upload, not preselected old documents.
     uploaded = [id for call in data['calls'] for id in call.get('uploaded_document_ids', [])]
     if uploaded and dataset.id != data['dataset_id']: raise HTTPException(409, 'Uploaded documents belong to the dataset selected for this workflow.')
-    ids = uploaded or body.document_ids or data['document_ids']
+    ids = data.get('recovery_document_ids') or uploaded or body.document_ids or data['document_ids']
+    if data.get('recovery_document_ids') and body.document_ids:
+        if not set(body.document_ids) <= set(ids): raise HTTPException(422, 'Recovery can only use documents from this request.')
+        ids = body.document_ids
     return dataset, list(dict.fromkeys(ids))
+
+def submit_extractions(record, data, call, body, owner, main):
+    dataset, ids = scope(data, body, owner)
+    if not ids: raise HTTPException(422, 'Choose the document references to extract.')
+    template_id = body.template_id or data['template_id']
+    if not template_id: raise HTTPException(422, 'Choose a prompt template before extraction.')
+    mode = body.extraction_mode or data.get('extraction_mode')
+    if len(ids) > 1 and mode is None:
+        raise HTTPException(422, 'Choose Merge into one result or Extract independently before extracting multiple documents.')
+    mode = mode or 'merge'
+    # Validate the complete scope before submitting the first independent job.
+    _,docs=routing.documents_scope(owner, dataset.id, ids)
+    template=routing.owned(template_id, owner, 'template')
+    if template.parent_id and template.parent_id!=dataset.id:
+        raise HTTPException(400,'Choose a prompt template belonging to the selected dataset.')
+    snapshot=routing.execution_snapshot(dataset,'extraction')
+    main.external_check(body.allow_external,cfg=snapshot['settings'])
+    stale=[doc for doc in docs if doc.status=='ready' and not routing.index_matches(doc,snapshot)]
+    if stale:
+        embedding=snapshot['embedding_execution']
+        main.external_check(body.allow_external,True,embedding['settings'])
+        with core.Session() as session:
+            from sqlalchemy import select
+            if session.scalar(select(core.Job).where(core.Job.target_id.in_(ids),core.Job.status.in_(['queued','running','blocked']))):
+                raise HTTPException(409,'One of these documents is already processing. Wait before confirming extraction.')
+        if any(doc.status!='ready' for doc in docs):
+            raise HTTPException(409,'Documents must be ready before extraction')
+        # Confirmation covers the prerequisites for the selected extraction.
+        # Keep its entire scope: only stale documents need new index jobs.
+        first={'tool':'upload','title':'Reindex selected documents','status':'waiting','uploaded_document_ids':ids,
+               'document_ids':[doc.id for doc in stale],'job_ids':[],'jobs':[],'started_at':time.time(),
+               'result':{'documents':[{'id':doc.id,'name':doc.name} for doc in stale],
+                         'message':'Rebuilding outdated document indexes before extraction. Originals and earlier results are retained.'}}
+        data['calls'].insert(data['calls'].index(call),first)
+        call.pop('error',None);call.pop('submission_error',None)
+        data.update(dataset_id=dataset.id,document_ids=ids,template_id=template_id,extraction_mode=mode,
+                    merge_strategy=body.merge_strategy if body.extraction_mode else data.get('merge_strategy',body.merge_strategy),
+                    display_name=body.display_name or data.get('display_name',''),workflow_allow_external=body.allow_external,auto_continue=True)
+        core.store.put_json(record.ref,data)
+        try:
+            for doc in stale:
+                job=main.reindex(doc.id,main.Consent(allow_external=body.allow_external),owner)
+                first['job_ids'].append(job['id']);first['jobs'].append(job)
+                core.store.put_json(record.ref,data)
+        except HTTPException as exc:
+            first.update(status='waiting' if first['job_ids'] else 'failed',error=str(exc.detail),submission_error=str(exc.detail))
+            data['auto_continue']=False;core.store.put_json(record.ref,data);raise
+        except Exception as exc:
+            first.update(status='waiting' if first['job_ids'] else 'failed',submission_uncertain=True,
+                         error='Index submission status is uncertain. Check accepted work before retrying.')
+            data['auto_continue']=False;core.store.put_json(record.ref,data)
+            raise HTTPException(502,first['error']) from exc
+        return {'id':record.id,**data}
+    call['status'] = 'running'; call['started_at'] = time.time(); core.store.put_json(record.ref, data)
+    try:
+        # Both tools use the same extraction API. A rerun creates a new result,
+        # preserving earlier versions and reviewed edits rather than overwriting them.
+        previous = call.get('result', {}).get('extractions', [])
+        completed = {doc for entry in previous if entry.get('status') == 'completed' for doc in entry['document_ids']}
+        remaining = [doc for doc in ids if doc not in completed]
+        groups = [[doc] for doc in remaining] if mode == 'independent' else ([remaining] if remaining else [])
+        entries = [dict(entry, superseded=True) if entry.get('status') != 'completed' else entry for entry in previous]
+        call.update(result={'extractions': entries}, job_ids=[], jobs=[], document_ids=ids, template_id=template_id)
+        for group in groups:
+            strategy=body.merge_strategy if body.extraction_mode else data.get('merge_strategy',body.merge_strategy)
+            result = main.create_extraction(main.ExtractInput(dataset_id=dataset.id, document_ids=group, template_id=template_id, allow_external=body.allow_external,merge_records=mode=='merge' and strategy=='records',display_name=body.display_name or None,idempotency_key='agent-'+record.id+'-'+str(data['calls'].index(call))+'-'+str(call.get('submission_revision',0))+'-'+','.join(group)), owner)
+            names = [routing.owned(doc, owner, 'document').name for doc in group]
+            entries.append({'extraction_id': result['id'], 'document_ids': group, 'name': (result.get('merge') or {}).get('filename') or ' + '.join(names), 'merge':result.get('merge'), 'status': 'queued', 'model_selection': result['model_selection']})
+            call['job_ids'].append(result['job']['id']); call['jobs'].append(result['job'])
+            # Persist each accepted submission, including on a later failure.
+            core.store.put_json(record.ref, data)
+        if len(entries) == 1:
+            call['result'].update(extraction_id=entries[0]['extraction_id'], model_selection=entries[0]['model_selection'])
+        call.update(status='waiting' if groups else 'completed'); call.pop('error', None); call.pop('submission_error', None); call.pop('submission_uncertain', None)
+        data.update(dataset_id=dataset.id, document_ids=ids, template_id=template_id, extraction_mode=mode,merge_strategy=body.merge_strategy if body.extraction_mode else data.get('merge_strategy',body.merge_strategy))
+    except HTTPException as exc:
+        call.update(status='waiting' if call.get('job_ids') else 'pending', error=str(exc.detail), submission_error=str(exc.detail)); data['auto_continue']=False; core.store.put_json(record.ref, data); raise
+    except Exception as exc:
+        call.update(status='waiting' if call.get('job_ids') else 'failed', submission_uncertain=True, error='Submission status is uncertain. Check extraction history before starting a new request.', submission_error='Submission interrupted. Review accepted results before retrying the remaining documents.')
+        data['auto_continue']=False
+        core.store.put_json(record.ref, data); raise HTTPException(502, call['error']) from exc
+    core.store.put_json(record.ref, data)
+    return {'id': record.id, **data}
 
 def install(app, auth, main):
     @app.get('/api/agent-v2/catalog')
@@ -209,14 +397,46 @@ def install(app, auth, main):
     @app.post('/api/agent-v2/plans')
     def prepare(body: PlanInput, owner=Depends(auth)):
         if not body.text.strip(): raise HTTPException(422, 'Describe what you want the agent to do.')
-        items = catalog(owner)
         if body.dataset_id: routing.owned(body.dataset_id, owner, 'knowledge_base')
         if body.document_ids: routing.documents_scope(owner, body.dataset_id, body.document_ids)
         if body.template_id: routing.owned(body.template_id, owner, 'template')
         context=application_context(body.model_dump(),owner)
-        direct_reply=application_reply(body.text,context)
         snapshot = chat_snapshot(owner, body.planner_model_id)
         main.external_check(body.allow_external, cfg=snapshot['settings'])
+        if os.getenv('AEGIS_AGENT_ENGINE', 'langgraph') != 'legacy':
+            from . import agent_graph
+            if body.dataset_id:
+                snapshot = routing.execution_snapshot(routing.owned(body.dataset_id, owner, 'knowledge_base'), 'chat', body.planner_model_id)
+                main.external_check(body.allow_external, cfg=snapshot['settings'])
+            if body.stream_answers:
+                if body.conversation_id:main.conversation(body.conversation_id,owner)
+                data={'request':body.text,'explanation':'','answer_mode':'general','clarification':[],
+                    'dataset_id':body.dataset_id,'document_ids':body.document_ids,'template_id':body.template_id,
+                    'submitted_prompt_id':body.submitted_prompt_id,'attached_filenames':body.attached_filenames,
+                    'prompt_receipt':context.get('submitted_prompt'),
+                    'calls':[],'created_at':time.time(),'planner':{'id':snapshot['model_id'],'name':snapshot['model_name'],'version':snapshot['model_version']},
+                    'conversation_id':body.conversation_id,'runtime':'langgraph','phase':'queued','deferred_input':body.model_dump()}
+                record=routing.create('agent_plan',owner,'Assistant question',data,parent=body.dataset_id)
+                return {'id':record.id,**{key:value for key,value in data.items() if key!='deferred_input'}}
+            try:
+                outcome = agent_graph.run(owner, body, snapshot, main)
+            except providers.ProviderError as exc:
+                raise HTTPException(502, str(exc)) from exc
+            proposal = outcome['proposal'] or {}
+            data = {'request': body.text, 'explanation': outcome['message']['text'], 'answer_mode': 'general',
+                'clarification': [], 'dataset_id': body.dataset_id,
+                'document_ids': proposal.get('document_ids', body.document_ids),
+                'template_id': proposal.get('template_id', body.template_id), 'submitted_prompt_id': body.submitted_prompt_id,
+                'prompt_receipt':context.get('submitted_prompt'),
+                'attached_filenames': body.attached_filenames,
+                'calls': [dict(call, status='pending') for call in proposal.get('calls', [])],
+                'created_at': time.time(), 'planner': {'id': snapshot['model_id'], 'name': snapshot['model_name'], 'version': snapshot['model_version']},
+                'conversation_id': outcome['conversation_id'], 'reply_user_id': outcome['reply_user_id'],
+                'runtime': 'langgraph', 'phase': outcome['phase'], 'agent_duration_ms': outcome['duration_ms'], 'model_calls': outcome['model_calls']}
+            record = routing.create('agent_plan', owner, 'Assistant workflow' if data['calls'] else 'Assistant question', data, parent=body.dataset_id)
+            return {'id': record.id, **data}
+        items = catalog(owner)
+        direct_reply=application_reply(body.text,context)
         prior_questions=[]
         if body.conversation_id:
             previous=main.conversation(body.conversation_id,owner)
@@ -231,6 +451,11 @@ def install(app, auth, main):
             snapshot['settings']['max_output_tokens'] = min(1024, snapshot['settings'].get('max_output_tokens') or 4096)
             if direct_reply:proposal=Definition(explanation=direct_reply,answer_mode='general')
             elif single_upload_request(body.text):proposal=Definition(explanation='Attach the documents and choose a dataset, then confirm upload to store and index them.',answer_mode='documents',calls=[ToolCall(tool='upload',title='Upload documents')])
+            elif not body.earlier_request and not body.completed_tools and (tool:=simple_extraction_request(body.text)) and not (tool=='reextract' and body.attached_filenames):
+                calls=[ToolCall(tool=tool,title='Re-extract fields' if tool=='reextract' else 'Extract fields')]
+                if body.attached_filenames or re.search(r'\bupload\s+(?:and|then|&)\s+',body.text,re.I):
+                    calls.insert(0,ToolCall(tool='upload',title='Upload documents'))
+                proposal=Definition(explanation='Review the selected documents, dataset and prompt template, then confirm each action.',answer_mode='documents',calls=calls)
             elif knowledge_lookup(body.text):proposal=Definition(explanation='Search the selected knowledge base for relevant document evidence.',answer_mode='documents')
             elif providers.capability_question(body.text):proposal=Definition(explanation=providers.AGENT_CAPABILITIES,answer_mode='general')
             else:
@@ -256,7 +481,7 @@ def install(app, auth, main):
             raise HTTPException(422, 'Re-extract existing documents in a separate request from uploading new ones.')
         if sum(c.tool == 'upload' for c in proposal.calls) > 1: raise HTTPException(422, 'Use one upload batch per request.')
         if any(c.tool == 'upload' for c in proposal.calls[1:]): raise HTTPException(422, 'Upload must be the first tool in the workflow.')
-        data = {'request': body.text, 'explanation': proposal.explanation, 'answer_mode':proposal.answer_mode, 'clarification': unresolved, 'dataset_id': dataset_id, 'document_ids': ids, 'template_id': template_id, 'attached_filenames':[name[:200] for name in body.attached_filenames], 'direct_reply':direct_reply, 'calls': [c.model_dump() | {'status': 'pending'} for c in proposal.calls], 'created_at': time.time(), 'planner': {'id': snapshot['model_id'], 'name': snapshot['model_name'], 'version': snapshot['model_version']}}
+        data = {'request': body.text, 'explanation': proposal.explanation, 'answer_mode':proposal.answer_mode, 'clarification': unresolved, 'dataset_id': dataset_id, 'document_ids': ids, 'template_id': template_id, 'submitted_prompt_id':body.submitted_prompt_id, 'attached_filenames':[name[:200] for name in body.attached_filenames], 'direct_reply':direct_reply, 'calls': [c.model_dump() | {'status': 'pending'} for c in proposal.calls], 'created_at': time.time(), 'planner': {'id': snapshot['model_id'], 'name': snapshot['model_name'], 'version': snapshot['model_version']}}
         record = routing.create('agent_plan', owner, body.text[:120], data)
         return {'id': record.id, **data}
 
@@ -270,6 +495,81 @@ def install(app, auth, main):
             record=routing.owned(id,owner,'agent_plan'); data=core.store.json(record.ref)
             if data['calls']:raise HTTPException(409,'Confirm the proposed document workflow before running its tools.')
             if data.get('reply_started'):raise HTTPException(409,'This question was already submitted. Reload its saved answer before sending again.')
+            if data.get('runtime')=='langgraph' and data.get('deferred_input'):
+                original=PlanInput.model_validate(data['deferred_input'])
+                if body.conversation_id and body.conversation_id!=original.conversation_id:raise HTTPException(409,'Reply belongs to a different assistant conversation.')
+                snapshot=chat_snapshot(owner,original.planner_model_id)
+                if original.dataset_id:snapshot=routing.execution_snapshot(routing.owned(original.dataset_id,owner,'knowledge_base'),'chat',original.planner_model_id)
+                main.external_check(body.allow_external,cfg=snapshot['settings'])
+                # Persist acceptance before returning headers; a retry cannot run a second turn.
+                with core.document_lock('agent-'+id):
+                    data=core.store.json(record.ref)
+                    if data.get('reply_started'):raise HTTPException(409,'This question was already submitted. Reload its saved answer before sending again.')
+                    data.update(reply_started=True,phase='answering');core.store.put_json(record.ref,data)
+                async def live_reply():
+                    queue=asyncio.Queue();loop=asyncio.get_running_loop();stopped=threading.Event();pieces=[]
+                    def emit(kind,payload):loop.call_soon_threadsafe(queue.put_nowait,(kind,payload))
+                    def delta(piece):
+                        if stopped.is_set():raise providers.ProviderError('Answer stopped. Any partial response is preserved.')
+                        if piece:pieces.append(piece);emit('delta',{'text':piece})
+                    def progress(workflow):
+                        data['answer_workflow']=workflow
+                        emit('progress',{'workflow':workflow})
+                    def generate():
+                        try:
+                            from . import agent_graph
+                            outcome=agent_graph.run(owner,original,snapshot,main,on_delta=delta,on_progress=progress)
+                            proposal=outcome['proposal'] or {}
+                            data.update(explanation=outcome['message']['text'],document_ids=proposal.get('document_ids',original.document_ids),
+                                template_id=proposal.get('template_id',original.template_id),calls=[dict(call,status='pending') for call in proposal.get('calls',[])],
+                                conversation_id=outcome['conversation_id'],reply_user_id=outcome['reply_user_id'],phase=outcome['phase'],
+                                agent_duration_ms=outcome['duration_ms'],model_calls=outcome['model_calls'])
+                            data.pop('deferred_input',None)
+                            with core.document_lock('agent-'+id):core.store.put_json(record.ref,data)
+                            emit('done',{'message':outcome['message'],'conversation_id':outcome['conversation_id'],'plan':{'id':id,**data}})
+                        except Exception as exc:
+                            detail=str(exc.detail) if isinstance(exc,HTTPException) else str(exc) if isinstance(exc,providers.ProviderError) else 'The answer could not finish. Retry the question.'
+                            message={'text':''.join(pieces),'status':'aborted' if stopped.is_set() else 'failed','citations':[]}
+                            workflow=data.get('answer_workflow')
+                            if workflow:
+                                workflow['status']=message['status']
+                                for step in workflow['steps']:
+                                    if step['status']=='running':
+                                        step['status']='cancelled' if stopped.is_set() else 'failed'
+                                        step['duration_ms']=max(0,round(time.time()*1000-step['started_at']))
+                                if stopped.is_set() and workflow['steps'] and workflow['steps'][-1]['status']=='failed':
+                                    workflow['steps'][-1]['status']='cancelled'
+                                message['answer_workflow']=workflow
+                                emit('progress',{'workflow':workflow})
+                            if not stopped.is_set():message['error']={'detail':detail}
+                            data.update(chat=message,phase=message['status'])
+                            with core.document_lock('agent-'+id):core.store.put_json(record.ref,data)
+                            emit('error',{'detail':detail,'message':message})
+                    task=asyncio.create_task(asyncio.to_thread(generate))
+                    try:
+                        while True:
+                            if await request.is_disconnected():stopped.set();break
+                            try:kind,payload=await asyncio.wait_for(queue.get(),1)
+                            except asyncio.TimeoutError:
+                                yield ': heartbeat\n\n';continue
+                            yield 'event: '+kind+'\ndata: '+json.dumps(payload)+'\n\n'
+                            if kind in ('done','error'):break
+                    finally:
+                        stopped.set()
+                        # Keep the worker alive long enough to record cancellation/partial text.
+                        if not task.done():task.add_done_callback(lambda finished:finished.exception() if not finished.cancelled() else None)
+                return StreamingResponse(live_reply(),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
+            if data.get('runtime') == 'langgraph':
+                if body.conversation_id and body.conversation_id != data['conversation_id']:
+                    raise HTTPException(409, 'Reply belongs to a different assistant conversation.')
+                conversation = main.conversation(data['conversation_id'], owner)
+                index = next(i for i,m in enumerate(conversation['messages']) if m['id']==data['reply_user_id'])
+                user, message = conversation['messages'][index:index+2]
+                data['reply_started'] = True; core.store.put_json(record.ref, data)
+                async def completed_reply():
+                    yield 'event: delta\ndata: '+json.dumps({'text': message['text']})+'\n\n'
+                    yield 'event: done\ndata: '+json.dumps({'message': message, 'user_message': user, 'conversation_id': conversation['id']})+'\n\n'
+                return StreamingResponse(completed_reply(), media_type='text/event-stream', headers={'Cache-Control':'no-cache', 'X-Accel-Buffering':'no'})
             general=data.get('answer_mode')=='general'
             if not general and (data['clarification'] or not data['dataset_id']):raise HTTPException(422,'Choose a dataset and an unambiguous document scope before asking about documents.')
             dataset_id='' if general else data['dataset_id']
@@ -311,27 +611,10 @@ def install(app, auth, main):
             if not start: return data
             if call['tool'] == 'upload': raise HTTPException(422, 'Attach files to start the upload tool.')
             if not body.confirmed: raise HTTPException(409, 'Confirm this tool action before it runs.')
-            dataset, ids = scope(data, body, owner)
-            if not ids: raise HTTPException(422, 'Choose the document references to extract.')
-            template_id = body.template_id or data['template_id']
-            if not template_id: raise HTTPException(422, 'Choose a prompt template before extraction.')
-            call['status'] = 'running'; call['started_at'] = time.time(); core.store.put_json(record.ref, data)
-            try:
-                # Both tools use the same extraction API. A rerun creates a new result,
-                # preserving earlier versions and reviewed edits rather than overwriting them.
-                result = main.create_extraction(main.ExtractInput(dataset_id=dataset.id, document_ids=ids, template_id=template_id, allow_external=body.allow_external), owner)
-                call.update(status='waiting', document_ids=ids, template_id=template_id, result={'extraction_id': result['id'], 'model_selection': result['model_selection'], 'message': 'Extraction submitted. Earlier results are retained.'}, job_ids=[result['job']['id']], jobs=[result['job']])
-                data.update(dataset_id=dataset.id, document_ids=ids, template_id=template_id)
-            except HTTPException as exc:
-                call.update(status='pending', error=str(exc.detail)); core.store.put_json(record.ref, data); raise
-            except Exception as exc:
-                call.update(status='failed', error='Submission status is uncertain. Check extraction history before starting a new request.')
-                core.store.put_json(record.ref, data); raise HTTPException(502, call['error']) from exc
-            core.store.put_json(record.ref, data)
-            return {'id': id, **data}
+            return submit_extractions(record, data, call, body, owner, main)
 
     @app.post('/api/agent-v2/plans/{id}/calls/{index}/upload')
-    async def upload_call(id: str, index: int, files: list[UploadFile] = File(...), dataset_id: str = Form(''), allow_external: bool = Form(False), confirmed: bool = Form(False), owner=Depends(auth)):
+    async def upload_call(id: str, index: int, files: list[UploadFile] = File(...), dataset_id: str = Form(''), allow_external: bool = Form(False), confirmed: bool = Form(False), extraction_mode: Literal['merge','independent'] | None = Form(None), merge_strategy: Literal['records','single'] = Form('records'), template_id: str = Form(''), continue_extraction: bool = Form(False), display_name: str = Form(''), owner=Depends(auth)):
         lock = upload_locks.setdefault(id, asyncio.Lock())
         async with lock:
             record = routing.owned(id, owner, 'agent_plan')
@@ -344,6 +627,12 @@ def install(app, auth, main):
                 # Validate the entire batch before creating any document. The existing
                 # upload API otherwise accepts earlier files before a later invalid file.
                 if not 1 <= len(files) <= 20: raise HTTPException(422, 'Choose between 1 and 20 documents.')
+                if continue_extraction:
+                    if not any(c['tool']=='extract' for c in data['calls']): raise HTTPException(422, 'This request has no extraction step.')
+                    if len(files)>1 and not extraction_mode: raise HTTPException(422, 'Choose merged or independent extraction first.')
+                    template = routing.owned(template_id or data['template_id'], owner, 'template')
+                    if template.parent_id and template.parent_id != dataset.id: raise HTTPException(422, 'Choose a template for this dataset.')
+                    data.update(auto_continue=True, extraction_mode=extraction_mode or 'merge',merge_strategy=merge_strategy, template_id=template.id, workflow_allow_external=allow_external)
                 limit = core.settings()['max_upload_mb'] * 1024 * 1024
                 for file in files:
                     if (file.filename or '').rsplit('.', 1)[-1].lower() not in ('pdf', 'docx', 'txt', 'json'): raise HTTPException(422, 'Only PDF, DOCX, UTF-8 TXT and JSON files are supported.')
@@ -354,8 +643,18 @@ def install(app, auth, main):
                         except ValueError as exc:raise HTTPException(422,str(exc)) from exc
                 call.update(status='running', started_at=time.time()); core.store.put_json(record.ref, data)
             try:
-                result = await main.upload(files=files, kb_id='', dataset_id=dataset.id, allow_external=allow_external, temporary_session_id='', owner=owner)
-                call.update(status='waiting', uploaded_document_ids=[d['id'] for d in result['documents']], job_ids=[j['id'] for j in result['jobs']], jobs=result['jobs'], result={'documents': [{'id': d['id'], 'name': d['name']} for d in result['documents']], 'message': 'Upload accepted. Waiting for indexing before the next tool.'})
+                result = await main.upload(files=files, kb_id='', dataset_id=dataset.id, allow_external=allow_external, temporary_session_id='', owner=owner,merge_files=False if continue_extraction else extraction_mode=='merge',template_id=(template_id or data['template_id']) if continue_extraction and extraction_mode!='independent' else '',display_name=display_name,idempotency_key='agent-'+id,merge_records=merge_strategy=='records')
+                if continue_extraction:
+                    accepted=result.get('extractions',[])
+                    if extraction_mode=='independent':
+                        for doc in result['documents']:
+                            accepted.append(main.create_extraction(main.ExtractInput(dataset_id=dataset.id,document_ids=[doc['id']],template_id=template_id or data['template_id'],wait_for_index=True,allow_external=allow_external,idempotency_key='agent-'+id+'-'+doc['id']),owner))
+                    extraction_call=next(c for c in data['calls'] if c['tool']=='extract')
+                    entries=[{'extraction_id':e['id'],'document_ids':e['document_ids'],'name':e['name'],'merge':e.get('merge'),'status':e['job']['status'],'model_selection':e['model_selection']} for e in accepted]
+                    extraction_call.update(status='waiting',started_at=time.time(),job_ids=[e['job']['id'] for e in accepted],jobs=[e['job'] for e in accepted],result={'extractions':entries})
+                    if len(entries)==1:extraction_call['result']['extraction_id']=entries[0]['extraction_id']
+                    data['auto_continue']=True
+                call.update(status='waiting', uploaded_document_ids=[d['id'] for d in result['documents']], job_ids=[j['id'] for j in result['jobs']], jobs=result['jobs'], result={'documents': [{'id': d['id'], 'name': d['name'],'merge':d.get('merge')} for d in result['documents']], 'message': 'Upload accepted. Indexing continues in the background.', 'extraction_ids':[e['id'] for e in result.get('extractions',[])]})
                 data['dataset_id'] = dataset.id
             except HTTPException as exc:
                 # Input/policy errors precede document creation. An unexpected partial
@@ -364,5 +663,96 @@ def install(app, auth, main):
             except Exception as exc:
                 call.update(status='failed', error='Upload status is uncertain. Check the dataset before uploading again.')
                 core.store.put_json(record.ref, data); raise HTTPException(502, call['error']) from exc
+            core.store.put_json(record.ref, data)
+            return {'id': id, **data}
+
+    @app.post('/api/agent-v2/plans/{id}/restart')
+    def restart(id: str, body: ExecuteInput, owner=Depends(auth)):
+        """Restart confirmed processing from retained originals, preserving prior results."""
+        if not body.confirmed: raise HTTPException(409, 'Confirm restarting the whole workflow.')
+        with core.document_lock('agent-' + id):
+            record = routing.owned(id, owner, 'agent_plan'); data = plan_public(record, main)
+            calls = data['calls']
+            if data.get('superseded') or not any(c['status']=='failed' or c.get('error') for c in calls):
+                raise HTTPException(409, 'Only a failed workflow can be restarted.')
+            if any(c['status'] in ('running','waiting') or any(j['status'] in ('queued','running','blocked') for j in c.get('jobs',[])) for c in calls):
+                raise HTTPException(409, 'Wait for all accepted work to stop before restarting.')
+            if any(c.get('submission_uncertain') or 'status is uncertain' in c.get('error','') for c in calls):
+                raise HTTPException(409, 'Check accepted work before restarting an uncertain submission.')
+            dataset, ids = scope(data, body, owner)
+            if not ids: raise HTTPException(422, 'Attach the original files again in a new request; no retained originals are available.')
+            # Validate ownership, consent and all settings before submitting any jobs.
+            routing.documents_scope(owner,dataset.id,ids)
+            snapshot=routing.execution_snapshot(dataset,'embedding')
+            main.external_check(body.allow_external,True,snapshot['settings'])
+            extraction_calls=[c for c in calls if c['tool']!='upload']
+            template_id=body.template_id or data['template_id']
+            if extraction_calls:
+                routing.owned(template_id,owner,'template')
+                main.external_check(body.allow_external,cfg=routing.execution_snapshot(dataset,'extraction')['settings'])
+                if len(ids)>1 and not (body.extraction_mode or data.get('extraction_mode')):
+                    raise HTTPException(422,'Choose single or independent extraction before restarting.')
+            with core.Session() as session:
+                from sqlalchemy import select
+                if session.scalar(select(core.Job).where(core.Job.target_id.in_(ids),core.Job.status.in_(['queued','running','blocked']))):
+                    raise HTTPException(409,'One of these documents is already processing. Wait before restarting.')
+            attempt=data.get('restart_attempt',0)+1
+            # Keep every previous extraction and attempt available for review/audit.
+            data.setdefault('previous_attempts',[]).append({'calls':calls,'finished_at':time.time()})
+            first={'tool':'upload','title':'Rebuild document knowledge','status':'waiting','uploaded_document_ids':ids,'job_ids':[],'jobs':[],
+                   'started_at':time.time(),'result':{'documents':[{'id':doc,'name':routing.owned(doc,owner,'document').name} for doc in ids]}}
+            data.update(calls=[first]+[{'tool':c['tool'],'title':c.get('title') or 'Extract fields','status':'pending','submission_revision':attempt} for c in extraction_calls],
+                        dataset_id=dataset.id,document_ids=ids,template_id=template_id,created_at=time.time(),restart_attempt=attempt,
+                        extraction_mode=body.extraction_mode or data.get('extraction_mode') or 'merge',merge_strategy=body.merge_strategy,
+                        display_name=body.display_name,workflow_allow_external=body.allow_external,auto_continue=True)
+            data.pop('recovery_document_ids',None)
+            # Persist each accepted index job. If a later submission fails, progress
+            # remains visible and a second click cannot duplicate accepted work.
+            try:
+                for doc in ids:
+                    job=main.reextract_document(doc,main.ReextractDocument(allow_external=body.allow_external,confirm_reviewed=True),owner)
+                    first['job_ids'].append(job['id']);first['jobs'].append(job)
+                    core.store.put_json(record.ref,data)
+            except HTTPException as exc:
+                first.update(status='waiting' if first['job_ids'] else 'failed',submission_error=str(exc.detail),error=str(exc.detail))
+                data['auto_continue']=False;core.store.put_json(record.ref,data);raise
+            except Exception as exc:
+                first.update(status='waiting' if first['job_ids'] else 'failed',submission_uncertain=True,error='Restart submission status is uncertain. Check accepted work before retrying.')
+                data['auto_continue']=False;core.store.put_json(record.ref,data)
+                raise HTTPException(502,first['error']) from exc
+            return {'id':id,**data}
+
+    @app.post('/api/agent-v2/plans/{id}/calls/{index}/recover')
+    def recover(id: str, index: int, body: RecoveryInput, owner=Depends(auth)):
+        if not body.confirmed: raise HTTPException(409, 'Confirm the recovery action.')
+        with core.document_lock('agent-' + id):
+            record = routing.owned(id, owner, 'agent_plan'); data = plan_public(record, main)
+            if not 0 <= index < len(data['calls']): raise HTTPException(404, 'Tool call not found')
+            call = data['calls'][index]
+            if call['status'] not in ('failed','pending'): raise HTTPException(409, 'Wait for processing to finish before recovery.')
+            if body.action != 'cancel' and (call.get('submission_uncertain') or 'status is uncertain' in call.get('error','')):
+                raise HTTPException(409, 'Submission status is uncertain. Check extraction history or the dataset before submitting again; automatic retry could create duplicate work.')
+            data['auto_continue'] = False
+            if body.action == 'retry':call['submission_revision']=call.get('submission_revision',0)+1
+            if body.action == 'cancel':
+                data['superseded'] = True
+            elif call['tool'] == 'upload':
+                jobs = call.get('jobs', [])
+                if body.action == 'continue_ready':
+                    ids = [j['target_id'] for j in jobs if j['status']=='completed']
+                    if not ids: raise HTTPException(422, 'No successfully indexed documents are available.')
+                    call.update(status='completed', uploaded_document_ids=ids, skipped_document_ids=[j['target_id'] for j in jobs if j['status']!='completed'])
+                else:
+                    if not jobs: raise HTTPException(409, 'Check the dataset for a partial upload, then attach corrected files in a new request.')
+                    for job in jobs:
+                        if job['status'] in ('failed','cancelled'): main.retry_job(job['id'], owner)
+                    call['status'] = 'waiting'
+            else:
+                if body.action != 'retry': raise HTTPException(422, 'Choose retry for this extraction step.')
+                # New jobs pin current registration, unlike retrying an old job
+                # with its original (possibly too small) context snapshot.
+                data['recovery_document_ids'] = call.get('document_ids') or data['document_ids']
+                call['status'] = 'pending'; data['created_at'] = time.time()
+            call.pop('error', None)
             core.store.put_json(record.ref, data)
             return {'id': id, **data}

@@ -1,0 +1,10 @@
+.agent-answer-workflow{margin:8px 0;max-width:100%;min-width:0;border:1px solid #dae7fb;border-radius:10px;background:#f4f9ff;color:#27456f;font-size:12px}
+.agent-answer-workflow>summary{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;list-style:none;min-height:36px}
+.agent-answer-workflow>summary::-webkit-details-marker{display:none}
+.answer-workflow-label{flex:1;min-width:0;overflow-wrap:anywhere}.agent-answer-workflow time{font-variant-numeric:tabular-nums;white-space:nowrap;color:#526e94}
+.answer-workflow-toggle{color:#0667ef;white-space:nowrap}.answer-workflow-toggle::after{content:' ⌄'}.agent-answer-workflow[open] .answer-workflow-toggle::after{content:' ⌃'}
+.answer-workflow-expanded{padding:4px 10px 8px;min-width:0}.answer-workflow-expanded>p{margin:7px 0 0;font-size:11px;color:#526e94}
+.agent-answer-workflow>summary:focus-visible{outline:2px solid #0667ef;outline-offset:2px;border-radius:10px}
+.agent-answer-workflow[data-status=running]>summary>.aegis-agent-logo{animation:answer-agent-working 1.4s ease-in-out infinite}
+@keyframes answer-agent-working{50%{transform:translateY(-2px);filter:drop-shadow(0 2px 3px #0667ef50)}}
+@media(prefers-reduced-motion:reduce){.agent-answer-workflow[data-status=running]>summary>.aegis-agent-logo{animation:none}}

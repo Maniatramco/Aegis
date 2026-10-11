@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select, delete, inspect, text
 from . import core, password_recovery
+from .relational import audit_as
 
 router = APIRouter()
 COOKIE = 'aegis_recovery_csrf'
@@ -121,6 +122,7 @@ async def prepare(request: Request, response: Response):
     return {'username':username,'csrf_token':csrf,'mode':mode}
 
 
+@audit_as('recovery')
 def apply_reset(body):
     # Login holds the same lock, so a login cannot retain a session for the old hash.
     password_recovery.validate_password(body['password'], body['confirmation'])

@@ -1,0 +1,17 @@
+{
+  "stage": "review",
+  "dataset_id": "d21843dc-e3d8-403f-9234-c93bab97fcc0",
+  "authentication": "test-process owner scope; live server auth unchanged",
+  "passed": true,
+  "extraction_id": "0f48de64-f9ba-4609-92af-a6c001cf34b3",
+  "review_version": 2,
+  "reextraction_version": 3,
+  "reextraction_seconds": 64.69,
+  "exports": [
+    "json",
+    "csv",
+    "xlsx"
+  ],
+  "invalid_edits_rejected": true,
+  "original_unchanged": true
+}

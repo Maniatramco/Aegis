@@ -1,0 +1,76 @@
+{
+  "steps": [
+    {
+      "name": "login and mapped dataset",
+      "seconds": 7.28
+    },
+    {
+      "name": "invalid JSON rejected",
+      "passed": true
+    },
+    {
+      "name": "agent request: Update this prompt for my selected dataset.",
+      "seconds": 51.04
+    },
+    {
+      "name": "agent request: Extract all three attached resumes using the saved prompt.",
+      "seconds": 1.96
+    },
+    {
+      "name": "attachments moved to submitted question",
+      "passed": true
+    },
+    {
+      "name": "three-file upload, indexing and merged extraction",
+      "seconds": 186.88
+    },
+    {
+      "name": "review displays all three profiles",
+      "passed": true
+    },
+    {
+      "name": "agent request: If these were already extracted, summarize each profile using the saved fields. Do not extract again.",
+      "seconds": 16.82
+    },
+    {
+      "name": "agent request: Search the original uploaded resumes: which candidate has Kubernetes experience? Cite the document passage.",
+      "seconds": 118.43
+    }
+  ],
+  "errors": [],
+  "prompt_acknowledgement": "Saved prompt \"sample_resume.json\" in \"LangGraph final browser QA\" — version 1. It is selected for extraction and available in Prompt templates. Uploading the same filename again creates a new version.",
+  "plan_id": "539e9b45-42c5-44de-9e02-acd85715c8a3",
+  "conversation_id": "3ea7a336-8179-4f76-b77e-2200b87552d8",
+  "runtime": "langgraph",
+  "model_calls": 1,
+  "summary": "All three profiles have been successfully extracted using the saved prompt. Here are their summaries:\n\n1. **Arjun Rao** - Backend Engineer from Bengaluru, India: \"Backend engineer building Python APIs and reliable transactional services.\"\n2. **Meera Iyer** - DevOps and Platform Engineer from Chennai, India: \"Platform engineer maintaining Kubernetes deployments and automated cloud infrastructure.\"\n3. **Nikhil Shah** - Data Engineer from Pune, India: \"Data engineer developing batch pipelines and trustworthy analytical datasets.\"\n\nAll fields are available for review (full details in Review). No re-extraction needed.",
+  "document_answer": "Meera Iyer has Kubernetes experience. The relevant passage is from page 2 of her resume: \"Platform engineer maintaining Kubernetes deployments and automated cloud infrastructure.\" (Document: merged-01-arjun-rao-backend-3-files-208daf2c.pdf, Page 2)",
+  "passed": false,
+  "failure": "Document answer missed the candidate or citation.",
+  "last_plan": {
+    "status": 200,
+    "id": "de3aaab9-88dd-4eb2-85a9-c62aa7801b40",
+    "request": "Search the original uploaded resumes: which candidate has Kubernetes experience? Cite the document passage.",
+    "explanation": "Meera Iyer has Kubernetes experience. The relevant passage is from page 2 of her resume: \"Platform engineer maintaining Kubernetes deployments and automated cloud infrastructure.\" (Document: merged-01-arjun-rao-backend-3-files-208daf2c.pdf, Page 2)",
+    "answer_mode": "general",
+    "clarification": [],
+    "dataset_id": "e2f68346-7225-4fe5-a62f-d8a882464d31",
+    "document_ids": [],
+    "template_id": "c72fa231-393f-4f54-970c-794add5c3335",
+    "submitted_prompt_id": "",
+    "attached_filenames": [],
+    "calls": [],
+    "created_at": 1791643404.6749685,
+    "planner": {
+      "id": "7d72fb5f-fd9e-4dca-806a-dbade07ec7f1",
+      "name": "LangGraph resume QA model",
+      "version": 2
+    },
+    "conversation_id": "3ea7a336-8179-4f76-b77e-2200b87552d8",
+    "reply_user_id": "74536fb2-f2ad-4694-8bfc-fdf4deb327a0",
+    "runtime": "langgraph",
+    "phase": "answered",
+    "agent_duration_ms": 117902,
+    "model_calls": 3
+  }
+}

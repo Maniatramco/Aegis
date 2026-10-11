@@ -1,0 +1,68 @@
+{
+  "started_at": "2026-10-10T17:25:43.444Z",
+  "checks": [
+    {
+      "name": "Arrow opens independent result in viewport 1294x582",
+      "passed": true,
+      "seconds": 0.189
+    },
+    {
+      "name": "ID opens merged result in viewport 1294x582",
+      "passed": true,
+      "seconds": 0.136
+    },
+    {
+      "name": "Arrow reopens same merged result in viewport 1294x582",
+      "passed": true,
+      "seconds": 0.097
+    },
+    {
+      "name": "Unsaved changes guard preserves review in viewport 1294x582",
+      "passed": true,
+      "seconds": 0.179
+    },
+    {
+      "name": "Confirmed discard restores the same extraction in viewport 1294x582",
+      "passed": true,
+      "seconds": 0.148
+    },
+    {
+      "name": "Arrow opens independent result in viewport 390x844",
+      "passed": true,
+      "seconds": 0.113
+    },
+    {
+      "name": "ID opens merged result in viewport 390x844",
+      "passed": true,
+      "seconds": 0.132
+    },
+    {
+      "name": "Arrow reopens same merged result in viewport 390x844",
+      "passed": true,
+      "seconds": 0.12
+    },
+    {
+      "name": "Unsaved changes guard preserves review in viewport 390x844",
+      "passed": true,
+      "seconds": 0.145
+    },
+    {
+      "name": "Confirmed discard restores the same extraction in viewport 390x844",
+      "passed": true,
+      "seconds": 0.148
+    },
+    {
+      "name": "Refresh retains saved results and Review still reveals the selection",
+      "passed": true,
+      "seconds": 0.485
+    }
+  ],
+  "page_errors": [],
+  "dataset_id": "d913eb9d-742a-4970-a127-0abf913c4d84",
+  "extraction_ids": [
+    "ea4fd217-6afc-44c9-bf2c-b76e159c78b6",
+    "a45b40e0-c3aa-4973-a8dd-0ff4c90f694c"
+  ],
+  "passed": true,
+  "finished_at": "2026-10-10T17:25:49.461Z"
+}

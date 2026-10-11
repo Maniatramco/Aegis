@@ -1,0 +1,610 @@
+TAP version 13
+# Subtest: successive drops append attachments and deduplicate repeated files
+ok 1 - successive drops append attachments and deduplicate repeated files
+  ---
+  duration_ms: 26.53798
+  type: 'test'
+  ...
+# Subtest: invalid batches preserve earlier attachments without partially adding files
+ok 2 - invalid batches preserve earlier attachments without partially adding files
+  ---
+  duration_ms: 4.626479
+  type: 'test'
+  ...
+# Subtest: the 20-file limit includes existing attachments and excludes duplicates
+ok 3 - the 20-file limit includes existing attachments and excludes duplicates
+  ---
+  duration_ms: 4.575471
+  type: 'test'
+  ...
+# Subtest: text drags are distinct from file drags
+ok 4 - text drags are distinct from file drags
+  ---
+  duration_ms: 1.516158
+  type: 'test'
+  ...
+# Subtest: nested drag events keep the drop overlay visible until the chat is exited
+ok 5 - nested drag events keep the drop overlay visible until the chat is exited
+  ---
+  duration_ms: 5265.971194
+  type: 'test'
+  ...
+# Subtest: drop and file picker share append validation; attachment removal works
+ok 6 - drop and file picker share append validation; attachment removal works
+  ---
+  duration_ms: 2052.09523
+  type: 'test'
+  ...
+# Subtest: folders are rejected and dragging text retains normal browser handling
+ok 7 - folders are rejected and dragging text retains normal browser handling
+  ---
+  duration_ms: 1318.882755
+  type: 'test'
+  ...
+# Subtest: files-only Send proposes an upload; files are never sent before confirmation
+ok 8 - files-only Send proposes an upload; files are never sent before confirmation
+  ---
+  duration_ms: 514.728677
+  type: 'test'
+  ...
+# Subtest: file drops outside the chat cannot navigate the page; listeners are removed
+ok 9 - file drops outside the chat cannot navigate the page; listeners are removed
+  ---
+  duration_ms: 259.560422
+  type: 'test'
+  ...
+# Subtest: submitted files leave the composer immediately and remain with their question; confirmation uploads their original bytes
+ok 10 - submitted files leave the composer immediately and remain with their question; confirmation uploads their original bytes
+  ---
+  duration_ms: 299.150249
+  type: 'test'
+  ...
+# Subtest: failed planning restores the draft and its files for retry
+ok 11 - failed planning restores the draft and its files for retry
+  ---
+  duration_ms: 934.433703
+  type: 'test'
+  ...
+# Subtest: failed upload keeps submitted bytes for retry, and clarification carries them into its replacement plan
+ok 12 - failed upload keeps submitted bytes for retry, and clarification carries them into its replacement plan
+  ---
+  duration_ms: 506.724766
+  type: 'test'
+  ...
+# Subtest: submitted attachment cards render compact read-only names and sizes with the question
+ok 13 - submitted attachment cards render compact read-only names and sizes with the question
+  ---
+  duration_ms: 374.940972
+  type: 'test'
+  ...
+# Subtest: multi-file workflow blocks confirmation until merge or independent is chosen, then authorizes continuation
+ok 14 - multi-file workflow blocks confirmation until merge or independent is chosen, then authorizes continuation
+  ---
+  duration_ms: 283.687149
+  type: 'test'
+  ...
+# Subtest: partial extraction exposes successful review while a sibling fails, hiding superseded attempts
+ok 15 - partial extraction exposes successful review while a sibling fails, hiding superseded attempts
+  ---
+  duration_ms: 51.06088
+  type: 'test'
+  ...
+# Subtest: only JSON attachments ask for a role, and unresolved JSON cannot be sent
+ok 16 - only JSON attachments ask for a role, and unresolved JSON cannot be sent
+  ---
+  duration_ms: 202.559071
+  type: 'test'
+  ...
+# Subtest: prompt choice validates, reviews, then saves once without document upload or model inference
+ok 17 - prompt choice validates, reviews, then saves once without document upload or model inference
+  ---
+  duration_ms: 266.26958
+  type: 'test'
+  ...
+# Subtest: a second upload of the same filename is reviewed as an update and sent without changing identity
+ok 18 - a second upload of the same filename is reviewed as an update and sent without changing identity
+  ---
+  duration_ms: 196.128601
+  type: 'test'
+  ...
+# Subtest: a confirmed prompt is supplied to extraction planning and excluded from document filenames
+ok 19 - a confirmed prompt is supplied to extraction planning and excluded from document filenames
+  ---
+  duration_ms: 201.999442
+  type: 'test'
+  ...
+# Subtest: update this saves the revised JSON before passing its prompt identity to chat
+ok 20 - update this saves the revised JSON before passing its prompt identity to chat
+  ---
+  duration_ms: 242.078433
+  type: 'test'
+  ...
+# Subtest: invalid prompt JSON stays attached for correction or document reclassification
+ok 21 - invalid prompt JSON stays attached for correction or document reclassification
+  ---
+  duration_ms: 196.120869
+  type: 'test'
+  ...
+# Subtest: server schema validation errors stay beside their file and block saving until corrected
+ok 22 - server schema validation errors stay beside their file and block saving until corrected
+  ---
+  duration_ms: 170.461078
+  type: 'test'
+  ...
+# Subtest: the displayed mapped Agent Model is the same ID used to submit after catalog refresh
+ok 23 - the displayed mapped Agent Model is the same ID used to submit after catalog refresh
+  ---
+  duration_ms: 242.26454
+  type: 'test'
+  ...
+# Subtest: document suggestions never include another dataset or processing files
+ok 24 - document suggestions never include another dataset or processing files
+  ---
+  duration_ms: 16.523503
+  type: 'test'
+  ...
+# Subtest: hash trigger works at the caret without consuming later text or code fragments
+ok 25 - hash trigger works at the caret without consuming later text or code fragments
+  ---
+  duration_ms: 1.656298
+  type: 'test'
+  ...
+# Subtest: duplicate filenames keep distinct document identities
+ok 26 - duplicate filenames keep distinct document identities
+  ---
+  duration_ms: 0.912606
+  type: 'test'
+  ...
+# Subtest: one agent model selector only offers enabled dataset mappings for document chat
+ok 27 - one agent model selector only offers enabled dataset mappings for document chat
+  ---
+  duration_ms: 1.60581
+  type: 'test'
+  ...
+# Subtest: unsupported browsers keep input and output capabilities disabled
+ok 28 - unsupported browsers keep input and output capabilities disabled
+  ---
+  duration_ms: 29.067575
+  type: 'test'
+  ...
+# Subtest: speech recognition provides editable text only and handles permission denial
+ok 29 - speech recognition provides editable text only and handles permission denial
+  ---
+  duration_ms: 2.86928
+  type: 'test'
+  ...
+# Subtest: spoken responses cancel previous playback and retain readable failures
+ok 30 - spoken responses cancel previous playback and retain readable failures
+  ---
+  duration_ms: 1.764776
+  type: 'test'
+  ...
+# Subtest: reference inventories only HTTP operations and carries authentication metadata
+ok 31 - reference inventories only HTTP operations and carries authentication metadata
+  ---
+  duration_ms: 24.180657
+  type: 'test'
+  ...
+# Subtest: schema references resolve JSON pointer escaping without following remote or cyclic references
+ok 32 - schema references resolve JSON pointer escaping without following remote or cyclic references
+  ---
+  duration_ms: 5.364427
+  type: 'test'
+  ...
+# Subtest: examples handle nullable nested arrays, required fields, constraints and defaults
+ok 33 - examples handle nullable nested arrays, required fields, constraints and defaults
+  ---
+  duration_ms: 6.495655
+  type: 'test'
+  ...
+# Subtest: nested model connection fields expand while recursive references stay bounded
+ok 34 - nested model connection fields expand while recursive references stay bounded
+  ---
+  duration_ms: 3.145889
+  type: 'test'
+  ...
+# Subtest: multipart upload example repeats file parts and identifies the target dataset
+ok 35 - multipart upload example repeats file parts and identifies the target dataset
+  ---
+  duration_ms: 11.491979
+  type: 'test'
+  ...
+# Subtest: stream and public examples preserve transport and omit irrelevant auth headers
+ok 36 - stream and public examples preserve transport and omit irrelevant auth headers
+  ---
+  duration_ms: 26.037242
+  type: 'test'
+  ...
+# Subtest: temporary examples upload one file without a dataset and use the direct document message contract
+ok 37 - temporary examples upload one file without a dataset and use the direct document message contract
+  ---
+  duration_ms: 144.457124
+  type: 'test'
+  ...
+# Subtest: prompt validation examples use the same strict schema as saving
+ok 38 - prompt validation examples use the same strict schema as saving
+  ---
+  duration_ms: 2.4621
+  type: 'test'
+  ...
+# Subtest: V2 shares saved chat history and canonical sources without fabricating unfinished answers
+ok 39 - V2 shares saved chat history and canonical sources without fabricating unfinished answers
+  ---
+  duration_ms: 62.869921
+  type: 'test'
+  ...
+# Subtest: compact chat formatting escapes HTML and preserves readable code
+ok 40 - compact chat formatting escapes HTML and preserves readable code
+  ---
+  duration_ms: 8.962424
+  type: 'test'
+  ...
+# Subtest: closing the upload panel gives ten documents one background workflow
+ok 41 - closing the upload panel gives ten documents one background workflow
+  ---
+  duration_ms: 17.451741
+  type: 'test'
+  ...
+# Subtest: V2 owns all its visible jobs while unrelated progress remains available
+ok 42 - V2 owns all its visible jobs while unrelated progress remains available
+  ---
+  duration_ms: 8.174353
+  type: 'test'
+  ...
+# Subtest: V2 describes selected tools without repeating invented pre-execution results
+ok 43 - V2 describes selected tools without repeating invented pre-execution results
+  ---
+  duration_ms: 1.541477
+  type: 'test'
+  ...
+# Subtest: merged result identifies every original and the single extraction without losing profiles
+ok 44 - merged result identifies every original and the single extraction without losing profiles
+  ---
+  duration_ms: 123.3011
+  type: 'test'
+  ...
+# Subtest: merged review keeps its filename and exposes all record fields and retained originals
+ok 45 - merged review keeps its filename and exposes all record fields and retained originals
+  ---
+  duration_ms: 21.347785
+  type: 'test'
+  ...
+# Subtest: compact agent progress retains real stage counts and visible failures
+ok 46 - compact agent progress retains real stage counts and visible failures
+  ---
+  duration_ms: 8.617792
+  type: 'test'
+  ...
+# Subtest: compact results keep full JSON expandable and retain the review action
+ok 47 - compact results keep full JSON expandable and retain the review action
+  ---
+  duration_ms: 3.414605
+  type: 'test'
+  ...
+# Subtest: an open upload panel suppresses duplicate background workflows without suppressing extraction jobs
+ok 48 - an open upload panel suppresses duplicate background workflows without suppressing extraction jobs
+  ---
+  duration_ms: 5.679926
+  type: 'test'
+  ...
+# Subtest: re-extraction dialog owns its workflow until it closes, when background progress resumes
+ok 49 - re-extraction dialog owns its workflow until it closes, when background progress resumes
+  ---
+  duration_ms: 5.324323
+  type: 'test'
+  ...
+# Subtest: a foreground extraction does not hide other jobs or unrelated loading activity
+ok 50 - a foreground extraction does not hide other jobs or unrelated loading activity
+  ---
+  duration_ms: 3.542597
+  type: 'test'
+  ...
+# Subtest: processing and completed views show one workflow without a file picker or upload button
+ok 51 - processing and completed views show one workflow without a file picker or upload button
+  ---
+  duration_ms: 97.531832
+  type: 'test'
+  ...
+# Subtest: the attachment view retains file selection before starting processing
+ok 52 - the attachment view retains file selection before starting processing
+  ---
+  duration_ms: 8.5889
+  type: 'test'
+  ...
+# Subtest: workflow-only failures retain their reasons and retry actions without file selection
+ok 53 - workflow-only failures retain their reasons and retry actions without file selection
+  ---
+  duration_ms: 37.787512
+  type: 'test'
+  ...
+# Subtest: review and background progress render an extraction workflow only once while refresh remains visible
+ok 54 - review and background progress render an extraction workflow only once while refresh remains visible
+  ---
+  duration_ms: 13.37957
+  type: 'test'
+  ...
+# Subtest: review resolves the current extraction job after a result refresh removes the embedded job
+ok 55 - review resolves the current extraction job after a result refresh removes the embedded job
+  ---
+  duration_ms: 1.370948
+  type: 'test'
+  ...
+# Subtest: loading progress names the current task and closes after all requests finish
+ok 56 - loading progress names the current task and closes after all requests finish
+  ---
+  duration_ms: 2.644812
+  type: 'test'
+  ...
+# Subtest: parallel refresh lists each outstanding task once and keeps the final task specific
+ok 57 - parallel refresh lists each outstanding task once and keeps the final task specific
+  ---
+  duration_ms: 3.314002
+  type: 'test'
+  ...
+# Subtest: workspace startup keeps one stable popup as requests finish and background jobs arrive
+ok 58 - workspace startup keeps one stable popup as requests finish and background jobs arrive
+  ---
+  duration_ms: 14.760351
+  type: 'test'
+  ...
+# Subtest: Home does not add another loading announcement or flash an empty dataset message during startup
+ok 59 - Home does not add another loading announcement or flash an empty dataset message during startup
+  ---
+  duration_ms: 15.990983
+  type: 'test'
+  ...
+# Subtest: extraction uses the shared horizontal workflow and real completed-stage progress
+ok 60 - extraction uses the shared horizontal workflow and real completed-stage progress
+  ---
+  duration_ms: 14.984444
+  type: 'test'
+  ...
+# Subtest: ten mixed documents share counts without implying all are ready
+ok 61 - ten mixed documents share counts without implying all are ready
+  ---
+  duration_ms: 31.335094
+  type: 'test'
+  ...
+# Subtest: a failed index retains completed reading and never reports full completion
+ok 62 - a failed index retains completed reading and never reports full completion
+  ---
+  duration_ms: 1.484716
+  type: 'test'
+  ...
+# Subtest: unconfirmed uploads remain unknown and cannot count as stored
+ok 63 - unconfirmed uploads remain unknown and cannot count as stored
+  ---
+  duration_ms: 0.956354
+  type: 'test'
+  ...
+# Subtest: a ready document overrides an older failed job from a crossed poll
+ok 64 - a ready document overrides an older failed job from a crossed poll
+  ---
+  duration_ms: 0.778375
+  type: 'test'
+  ...
+# Subtest: a queued index requiring a rebuild is processing, not a failure needing attention
+ok 65 - a queued index requiring a rebuild is processing, not a failure needing attention
+  ---
+  duration_ms: 8.684366
+  type: 'test'
+  ...
+# Subtest: a queued retry never borrows completion or failure from the previous job
+ok 66 - a queued retry never borrows completion or failure from the previous job
+  ---
+  duration_ms: 1.043202
+  type: 'test'
+  ...
+# Subtest: older jobs without stage details show unavailable status instead of invented progress
+ok 67 - older jobs without stage details show unavailable status instead of invented progress
+  ---
+  duration_ms: 1.05818
+  type: 'test'
+  ...
+# Subtest: encoding failures explain how to fix the file, while provider errors retain their useful reason
+ok 68 - encoding failures explain how to fix the file, while provider errors retain their useful reason
+  ---
+  duration_ms: 2.27055
+  type: 'test'
+  ...
+# Subtest: parses split UTF-8, CRLF and heartbeat comments
+ok 69 - parses split UTF-8, CRLF and heartbeat comments
+  ---
+  duration_ms: 274.42257
+  type: 'test'
+  ...
+# Subtest: an abrupt end retains deltas and never reports completion
+ok 70 - an abrupt end retains deltas and never reports completion
+  ---
+  duration_ms: 38.09575
+  type: 'test'
+  ...
+# Subtest: a terminal event without a trailing separator is accepted
+ok 71 - a terminal event without a trailing separator is accepted
+  ---
+  duration_ms: 66.589537
+  type: 'test'
+  ...
+# Subtest: the structured provider error reaches the UI with partial text
+ok 72 - the structured provider error reaches the UI with partial text
+  ---
+  duration_ms: 12.125937
+  type: 'test'
+  ...
+# Subtest: review directory filters by dataset, exact extraction ID, source filename and status
+ok 73 - review directory filters by dataset, exact extraction ID, source filename and status
+  ---
+  duration_ms: 41.515478
+  type: 'test'
+  ...
+# Subtest: review directory displays dataset identity, complete extraction ID, merged filename and version
+ok 74 - review directory displays dataset identity, complete extraction ID, merged filename and version
+  ---
+  duration_ms: 1120.20541
+  type: 'test'
+  ...
+# Subtest: saved-result citations render clickable references and extraction source actions
+ok 75 - saved-result citations render clickable references and extraction source actions
+  ---
+  duration_ms: 1275.215314
+  type: 'test'
+  ...
+# Subtest: provider/category parameters follow each native request format
+ok 76 - provider/category parameters follow each native request format
+  ---
+  duration_ms: 9.947878
+  type: 'test'
+  ...
+# Subtest: parameters retain JSON types and blank means default
+ok 77 - parameters retain JSON types and blank means default
+  ---
+  duration_ms: 4.976434
+  type: 'test'
+  ...
+# Subtest: malformed, non-object, and transport/token overrides cannot be submitted
+ok 78 - malformed, non-object, and transport/token overrides cannot be submitted
+  ---
+  duration_ms: 2.358856
+  type: 'test'
+  ...
+# Subtest: prompt upload uses the filename for identity and preserves the JSON schema and preview
+ok 79 - prompt upload uses the filename for identity and preserves the JSON schema and preview
+  ---
+  duration_ms: 27.230364
+  type: 'test'
+  ...
+# Subtest: malformed, non-object, wrong-extension and excessive prompt uploads fail before preview
+ok 80 - malformed, non-object, wrong-extension and excessive prompt uploads fail before preview
+  ---
+  duration_ms: 16.717031
+  type: 'test'
+  ...
+# Subtest: different embedded JSON names do not change the uploaded filename identity
+ok 81 - different embedded JSON names do not change the uploaded filename identity
+  ---
+  duration_ms: 27.103318
+  type: 'test'
+  ...
+# Subtest: syntax errors give correction guidance without exposing the file contents
+ok 82 - syntax errors give correction guidance without exposing the file contents
+  ---
+  duration_ms: 4.075542
+  type: 'test'
+  ...
+# Subtest: new workspace dataset takes precedence over old Assistant history and prompt selection
+ok 83 - new workspace dataset takes precedence over old Assistant history and prompt selection
+  ---
+  duration_ms: 3.063926
+  type: 'test'
+  ...
+# Subtest: saved selection survives reload, remains scoped to its dataset, and can be cleared
+ok 84 - saved selection survives reload, remains scoped to its dataset, and can be cleared
+  ---
+  duration_ms: 8.437191
+  type: 'test'
+  ...
+# Subtest: review dialog shows complete escaped JSON and requires an explicit confirmation
+ok 85 - review dialog shows complete escaped JSON and requires an explicit confirmation
+  ---
+  duration_ms: 163.160843
+  type: 'test'
+  ...
+# Subtest: review clearly explains replacing an existing filename while keeping earlier versions
+ok 86 - review clearly explains replacing an existing filename while keeping earlier versions
+  ---
+  duration_ms: 16.035531
+  type: 'test'
+  ...
+# Subtest: dataset filtering keeps scoped prompts separate and legacy prompts accessible
+ok 87 - dataset filtering keeps scoped prompts separate and legacy prompts accessible
+  ---
+  duration_ms: 3.185508
+  type: 'test'
+  ...
+# Subtest: uploaded filenames and prompt names are both searchable within the selected dataset
+ok 88 - uploaded filenames and prompt names are both searchable within the selected dataset
+  ---
+  duration_ms: 12.907466
+  type: 'test'
+  ...
+# Subtest: download round trips complete nested schema through Upload Prompt without binding destination dataset
+ok 89 - download round trips complete nested schema through Upload Prompt without binding destination dataset
+  ---
+  duration_ms: 2.847486
+  type: 'test'
+  ...
+# Subtest: template list renders one row per selected dataset prompt with all row actions
+ok 90 - template list renders one row per selected dataset prompt with all row actions
+  ---
+  duration_ms: 47.722932
+  type: 'test'
+  ...
+# Subtest: editing a scoped template displays its fixed dataset and existing fields
+ok 91 - editing a scoped template displays its fixed dataset and existing fields
+  ---
+  duration_ms: 51.714422
+  type: 'test'
+  ...
+# Subtest: recovers the same session and replays JSON once
+ok 92 - recovers the same session and replays JSON once
+  ---
+  duration_ms: 800.083604
+  type: 'test'
+  ...
+# Subtest: recovers the same session and replays multipart once
+ok 93 - recovers the same session and replays multipart once
+  ---
+  duration_ms: 49.270176
+  type: 'test'
+  ...
+# Subtest: does not replay a second CSRF rejection
+ok 94 - does not replay a second CSRF rejection
+  ---
+  duration_ms: 9.11239
+  type: 'test'
+  ...
+# Subtest: does not replay policy rejections, reads, success, or uncertain failures
+ok 95 - does not replay policy rejections, reads, success, or uncertain failures
+  ---
+  duration_ms: 30.764374
+  type: 'test'
+  ...
+# Subtest: never replays an action under a different account
+ok 96 - never replays an action under a different account
+  ---
+  duration_ms: 3.175343
+  type: 'test'
+  ...
+# Subtest: expired sessions stop recovery without replay
+ok 97 - expired sessions stop recovery without replay
+  ---
+  duration_ms: 4.898612
+  type: 'test'
+  ...
+# Subtest: temporary mode needs no dataset, exposes one file input, and blocks questions before upload
+ok 98 - temporary mode needs no dataset, exposes one file input, and blocks questions before upload
+  ---
+  duration_ms: 179.760192
+  type: 'test'
+  ...
+# Subtest: only enabled chat-capable registrations are selectable and local-only disables cloud options
+ok 99 - only enabled chat-capable registrations are selectable and local-only disables cloud options
+  ---
+  duration_ms: 10.152295
+  type: 'test'
+  ...
+# Subtest: cloud registrations become selectable when local-only is disabled
+ok 100 - cloud registrations become selectable when local-only is disabled
+  ---
+  duration_ms: 7.000864
+  type: 'test'
+  ...
+1..100
+# tests 100
+# suites 0
+# pass 100
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 18500.816068

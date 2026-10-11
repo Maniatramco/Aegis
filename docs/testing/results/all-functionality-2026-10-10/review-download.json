@@ -1,0 +1,72 @@
+{
+  "extraction_id": "a45b40e0-c3aa-4973-a8dd-0ff4c90f694c",
+  "version": 5,
+  "result": {
+    "records": [
+      {
+        "source_filename": "agent-invoice-a.txt",
+        "source_key": "1",
+        "fields": {
+          "reference": "INV-A-42",
+          "total": 42
+        }
+      },
+      {
+        "source_filename": "agent-invoice-b.txt",
+        "source_key": "2",
+        "fields": {
+          "reference": "INV-B-75",
+          "total": 75
+        }
+      }
+    ]
+  },
+  "merge": {
+    "filename": "merged-agent-invoice-a-2-files-fad72b18.txt",
+    "source_count": 2,
+    "sources": [
+      {
+        "key": "1",
+        "name": "agent-invoice-a.txt",
+        "size": 75,
+        "page_count": 1,
+        "merged_page_start": 1,
+        "merged_page_end": 1
+      },
+      {
+        "key": "2",
+        "name": "agent-invoice-b.txt",
+        "size": 75,
+        "page_count": 1,
+        "merged_page_start": 2,
+        "merged_page_end": 2
+      }
+    ],
+    "document_id": "a1ae8463-afd2-468a-a6e1-faddc8063062"
+  },
+  "evidence": [],
+  "sources": [
+    {
+      "document_id": "a1ae8463-afd2-468a-a6e1-faddc8063062",
+      "document_name": "merged-agent-invoice-a-2-files-fad72b18.txt",
+      "chunk_id": "37dd8b68-f3b3-5a45-98a8-e4b05b4bd80a",
+      "page": 1,
+      "excerpt": "Fictional invoice. Invoice reference INV-A-42. Total including tax: 42 USD.",
+      "source_key": "1",
+      "source_filename": "agent-invoice-a.txt",
+      "source_page": 1
+    },
+    {
+      "document_id": "a1ae8463-afd2-468a-a6e1-faddc8063062",
+      "document_name": "merged-agent-invoice-a-2-files-fad72b18.txt",
+      "chunk_id": "fc425865-abcf-5f64-b8ed-b1c0ead22dc9",
+      "page": 2,
+      "excerpt": "Fictional invoice. Invoice reference INV-B-75. Total including tax: 75 USD.",
+      "source_key": "2",
+      "source_filename": "agent-invoice-b.txt",
+      "source_page": 1
+    }
+  ],
+  "review_status": "unreviewed",
+  "saved_values_only": true
+}

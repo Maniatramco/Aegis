@@ -1,0 +1,23 @@
+{
+  "runtime": "Installed Oracle Docker",
+  "passwords_changed": false,
+  "checks": [
+    {
+      "username": "User1",
+      "login": true,
+      "unassigned_datasets_hidden": true,
+      "administrator_controls_blocked": true,
+      "password_screen": true,
+      "logout": true
+    },
+    {
+      "username": "User2",
+      "login": true,
+      "unassigned_datasets_hidden": true,
+      "administrator_controls_blocked": true,
+      "password_screen": true,
+      "logout": true
+    }
+  ],
+  "passed": true
+}

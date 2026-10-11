@@ -1,0 +1,26 @@
+{
+  "phase": "failures",
+  "steps": [
+    {
+      "name": "Real login and session",
+      "passed": true,
+      "seconds": 2.9
+    },
+    {
+      "name": "Assistant partial upload failure, retry failure and continue-ready extraction",
+      "passed": true,
+      "seconds": 128.56
+    },
+    {
+      "name": "Assistant cancellation preserves failed-upload status and original file",
+      "passed": false,
+      "seconds": 299.99,
+      "error": "page.waitForResponse: Timeout 300000ms exceeded while waiting for event \"response\""
+    }
+  ],
+  "errors": [],
+  "started_at": "2026-10-10T16:34:50.610Z",
+  "passed": false,
+  "failure": "page.waitForResponse: Timeout 300000ms exceeded while waiting for event \"response\"",
+  "completed_at": "2026-10-10T16:42:09.058Z"
+}

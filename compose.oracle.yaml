@@ -13,7 +13,7 @@ x-backend: &backend
     ORACLE_HOST: oracle
     ORACLE_PORT: '1521'
     ORACLE_SERVICE_NAME: FREEPDB1
-    ORACLE_USER: AEGIS
+    ORACLE_USER: ${ORACLE_APP_USER:-AGS_OWNER}
     ORACLE_PASSWORD_FILE: /run/secrets/aegis_oracle_password
     AEGIS_STORAGE_ROOT: /data
     AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Generate the Oracle configuration first}
@@ -24,10 +24,25 @@ x-backend: &backend
     EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
     AEGIS_MODEL: ${AEGIS_MODEL:-qwen3:4b}
     EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-    AEGIS_OLLAMA_URL: http://ollama:11434
-    AEGIS_OLLAMA_ENDPOINT_HOSTS: ollama
+    AEGIS_OLLAMA_URL: ${AEGIS_OLLAMA_URL:-http://ollama:11434}
+    AEGIS_RERANKER: ${AEGIS_RERANKER:-local}
+    AEGIS_RERANK_MODEL_DIR: /data/models/reranker
+    AEGIS_RERANK_CANDIDATES: ${AEGIS_RERANK_CANDIDATES:-25}
+    AEGIS_INFERENCE_DEVICE: ${AEGIS_INFERENCE_DEVICE:-auto}
+    AEGIS_OCR_ENABLED: ${AEGIS_OCR_ENABLED:-true}
+    AEGIS_OCR_MODEL: ${AEGIS_OCR_MODEL:-qwen2.5vl:3b}
+    AEGIS_OCR_URL: ${AEGIS_OCR_URL:-http://ollama:11434}
+    AEGIS_OCR_FORCE_CPU: ${AEGIS_OCR_FORCE_CPU:-false}
+    AEGIS_OCR_TIMEOUT: ${AEGIS_OCR_TIMEOUT:-1200}
+    AEGIS_OCR_CONTEXT: ${AEGIS_OCR_CONTEXT:-8192}
+    AEGIS_OCR_MAX_TOKENS: ${AEGIS_OCR_MAX_TOKENS:-3000}
+    AEGIS_OCR_DPI: ${AEGIS_OCR_DPI:-180}
+    AEGIS_OCR_BATCH: ${AEGIS_OCR_BATCH:-128}
+    AEGIS_OLLAMA_ENDPOINT_HOSTS: ${AEGIS_OLLAMA_ENDPOINT_HOSTS:-ollama}
     AEGIS_ALLOW_MOCK: ${AEGIS_ALLOW_MOCK:-false}
-    AEGIS_TIMEOUT: '300'
+    AEGIS_AGENT_ENGINE: ${AEGIS_AGENT_ENGINE:-langgraph}
+    LANGSMITH_TRACING: 'false'
+    AEGIS_TIMEOUT: ${AEGIS_TIMEOUT:-1200}
     API_INTERNAL_URL: http://api:8000
     ALLOWED_ORIGINS: ${AEGIS_PUBLIC_ORIGIN:-http://localhost:3003},http://localhost:${AEGIS_PORT:-3003},http://127.0.0.1:${AEGIS_PORT:-3003}
   secrets: [aegis_oracle_password]
@@ -77,6 +92,8 @@ services:
     image: ${ORACLE_IMAGE:-container-registry.oracle.com/database/free:23.26.3.0}
     restart: unless-stopped
     shm_size: 1gb
+    environment:
+      ORACLE_APP_USER: ${ORACLE_APP_USER:-AGS_OWNER}
     secrets: [oracle_pwd, aegis_oracle_password, aegis_oracle_test_password]
     volumes:
       - oracle:/opt/oracle/oradata

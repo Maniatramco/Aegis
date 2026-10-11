@@ -10,6 +10,25 @@ from test_dataset_models import system,dataset,conversation,post
 def test_remote_model_names_rejected(name):
     with pytest.raises(ollama.OllamaError):ollama.local_model_name(name)
 
+
+def test_long_cpu_settings_budget_is_bounded(system):
+    response=system.api.patch('/api/settings',json={'timeout':1200})
+    assert response.status_code==200,response.text
+    assert core.settings()['timeout']==1200
+    assert system.api.patch('/api/settings',json={'top_k':4}).status_code==200
+    assert system.api.patch('/api/settings',json={'timeout':1801}).status_code==400
+
+def test_timeout_reports_the_real_budget_and_retry_guidance_without_request_content(monkeypatch):
+    original=httpx.Client
+    def handle(request):
+        raise httpx.ReadTimeout('sensitive provider details',request=request)
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(handle),**kwargs))
+    with pytest.raises(ollama.OllamaError) as caught:
+        ollama.request('/api/chat',{'messages':[{'content':'private document text'}]},300)
+    assert 'timed out after 300 seconds' in str(caught.value)
+    assert 'Model Registration' in str(caught.value)
+    assert 'sensitive' not in str(caught.value) and 'private document' not in str(caught.value)
+
 def test_loopback_transport_ignores_proxy_and_credentials(monkeypatch):
     original=httpx.Client;seen=[]
     def handle(request):
@@ -35,6 +54,24 @@ def test_schema_and_incomplete_output_rejected(monkeypatch):
     with pytest.raises(ollama.OllamaError):ollama.extract('qwen3:4b','Synthetic',schema,30)
     monkeypatch.setattr(ollama,'request',lambda *a:{'done':True,'done_reason':'length','message':{'content':'truncated'}})
     with pytest.raises(ollama.OllamaError):ollama.chat('qwen3:4b','Q',[{'document_name':'x','text':'x'}],[],30)
+
+
+def test_local_evidence_budget_keeps_nested_fields_unbounded():
+    schema={'type':'object','properties':{'items':{'type':'array','items':{'type':'object','properties':{'name':{'type':'string'}}}}}}
+    compact=providers.evidence_schema(schema,True)
+    assert compact['properties']['data']==schema
+    assert compact['properties']['evidence']['maxItems']==8
+    assert compact['properties']['evidence']['items']['properties']['quote']['maxLength']==160
+    assert 'maxItems' not in providers.evidence_schema(schema)['properties']['evidence']
+
+
+def test_truncated_extraction_reports_configurable_limit_without_partial_json(monkeypatch):
+    monkeypatch.setattr(core,'settings',lambda:{'max_output_tokens':2048,'context_limit':8192})
+    monkeypatch.setattr(ollama,'request',lambda *a:{'done':True,'done_reason':'length','message':{'content':'private truncated content'}})
+    with pytest.raises(ollama.OllamaError) as caught:ollama.extract('qwen3:4b','Synthetic',{'type':'object'},30)
+    message=str(caught.value)
+    assert '2,048' in message and 'Model Registration' in message and 'retry' in message
+    assert 'private' not in message
 
 
 def test_qwen_legacy_thinking_template_returns_only_completed_answer(monkeypatch):
@@ -125,9 +162,13 @@ def test_unavailable_ollama_never_falls_back(monkeypatch):
         providers.answer('Question',[{'document_name':'synthetic','text':'Synthetic fact'}])
 
 def test_ollama_routing_upload_chat_extraction(system,monkeypatch):
+    from app import reranker
+    monkeypatch.setenv('AEGIS_RERANK_MODEL_DIR','/tmp/scripted-reranker-fixture')
+    monkeypatch.setattr(reranker,'enabled',lambda:True)
+    monkeypatch.setattr(reranker,'rank',lambda query,candidates,top_k:candidates[:top_k])
     monkeypatch.setattr(ollama,'model_digest',lambda name:'a'*64)
     def response(path,payload,timeout):
-        if path=='/api/embed':return {'embeddings':[[1.,0.,0.] for _ in payload['input']]}
+        if path=='/api/embed':return {'embeddings':[[1.]+[0.]*767 for _ in payload['input']]}
         if 'format' in payload:return {'done':True,'message':{'content':'{"data":{"owner":"Alice"},"evidence":[]}'}}
         return {'done':True,'message':{'content':'Alice owns the project. [1]'}}
     monkeypatch.setattr(ollama,'request',response)

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Startup scripts also run when the official image reuses its prebuilt database.
 set -eu
-for task_user in AEGIS AEGIS_TEST; do
-if [[ "$task_user" == AEGIS ]]; then
+task_app_user=${ORACLE_APP_USER:-AGS_OWNER}
+if [[ ! "$task_app_user" =~ ^[A-Z][A-Z0-9_]{0,29}$ ]]; then
+  echo 'Invalid Oracle application owner.' >&2; exit 1
+fi
+for task_user in "$task_app_user" AEGIS_TEST; do
+if [[ "$task_user" == "$task_app_user" ]]; then
   task_password=$(cat /run/secrets/aegis_oracle_password)
   task_quota=512M
 else

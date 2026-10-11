@@ -1,0 +1,98 @@
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.40kB done
+#1 DONE 0.0s
+
+#2 [worker internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.07kB 0.0s done
+#2 DONE 0.2s
+
+#2 [api internal] load build definition from Dockerfile
+#2 DONE 0.2s
+
+#3 [api internal] load metadata for docker.io/library/python:3.12-slim
+#3 DONE 0.2s
+
+#4 [worker internal] load .dockerignore
+#4 transferring context: 112B 0.0s done
+#4 DONE 0.1s
+
+#4 [api internal] load .dockerignore
+#4 DONE 0.1s
+
+#5 [worker internal] load build context
+#5 DONE 0.0s
+
+#6 [worker 1/7] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#6 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.1s done
+#6 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.1s done
+#6 DONE 0.1s
+
+#5 [worker internal] load build context
+#5 transferring context: 15.51kB 0.1s done
+#5 DONE 0.1s
+
+#7 [worker 2/7] WORKDIR /app
+#7 CACHED
+
+#8 [worker 3/7] COPY requirements.txt requirements.lock requirements-local.txt requirements-local.lock requirements-oci.txt requirements-models.txt requirements-oracle.txt ./
+#8 CACHED
+
+#9 [worker 4/7] RUN pip install --no-cache-dir -r requirements.lock && if [ "false" = "true" ]; then pip install --no-cache-dir -r requirements-local.lock -c requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu; fi && if [ "false" = "true" ]; then pip install --no-cache-dir -r requirements-models.txt -c requirements.lock; fi
+#9 CACHED
+
+#10 [worker 5/7] RUN if [ "true" = "true" ]; then pip install --no-cache-dir -r requirements-oracle.txt -c requirements.lock; fi
+#10 CACHED
+
+#7 [api 2/7] WORKDIR /app
+#7 CACHED
+
+#8 [api 3/7] COPY requirements.txt requirements.lock requirements-local.txt requirements-local.lock requirements-oci.txt requirements-models.txt requirements-oracle.txt ./
+#8 CACHED
+
+#9 [api 4/7] RUN pip install --no-cache-dir -r requirements.lock && if [ "false" = "true" ]; then pip install --no-cache-dir -r requirements-local.lock -c requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu; fi && if [ "false" = "true" ]; then pip install --no-cache-dir -r requirements-models.txt -c requirements.lock; fi
+#9 CACHED
+
+#10 [api 5/7] RUN if [ "true" = "true" ]; then pip install --no-cache-dir -r requirements-oracle.txt -c requirements.lock; fi
+#10 CACHED
+
+#11 [api 6/7] COPY app ./app
+#11 DONE 0.3s
+
+#11 [api 6/7] COPY app ./app
+#11 DONE 0.3s
+
+#12 [api 7/7] RUN useradd --create-home --uid 10001 aegis && mkdir -p /data && chown aegis:aegis /data /app
+#12 DONE 1.6s
+
+#12 [api 7/7] RUN useradd --create-home --uid 10001 aegis && mkdir -p /data && chown aegis:aegis /data /app
+#12 DONE 1.6s
+
+#13 [worker] exporting to image
+#13 exporting layers
+#13 exporting layers 0.9s done
+#13 exporting manifest sha256:fa0fd5674fd327d87aaad8c51e06064efd006195b0db928d4d3b668126437134 0.1s done
+#13 exporting config sha256:539faa2a2ae2d97cc8235eb79b6fd5b1398590fd08fa627552394ff39cbb751a
+#13 exporting config sha256:539faa2a2ae2d97cc8235eb79b6fd5b1398590fd08fa627552394ff39cbb751a 0.1s done
+#13 exporting attestation manifest sha256:611d3f8ff958017bd60b93b6b5fd4593969ad6d0c557d977d590e6323d5fa703
+#13 exporting attestation manifest sha256:611d3f8ff958017bd60b93b6b5fd4593969ad6d0c557d977d590e6323d5fa703 0.1s done
+#13 exporting manifest list sha256:cd269b7e46255f6dd7e4660e6b975adb2ca7b9529281f53c7a569e0632739f62 0.1s done
+#13 naming to docker.io/library/aegis-oracle-worker:latest 0.0s done
+#13 unpacking to docker.io/library/aegis-oracle-worker:latest
+#13 unpacking to docker.io/library/aegis-oracle-worker:latest 0.2s done
+#13 DONE 1.8s
+
+#14 [api] exporting to image
+#14 exporting layers 0.9s done
+#14 exporting manifest sha256:1c91f26b93eec42ca3636d1bcae767fd0b0eea8f23e1f0cc77026a17eb8a8f4d 0.1s done
+#14 exporting config sha256:897fef56ce5b76a93eb9b5dfa3e0081acb2f352ea5df5f33424e1c1bd94772e4 0.1s done
+#14 exporting attestation manifest sha256:d4369c883347b12e8d347a589f13b9bf35da25e025f4bf79532bf89c679d2be9 0.1s done
+#14 exporting manifest list sha256:02d32375ecde28c49f3ab15afcab975e36d6bf754fa488d2e94525963c609b86 0.1s done
+#14 naming to docker.io/library/aegis-oracle-api:latest 0.0s done
+#14 unpacking to docker.io/library/aegis-oracle-api:latest 0.2s done
+#14 DONE 1.8s
+
+#15 [worker] resolving provenance for metadata file
+#15 DONE 0.1s
+
+#16 [api] resolving provenance for metadata file
+#16 DONE 0.1s

@@ -49,6 +49,8 @@ test('V2 owns all its visible jobs while unrelated progress remains available',(
  const owned=jobs.map(job=>job.id);
  const hidden=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs,visibleJobIds:owned}));
  assert.equal(hidden,'');
+ const tracked=items.map((item,i)=>({...item,job:{...item.job,id:owned[i]}}));
+ assert.equal(renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs,uploadItems:tracked,visibleJobIds:owned})), '');
  const other={id:'unrelated-extraction',kind:'extract',status:'running',workflow:{stages:{generate:{status:'running'}}}};
  const html=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs:[...jobs,other],visibleJobIds:owned}));
  assert.equal((html.match(/class="job-progress"/g)||[]).length,1);
@@ -59,7 +61,7 @@ test('V2 owns all its visible jobs while unrelated progress remains available',(
 test('V2 describes selected tools without repeating invented pre-execution results',()=>{
  const text=explainPlan({explanation:'All files are valid and extraction completed!',calls:[{tool:'upload'},{tool:'extract'}]});
  assert.match(text,/Upload documents → Extract fields/);
- assert.match(text,/confirm each tool/);
+ assert.match(text,/confirm the workflow/);
  assert.match(text,/after indexing finishes/);
  assert.doesNotMatch(text,/are valid|completed!/);
  const reply='Hi! I can upload documents, extract fields, and re-extract while keeping previous results. What would you like to do?';
@@ -68,6 +70,23 @@ test('V2 describes selected tools without repeating invented pre-execution resul
 });
 
 const {AgentJobProgress,AgentResult}=load(path.resolve(__dirname,'../app/agent-v2-output.tsx'));
+test('merged result identifies every original and the single extraction without losing profiles',()=>{
+ const merge={filename:'merged-profiles-3.pdf',source_count:3,document_id:'combined',sources:['Alice','Bob','Carol'].map((name,n)=>({key:String(n+1),name:name+'.pdf',size:100,page_count:1,merged_page_start:n+1,merged_page_end:n+1}))};
+ const html=renderToStaticMarkup(React.createElement(AgentResult,{tool:{result:{extractions:[{extraction_id:'extract-all-three',status:'completed',name:merge.filename,merge,data:{records:merge.sources.map(s=>({source_filename:s.name,fields:{full_name:s.name}}))}}]}},onReview(){}}));
+ assert.match(html,/Extraction ID:.*extract-all-three/);assert.match(html,/merged-profiles-3.pdf/);assert.match(html,/3 separate records/);
+ for(const name of ['Alice','Bob','Carol'])assert.match(html,new RegExp(name+'\\.pdf'));
+ assert.match(html,/\/api\/extractions\/extract-all-three\/merged-file/);
+});
+
+test('merged review keeps its filename and exposes all record fields and retained originals',()=>{
+ const {ExtractionReview}=load(path.resolve(__dirname,'../app/extraction-review.tsx'));
+ const sources=['Alice','Bob','Carol'].map((name,n)=>({key:String(n+1),name:name+'.pdf',size:100,page_count:1,merged_page_start:n+1,merged_page_end:n+1}));
+ const e={id:'extract-three',version:1,status:'ready',document_ids:['combined'],merge_records:true,merge:{filename:'merged-three.pdf',source_count:3,document_id:'combined',sources},result:{records:sources.map(s=>({source_filename:s.name,source_key:s.key,fields:{full_name:s.name}}))},sources:sources.map(s=>({document_id:'combined',source_key:s.key,page:Number(s.key),source_page:1}))};
+ const html=renderToStaticMarkup(React.createElement(ExtractionReview,{extraction:e,documents:[{id:'combined',name:'merged-three.pdf'}],jobs:[],api:async()=>{},onSaved(){},onDirty(){}}));
+ assert.match(html,/merged-three.pdf/);assert.match(html,/Extraction ID.*extract-three/);assert.match(html,/3 separate records extracted/);
+ for(const [n,name] of ['Alice','Bob','Carol'].entries()){assert.match(html,new RegExp(`Value /records/${n}/fields/full_name`));assert.match(html,new RegExp(name+'\\.pdf'));}
+ assert.match(html,/\/api\/documents\/combined\/merged-sources\/1\/source/);
+});
 test('compact agent progress retains real stage counts and visible failures',()=>{
  const job={kind:'extract',status:'failed',progress:80,error:'Model unavailable',workflow:{current:'generate',stages:{prepare:{status:'completed'},generate:{status:'failed'},validate:{status:'blocked'},ready:{status:'blocked'}}}};
  const html=renderToStaticMarkup(React.createElement(AgentJobProgress,{job}));
@@ -133,7 +152,7 @@ test('workflow-only failures retain their reasons and retry actions without file
  const failed={...items[0],processing:false,failed:true,document:{...items[0].document,status:'failed',error:'Embedding provider timed out'},job:{status:'failed',workflow:{current:'index'}}};
  const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([failed]),workflowOnly:true}));
  assert.match(html,/Embedding provider timed out/);
- assert.match(html,/Retry failed step/);
+ assert.match(html,/Restart document workflow/);
  assert.doesNotMatch(html,/type="file"/);
  const rejected={id:'rejected',name:'rejected.txt',status:'failed',error:'Upload rejected'};
  const uploadFailure=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([rejected],{pending:[rejected]}),workflowOnly:true}));
@@ -213,10 +232,41 @@ test('Home does not add another loading announcement or flash an empty dataset m
 test('extraction uses the shared horizontal workflow and real completed-stage progress',()=>{
  const stages={prepare:{status:'completed'},generate:{status:'running'},validate:{status:'blocked'},ready:{status:'blocked'}};
  const html=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'running',progress:80,workflow:{current:'generate',stages}}}));
- assert.match(html,/aria-label="Extraction workflow"/);assert.match(html,/workflow-stages batch-stages/);assert.match(html,/aria-valuenow="25"/);assert.match(html,/stage-running/);assert.match(html,/Prepare sources/);assert.match(html,/Validate and save/);assert.doesNotMatch(html,/job-stage-list/);
+ assert.match(html,/aria-label="Extraction workflow"/);assert.match(html,/workflow-stages batch-stages/);assert.match(html,/aria-valuenow="25"/);assert.match(html,/stage-running/);assert.match(html,/Prepare sources/);assert.match(html,/Validate fields/);assert.doesNotMatch(html,/job-stage-list/);
  const failed=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'failed',error:'Model unavailable',workflow:{current:'generate',stages:{...stages,generate:{status:'failed'}}}}}));
  assert.match(failed,/Needs attention/);assert.match(failed,/stage-failed/);assert.match(failed,/Model unavailable/);assert.match(failed,/aria-valuenow="25"/);
  const done=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'completed',workflow:{stages:Object.fromEntries(Object.keys(stages).map(name=>[name,{status:'completed'}]))}}}));
  assert.match(done,/aria-valuenow="100"/);assert.match(done,/Your result is ready to review/);
  const legacy=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'running'}}));assert.match(legacy,/Stage details are unavailable/);assert.match(legacy,/aria-valuenow="0"/);
+});
+const {WorkflowStepper}=load(path.resolve(__dirname,'../app/workflow-stepper.tsx'));
+const {BatchProgress}=load(path.resolve(__dirname,'../app/batch-progress.tsx'));
+test('particles feed only the active stage; Knowledge to Chat waits until Knowledge finishes',()=>{
+ const steps=['Document','Knowledge','AI Chat'].map((label,n)=>({id:String(n),label,status:n===0?'completed':n===1?'running':'pending'}));
+ const html=renderToStaticMarkup(React.createElement(WorkflowStepper,{steps}));
+ assert.equal((html.match(/data-connection="flowing"/g)||[]).length,1);
+ assert.equal((html.match(/data-connection="pending"/g)||[]).length,1);
+ assert.equal((html.match(/aria-current="step"/g)||[]).length,1);
+ steps[1].status='completed';steps[2].status='running';
+ const chat=renderToStaticMarkup(React.createElement(WorkflowStepper,{steps}));
+ assert.equal((chat.match(/data-connection="complete"/g)||[]).length,1);
+ assert.equal((chat.match(/data-connection="flowing"/g)||[]).length,1);
+ steps[2].status='failed';
+ assert.doesNotMatch(renderToStaticMarkup(React.createElement(WorkflowStepper,{steps})),/connector-flowing|aria-current/);
+ steps[2].status='completed';
+ const complete=renderToStaticMarkup(React.createElement(WorkflowStepper,{steps}));
+ assert.equal((complete.match(/data-connection="complete"/g)||[]).length,2);
+ assert.equal((complete.match(/stage-completed/g)||[]).length,3);
+ assert.doesNotMatch(complete,/connector-flowing|stage-running/);
+});
+test('document journey uses real reading, knowledge and chat-readiness states',()=>{
+ const item={id:'doc',name:'evidence.txt',status:'submitted',document:{status:'processing'},processing:true,job:{status:'running',workflow:{current:'index',stages:{extract:{status:'completed'},index:{status:'running'},ready:{status:'blocked'}}}}};
+ const render=()=>renderToStaticMarkup(React.createElement(BatchProgress,{items:[item],compact:true}));
+ const active=render();assert.match(active,/>Document</);assert.match(active,/>Knowledge</);assert.match(active,/>AI Chat</);
+ assert.equal((active.match(/stage-running/g)||[]).length,1);
+ assert.equal((active.match(/connector-flowing/g)||[]).length,1);
+ item.job.status='failed';item.processing=false;item.failed=true;item.job.workflow.stages.index.status='failed';
+ const failed=render();assert.match(failed,/stage-failed/);assert.doesNotMatch(failed,/connector-flowing|stage-running/);
+ item.ready=true;item.failed=false;item.job.status='completed';
+ const ready=render();assert.equal((ready.match(/stage-completed/g)||[]).length,3);assert.match(ready,/All documents are ready/);
 });

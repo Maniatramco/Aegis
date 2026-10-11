@@ -179,3 +179,130 @@ def test_valid_docx_still_parses_after_error_classification():
     from docx import Document
     document=Document();document.add_paragraph('General document text.');raw=io.BytesIO();document.save(raw)
     assert worker.parse_document('general.docx',raw.getvalue())[0]['text']=='General document text.'
+
+def test_restart_rebuilds_all_originals_then_extracts_again_preserving_results(system, monkeypatch):
+    s=system;d=dataset(s);t=template(s);planner(monkeypatch,proposal())
+    p=plan(s,d,template_id=t['id'])
+    assert send_files(s,p).status_code==200
+    assert worker.run_once()
+    accepted=call(s,p,1);assert accepted.status_code==200,accepted.text
+    original=accepted.json()['calls'][1]['result']['extraction_id']
+    assert worker.run_once()
+    saved=core.store.get(main.get_record(original,s.owner,'extraction').ref)
+    # A completed first result and a later failed call must both restart.
+    record=main.get_record(p['id'],s.owner,'agent_plan');data=core.store.json(record.ref)
+    data['calls'].append({'tool':'extract','title':'Second extraction','status':'failed','error':'Model unavailable'})
+    core.store.put_json(record.ref,data)
+    response=s.api.post('/api/agent-v2/plans/'+p['id']+'/restart',json={'confirmed':True})
+    assert response.status_code==200,response.text
+    restarted=response.json();first=restarted['calls'][0]
+    assert first['status']=='waiting' and all(c['status']=='pending' for c in restarted['calls'][1:])
+    assert first['uploaded_document_ids']==data['calls'][0]['uploaded_document_ids']
+    assert first['job_ids']!=data['calls'][0]['job_ids']
+    assert first['jobs'][0]['workflow']['stages']['extract']['status']=='queued'
+    assert first['jobs'][0]['workflow']['stages']['index']['status']=='blocked'
+    assert s.api.post('/api/agent-v2/plans/'+p['id']+'/restart',json={'confirmed':True}).status_code==409
+    assert worker.run_once()
+    for _ in range(4):
+        s.api.get('/api/agent-v2/plans/'+p['id'])
+        worker.run_once()
+    done=s.api.get('/api/agent-v2/plans/'+p['id']).json()
+    assert all(c['status']=='completed' for c in done['calls']),done
+    assert done['calls'][1]['result']['extraction_id']!=original
+    assert core.store.get(main.get_record(original,s.owner,'extraction').ref)==saved
+    assert len(s.api.get('/api/documents').json())==1
+    assert done['restart_attempt']==1 and len(done['previous_attempts'])==1
+
+
+def test_restart_extract_only_rebuilds_stale_knowledge_before_extraction(system, monkeypatch):
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0];t=template(s);planner(monkeypatch,proposal(('extract',)))
+    p=plan(s,d,document_ids=[doc['id']],template_id=t['id'])
+    record=main.get_record(p['id'],s.owner,'agent_plan');data=core.store.json(record.ref)
+    data['calls'][0].update(error='Reindex required',status='pending');core.store.put_json(record.ref,data)
+    assert s.api.post('/api/agent-v2/plans/'+p['id']+'/restart',json={}).status_code==409
+    response=s.api.post('/api/agent-v2/plans/'+p['id']+'/restart',json={'confirmed':True})
+    assert response.status_code==200,response.text
+    assert [c['tool'] for c in response.json()['calls']]==['upload','extract']
+    assert worker.run_once();assert worker.run_once()
+    assert all(c['status']=='completed' for c in s.api.get('/api/agent-v2/plans/'+p['id']).json()['calls'])
+
+
+def test_restart_rejects_uncertain_or_active_work_and_foreign_scope(system, monkeypatch):
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0];t=template(s);planner(monkeypatch,proposal(('extract',)))
+    p=plan(s,d,document_ids=[doc['id']],template_id=t['id'])
+    record=main.get_record(p['id'],s.owner,'agent_plan');data=core.store.json(record.ref)
+    data['calls'][0].update(error='Submission status is uncertain',status='failed',submission_uncertain=True);core.store.put_json(record.ref,data)
+    endpoint='/api/agent-v2/plans/'+p['id']+'/restart'
+    assert s.api.post(endpoint,json={'confirmed':True}).status_code==409
+    data['calls'][0].pop('submission_uncertain');data['calls'][0]['error']='Model failed';core.store.put_json(record.ref,data)
+    s.owner='mallory'
+    assert s.api.post(endpoint,json={'confirmed':True}).status_code in (403,404)
+    s.owner='alice'
+    post(s,'/api/documents/'+doc['id']+'/reindex',{})
+    assert s.api.post(endpoint,json={'confirmed':True}).status_code==409
+
+
+def stale_index(doc):
+    path='documents/'+doc['id']+'/index.json'
+    index=core.store.json(path);index['fingerprint']='old-embedding-pipeline';core.store.put_json(path,index)
+
+
+def test_confirmed_extraction_reindexes_only_stale_documents_keeps_complete_scope(system,monkeypatch):
+    s=system;d=dataset(s);stale=upload(s,d)['documents'][0];ready=upload(s,d)['documents'][0];t=template(s)
+    original=core.store.get(main.get_record(stale['id'],s.owner,'document').ref)
+    before=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[ready['id']],'template_id':t['id']})
+    assert worker.run_once();saved=core.store.get(main.get_record(before['id'],s.owner,'extraction').ref)
+    stale_index(stale);planner(monkeypatch,proposal(('extract',)))
+    p=plan(s,d,document_ids=[stale['id'],ready['id']],template_id=t['id'])
+    endpoint=f'/api/agent-v2/plans/{p["id"]}/calls/0'
+    assert s.api.post(endpoint,json={'extraction_mode':'independent'}).status_code==409
+    response=call(s,p,0,extraction_mode='independent',display_name='Selected profiles')
+    assert response.status_code==200,response.text
+    accepted=response.json();first=accepted['calls'][0]
+    assert first['title']=='Reindex selected documents' and first['status']=='waiting'
+    assert [j['target_id'] for j in first['jobs']]==[stale['id']]
+    assert first['uploaded_document_ids']==[stale['id'],ready['id']]
+    assert accepted['calls'][1]['status']=='pending'
+    assert s.api.post(endpoint,json={'confirmed':True}).json()['calls'][0]['job_ids']==first['job_ids']
+    assert worker.run_once()
+    resumed=s.api.get('/api/agent-v2/plans/'+p['id']).json()
+    assert resumed['calls'][0]['status']=='completed'
+    assert {tuple(e['document_ids']) for e in resumed['calls'][1]['result']['extractions']}=={(stale['id'],),(ready['id'],)}
+    assert worker.run_once();assert worker.run_once()
+    done=s.api.get('/api/agent-v2/plans/'+p['id']).json()
+    assert all(c['status']=='completed' for c in done['calls'])
+    assert core.store.get(main.get_record(stale['id'],s.owner,'document').ref)==original
+    assert core.store.get(main.get_record(before['id'],s.owner,'extraction').ref)==saved
+    assert s.api.get('/api/documents/'+stale['id']).json()['requires_reindex'] is False
+
+
+def test_reindex_prerequisite_failure_stops_extraction_and_allows_full_restart(system,monkeypatch):
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0];t=template(s);stale_index(doc)
+    planner(monkeypatch,proposal(('extract',)));p=plan(s,d,document_ids=[doc['id']],template_id=t['id'])
+    response=call(s,p,0);assert response.status_code==200,response.text
+    original_embed=providers.embed
+    def fail(*args,**kwargs):raise providers.ProviderError('Embedding service unavailable')
+    monkeypatch.setattr(providers,'embed',fail);assert worker.run_once()
+    failed=s.api.get('/api/agent-v2/plans/'+p['id']).json()
+    assert failed['calls'][0]['status']=='failed' and failed['calls'][1]['status']=='pending'
+    assert s.api.get('/api/extractions').json()==[]
+    monkeypatch.setattr(providers,'embed',original_embed)
+    restart=s.api.post('/api/agent-v2/plans/'+p['id']+'/restart',json={'confirmed':True})
+    assert restart.status_code==200,restart.text
+    assert worker.run_once();assert worker.run_once()
+    assert all(c['status']=='completed' for c in s.api.get('/api/agent-v2/plans/'+p['id']).json()['calls'])
+
+
+def test_stale_indexes_validate_template_and_external_consent_before_queueing(system,monkeypatch):
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0];t=template(s);stale_index(doc)
+    planner(monkeypatch,proposal(('extract',)));p=plan(s,d,document_ids=[doc['id']],template_id=t['id'])
+    jobs=len(s.api.get('/api/jobs').json())
+    other=dataset(s,'Other');record=main.get_record(t['id'],s.owner,'template')
+    with core.Session.begin() as session:session.get(core.Record,record.id).parent_id=other['id']
+    assert call(s,p,0).status_code==400
+    with core.Session.begin() as session:session.get(core.Record,record.id).parent_id=''
+    def consent(*args,**kwargs):raise main.HTTPException(400,'External data consent required')
+    monkeypatch.setattr(main,'external_check',consent)
+    assert call(s,p,0).status_code==400
+    assert len(s.api.get('/api/jobs').json())==jobs
+    assert s.api.get('/api/extractions').json()==[]

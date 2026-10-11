@@ -99,8 +99,7 @@ export function useDocumentUpload(options: Options) {
     if (options.externalRequired && !options.consent) { setNotice("Approve the external processing notice before retrying indexing."); return; }
     retryLocks.current.add(document.id); setRetrying(ids => [...ids, document.id]); setNotice("");
     try {
-      const failed = options.jobs.filter(j => j.target_id === document.id && ["failed","cancelled"].includes(j.status)).sort((a,b) => b.created_at-a.created_at)[0];
-      const job = failed ? await options.api(`/jobs/${failed.id}/retry`, "POST", {}) : await options.api(`/documents/${document.id}/reindex`, "POST", { allow_external: options.consent });
+      const job = await options.api(`/documents/${document.id}/reextract`, "POST", { allow_external: options.consent, confirm_reviewed:true });
       if (currentSession.current !== options.sessionKey) return;
       options.onUploaded({ documents: [{ ...document, status: "queued", error: null }], jobs: [job] });
     } catch (error) { if (currentSession.current === options.sessionKey) setNotice(error instanceof Error ? error.message : "Could not retry indexing. Check the document status before trying again."); }
@@ -158,7 +157,7 @@ export function DocumentUploadPanel({ upload: u, attachmentOnly = false, workflo
         {row.status === "uncertain" && <p className="upload-file-error">The original may already be stored. Check this dataset’s documents before selecting this file again to avoid a duplicate.</p>}
         {row.document && <>
         {row.job?.workflow?.notice && <p className="small muted">{row.job.workflow.notice}</p>}
-        {!row.processing && (row.failed || row.document.requires_reindex) && <div className="batch-document-retry"><button type="button" className="btn primary" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13}/>{u.retrying.includes(row.document.id)?"Retrying…":"Retry failed step"}</button></div>}
+        {!row.processing && (row.failed || row.document.requires_reindex) && <div className="batch-document-retry"><button type="button" className="btn primary" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13}/>{u.retrying.includes(row.document.id)?"Restarting…":"Restart document workflow"}</button></div>}
         <details className="batch-document-actions"><summary>Document actions</summary><div className="workflow-actions"><button type="button" className="btn" disabled={row.processing||u.retrying.includes(row.document.id)||!!u.blocked} onClick={()=>u.reextract(row.document!)}>Re-extract document</button>{row.document.temporary_session_id&&<button type="button" className="text-button" onClick={()=>u.keep(row.document!)}>Keep in dataset</button>}</div></details></>}
       </div>
       {!row.document && row.status !== "uploading" && <button type="button" className="btn icon" aria-label={`Remove ${row.name}`} disabled={u.uploading} onClick={() => u.remove(row.id)}><X size={16} /></button>}

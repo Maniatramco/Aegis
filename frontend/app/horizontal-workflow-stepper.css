@@ -1,0 +1,27 @@
+.workflow-stages.horizontal-workflow-stepper{--workflow-accent:#2563eb;--workflow-current:#0b316f;--workflow-muted:#93a9c4;--workflow-marker:38px;position:relative;contain:inline-size;display:grid;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(88px,1fr);gap:0;width:100%;max-width:665px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding:14px 0 10px;margin:10px auto 8px;list-style:none;text-align:center;background:#f6f9fe;border-radius:9px}
+.workflow-stages.horizontal-workflow-stepper>li{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;padding:0 5px;color:#71839e!important;font-size:11px}
+.workflow-stages.horizontal-workflow-stepper>li::after{display:none!important}
+.workflow-stages.horizontal-workflow-stepper .workflow-connector{position:absolute;top:calc(var(--workflow-marker)/2 - 1px);left:calc(50% + var(--workflow-marker)/2 + 5px);right:calc(-50% + var(--workflow-marker)/2 + 5px);height:2px;background:#c8d6e9;z-index:0;border-radius:4px}
+.workflow-stages.horizontal-workflow-stepper .connector-complete{background:#2a62b4}
+.workflow-stages.horizontal-workflow-stepper .connector-flowing{background:#b7cef0}
+.workflow-stages.horizontal-workflow-stepper .workflow-connector i{display:none}
+.workflow-stages.horizontal-workflow-stepper .connector-flowing i{display:block;position:absolute;top:50%;left:0;width:5px;height:5px;border-radius:50%;background:var(--workflow-current);transform:translate(-50%,-50%);opacity:0;animation:workflow-particle 2.15s linear infinite}
+.workflow-stages.horizontal-workflow-stepper .connector-flowing i:nth-child(2){width:4px;height:4px;animation-delay:.7s}
+.workflow-stages.horizontal-workflow-stepper .connector-flowing i:nth-child(3){width:3px;height:3px;animation-delay:1.4s}
+.workflow-stages.horizontal-workflow-stepper .stage-symbol{display:grid;place-items:center;width:var(--workflow-marker);height:var(--workflow-marker);flex-shrink:0;border:1px solid #dae6f5;border-radius:12px;background:#fff;color:var(--workflow-muted);position:relative;z-index:1;animation:none!important}
+.workflow-stages.horizontal-workflow-stepper .stage-completed .stage-symbol{border-color:var(--workflow-accent);background:var(--workflow-accent);color:#fff}
+.workflow-stages.horizontal-workflow-stepper .stage-running .stage-symbol{border-color:#afcafa;background:#f1f6ff;color:var(--workflow-current);box-shadow:none}
+.workflow-stages.horizontal-workflow-stepper .stage-running .stage-symbol::before{content:"";position:absolute;inset:-6px;border:2px solid #d7e5fa;border-top-color:var(--workflow-current);border-right-color:#123c8c;border-radius:50%;animation:workflow-ring 1.15s linear infinite}
+.workflow-stages.horizontal-workflow-stepper .stage-failed .stage-symbol{border-color:#bc1733;background:#ffebef;color:#bc1733}
+.workflow-stages.horizontal-workflow-stepper :is(b,strong){font-weight:600;line-height:1.35;margin-top:5px;overflow-wrap:anywhere;max-width:100%}
+.workflow-stages.horizontal-workflow-stepper>li.stage-running{color:var(--workflow-current)!important}
+.workflow-stages.horizontal-workflow-stepper>li.stage-completed{color:#3262a8!important}
+.workflow-stages.horizontal-workflow-stepper small{font-size:10px!important;line-height:1.35!important;text-transform:none;overflow-wrap:anywhere}
+.workflow-stages.horizontal-workflow-stepper .workflow-step-detail{color:#71839e}
+.workflow-stages.horizontal-workflow-stepper:focus-visible{outline:2px solid var(--workflow-accent);outline-offset:3px}
+.workflow-stages.horizontal-workflow-stepper .stage-completed .stage-symbol svg{animation:workflow-step-complete .3s ease-out}
+@keyframes workflow-ring{to{transform:rotate(360deg)}}
+@keyframes workflow-particle{0%{left:0;opacity:0}12%{opacity:1}85%{opacity:1}100%{left:100%;opacity:0}}
+@keyframes workflow-step-complete{from{opacity:.2;transform:scale(.65)}to{opacity:1;transform:scale(1)}}
+@media(max-width:480px),(max-height:600px){.workflow-stages.horizontal-workflow-stepper{--workflow-marker:32px;grid-auto-columns:minmax(78px,1fr);padding:12px 0 8px}.workflow-stages.horizontal-workflow-stepper>li{font-size:10px;gap:4px}.workflow-stages.horizontal-workflow-stepper .stage-symbol svg{width:18px;height:18px}}
+@media(prefers-reduced-motion:reduce){.workflow-stages.horizontal-workflow-stepper *,.workflow-stages.horizontal-workflow-stepper *::before{animation:none!important;transition:none!important}.workflow-stages.horizontal-workflow-stepper .connector-flowing{background:var(--workflow-current)}.workflow-stages.horizontal-workflow-stepper .connector-flowing i{display:none}.workflow-stages.horizontal-workflow-stepper .stage-running .stage-symbol::before{border-color:var(--workflow-current)}}

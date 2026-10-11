@@ -37,8 +37,8 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
   </div>;
 }
 
-export function DatasetWorkspace({ datasets, models, documents, selectedId, onSelect, onCreated, api, run, busy, reload, notify, onConnections, onUse, uploadPanel, documentsPanel, modelsFocus, onUploadWorkflowVisible }: {
-  datasets: Entity[]; models: Entity[]; documents: Entity[]; selectedId: string; onSelect: (id: string) => void; onCreated: (dataset: Entity) => void; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void; onUse: (view: "Aegis Agent" | "Extract") => void; uploadPanel: React.ReactNode; documentsPanel: React.ReactNode; modelsFocus: boolean; onUploadWorkflowVisible?: (visible:boolean)=>void;
+export function DatasetWorkspace({ datasets, models, documents, selectedId, onSelect, onCreated, api, run, busy, reload, notify, onConnections, onUse, uploadPanel, documentsPanel, modelsFocus, onUploadWorkflowVisible, canManage = true }: {
+  datasets: Entity[]; models: Entity[]; documents: Entity[]; selectedId: string; onSelect: (id: string) => void; onCreated: (dataset: Entity) => void; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void; onUse: (view: "Aegis Agent" | "Extract") => void; uploadPanel: React.ReactNode; documentsPanel: React.ReactNode; modelsFocus: boolean; onUploadWorkflowVisible?: (visible:boolean)=>void; canManage?: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [showList, setShowList] = useState(!selectedId);
@@ -58,17 +58,17 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
   const embedding = dataset?.models_complete && mapped.find((m: Entity) => m.id === dataset?.embedding_model_id);
   const visibleDatasets = datasets.filter(d => `${d.name} ${d.description || ""}`.toLowerCase().includes(search.toLowerCase()));
   useEffect(() => {
-    setTab(modelsFocus && dataset?.active === false ? "settings" : modelsFocus || newlyCreated.current === selectedId ? "models" : "documents");
+    setTab(!canManage ? "documents" : modelsFocus && dataset?.active === false ? "settings" : modelsFocus || newlyCreated.current === selectedId ? "models" : "documents");
     setShowUpload(false);
     if (selectedId) setShowList(false);
     newlyCreated.current = "";
-  }, [selectedId, modelsFocus]);
+  }, [selectedId, modelsFocus, canManage]);
   const startCreating = () => { setCreating(true); setName(""); setDescription(""); };
   const openDataset = (id: string) => { onSelect(id); setShowList(false); setCreating(false); setTab("documents"); setShowUpload(false); };
   return <div className="dataset-focus">
     <div className="dataset-intro dataset-navigation">
       {!creating && dataset && !showList ? <button className="text-button" onClick={() => { setShowList(true); setShowUpload(false); }}><ArrowLeft size={15} />All datasets</button> : <div><h2>{creating ? "New dataset" : "Your datasets"}</h2><p>{creating ? "Give your documents a name and a place." : `${datasets.length} dataset${datasets.length === 1 ? "" : "s"} · Choose one to view its documents`}</p></div>}
-      {!creating && <button className={`btn ${showList || !dataset ? "primary" : ""}`} onClick={startCreating}><Plus size={15} />New dataset</button>}
+      {!creating && canManage && <button className={`btn ${showList || !dataset ? "primary" : ""}`} onClick={startCreating}><Plus size={15} />New dataset</button>}
     </div>
     {creating ? <section className="panel onboarding-panel">
       <div className="panel-head"><div><h2>Name your dataset</h2><p className="muted small">You can choose its models after creating it.</p></div><button className="btn icon" aria-label="Cancel dataset onboarding" onClick={() => setCreating(false)}><X size={16} /></button></div>
@@ -93,7 +93,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
             <span className="dataset-card-link">Open dataset<ChevronRight size={14} /></span>
           </button>;
         })}
-        {!datasets.length && <div className="panel dataset-empty"><Database size={30} /><h3>Your first dataset starts here</h3><p>Create a dataset, choose its models, and add documents.</p><button className="btn primary" onClick={startCreating}>New dataset <ArrowRight size={14} /></button></div>}
+        {!datasets.length && <div className="panel dataset-empty"><Database size={30} /><h3>{canManage?'Your first dataset starts here':'No datasets assigned'}</h3><p>{canManage?'Create a dataset, choose its models, and add documents.':'Ask your administrator to assign a dataset to your account.'}</p>{canManage&&<button className="btn primary" onClick={startCreating}>New dataset <ArrowRight size={14} /></button>}</div>}
         {!!datasets.length && !visibleDatasets.length && <div className="panel dataset-empty"><Search size={28} /><h3>No matching datasets</h3><p>Try another name or description.</p><button className="btn" onClick={() => setSearch("")}>Clear search</button></div>}
       </div>
     </> : <>
@@ -101,23 +101,23 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
         <div className="panel-head dataset-detail-heading"><div><div className="row wrap"><h2>{dataset.name}</h2><span className={`pill ${dataset.active === false ? "inactive" : "green"}`}>{dataset.active === false ? "Inactive" : "Active"}</span></div>{dataset.description && <p className="muted small">{dataset.description}</p>}<p className="dataset-document-summary">{datasetDocs.length} document{datasetDocs.length === 1 ? "" : "s"} · {ready} ready</p></div><div className="row wrap dataset-use-actions"><button className="btn" onClick={() => onUse("Aegis Agent")} disabled={!chat.length || !ready}><MessageSquare size={14} />Ask this dataset</button><button className="btn" onClick={() => onUse("Extract")} disabled={!extraction.length || !ready}><FileSearch size={14} />Extract from dataset</button></div></div>
         <div className="tabs dataset-tabs" aria-label="Dataset sections">
           <button className={`btn ${tab === "documents" ? "primary" : ""}`} aria-pressed={tab === "documents"} onClick={() => setTab("documents")}><FileText size={14} />Documents</button>
-          <button className={`btn ${tab === "models" ? "primary" : ""}`} aria-pressed={tab === "models"} onClick={() => setTab("models")}><Layers size={14} />Model Mapping</button>
-          <button className={`btn ${tab === "settings" ? "primary" : ""}`} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={14} />Settings</button>
+          {canManage&&<button className={`btn ${tab === "models" ? "primary" : ""}`} aria-pressed={tab === "models"} onClick={() => setTab("models")}><Layers size={14} />Model Mapping</button>}
+          {canManage&&<button className={`btn ${tab === "settings" ? "primary" : ""}`} aria-pressed={tab === "settings"} onClick={() => setTab("settings")}><Settings2 size={14} />Settings</button>}
         </div>
         <div hidden={tab !== "documents"}>
-          {dataset.active === false ? <div className="notice"><Settings2 size={16} /><div>This dataset is inactive. You can review its documents or <button className="text-button" onClick={() => setTab("settings")}>open settings to activate it</button>.</div></div> : !embedding && <div className="notice warn"><Layers size={16} /><div>Choose Embedding, Chat, and Extraction models before adding documents. <button className="text-button" onClick={() => setTab("models")}>Choose models <ArrowRight size={12} /></button></div></div>}
+          {dataset.active === false ? <div className="notice"><Settings2 size={16} /><div>This dataset is inactive. {canManage?<>You can review its documents or <button className="text-button" onClick={() => setTab("settings")}>open settings to activate it</button>.</>:<>You can review its documents. Ask your administrator to activate it.</>}</div></div> : !embedding && <div className="notice warn"><Layers size={16} /><div>{canManage?<>Choose Embedding, Chat, and Extraction models before adding documents. <button className="text-button" onClick={() => setTab("models")}>Choose models <ArrowRight size={12} /></button></>:<>Ask your administrator to configure this dataset's models before adding documents.</>}</div></div>}
           <div className="dataset-documents-toolbar"><span className="muted small">Originals and their processing status</span><button className={`btn ${showUpload ? "" : "primary"}`} aria-expanded={showUpload} aria-controls="dataset-add-documents" disabled={dataset.active === false || !embedding} onClick={() => setShowUpload(!showUpload)}>{showUpload ? <X size={14} /> : <Plus size={14} />}{showUpload ? "Cancel upload" : "Add documents"}</button></div>
           <div id="dataset-add-documents" className="dataset-upload-panel" hidden={!showUpload}>{uploadPanel}</div>
         </div>
-        <div hidden={tab !== "models"}>
+        {canManage&&<div hidden={tab !== "models"}>
           <p><button className="btn" disabled={busy} onClick={()=>run(async()=>{await api(`/datasets/${dataset.id}/local-models`,"POST",{});notify("Installed local models mapped. Existing embedding index selection preserved.");reload();})}>Use installed local models</button></p>
           {dataset.migration_required && <div className="notice warn"><Settings2 size={16} /><div><strong>This dataset needs model mappings.</strong><p>Import your current deployment settings, then review the models below.</p><button className="btn" disabled={busy} onClick={() => run(async () => { await api(`/datasets/${dataset.id}/migrate-settings`, "POST", {}); notify("Current settings imported. Review the dataset’s model mappings."); reload(); })}>Import current settings</button></div></div>}
           <DatasetMappings key={dataset.id} dataset={dataset} models={models} api={api} run={run} busy={busy} reload={reload} notify={notify} onConnections={onConnections} />
-        </div>
-        <div hidden={tab !== "settings"}>
+        </div>}
+        {canManage&&<div hidden={tab !== "settings"}>
           <div className="dataset-status-setting"><div><strong>Dataset status: {dataset.active !== false ? "Active" : "Inactive"}</strong><p className="muted small">Inactive datasets remain available to review. New processing, questions, and extractions are paused; work already queued may finish.</p></div><button className="btn" disabled={busy} onClick={() => run(async () => { const active = dataset.active === false; await api(`/datasets/${dataset.id}/status`, "PATCH", { active }); notify(`Dataset ${active ? "activated" : "deactivated"}.`); reload(); })}>{dataset.active !== false ? "Deactivate dataset" : "Activate dataset"}</button></div>
           <div className="dataset-storage"><Shield size={17} /><div><strong>Document storage</strong><p>Original files use your deployment’s durable storage. Model mappings control answering, extraction, and indexing. Connection credentials stay encrypted on the server.</p></div></div>
-        </div>
+        </div>}
       </section>
       {tab === "documents" && documentsPanel}
     </>}

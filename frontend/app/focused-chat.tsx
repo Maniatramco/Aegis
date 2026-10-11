@@ -135,6 +135,7 @@ export function FocusedChat(p: Props) {
         </div>
       </header>
       <div className="chat-messages" ref={thread} tabIndex={0} aria-label="Conversation messages" onScroll={() => { const el = thread.current!; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!atEnd.current); }}>
+        {sources.some((citation:Entity)=>citation.ocr)&&<p className="small muted" role="status">Some sources use AI OCR. Verify names, numbers and tables against the originals.</p>}
         {messages.length ? messages.map((m, i) => {
           const text = m.text || m.content || "";
           const incomplete = m.role !== "user" && (["failed", "aborted"].includes(m.status) || (!text && m.id !== "streaming-answer" && m.status !== "streaming"));

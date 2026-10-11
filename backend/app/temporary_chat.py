@@ -51,7 +51,7 @@ def chat_snapshot(owner, id):
     data = routing.model_data(model)
     if not data.get('enabled', True) or 'chat' not in data['capabilities']:
         raise HTTPException(409, 'Choose an enabled registered Chat model.')
-    profile = routing.owned(data['connection_profile_id'], owner, 'config_profile')
+    profile = routing.owned(data['connection_profile_id'], model.owner, 'config_profile')
     snap = routing.profile_snapshot(profile, data.get('connection_profile_version'))
     cfg = core.settings().copy()
     cfg.update({key: snap['settings'][key] for key in routing.MODEL_KEYS if key in snap['settings']})
@@ -108,7 +108,7 @@ def install(app, auth):
         pages = [page for page in pages if page['text'].strip()]
         text_bytes = sum(len(page['text'].encode('utf-8')) for page in pages)
         if not pages:
-            raise HTTPException(400, 'No readable text was found. Scanned documents need OCR before direct chat.')
+            raise HTTPException(400, 'No readable text was found. Upload a document containing legible text or a clearer scan.')
         if text_bytes > MAX_TEXT_BYTES:
             raise HTTPException(413, 'This document exceeds the 40 KB text limit for direct chat. Use a shorter document or the regular dataset workflow. No text was indexed or embedded.')
         doc = {'id': core.uid(), 'owner': owner, 'session_id': session_id, 'name': name,
@@ -146,7 +146,7 @@ def install(app, auth):
         context_bytes = doc['text_bytes'] + len(body.text.encode('utf-8')) + sum(len(turn.text.encode('utf-8')) for turn in body.history)
         if context_bytes > MAX_CONTEXT_BYTES:
             raise HTTPException(400, 'This document, question, and chat history exceed the direct context limit. Start a new chat or ask a shorter question. The document has not been truncated.')
-        sources = [{'document_name': doc['name'], 'text': page['text'], 'page': page['page']} for page in doc['pages']]
+        sources = [{'document_name': doc['name'], 'text': page['text'], 'page': page['page'], **{key:page[key] for key in ('text_origin','ocr') if key in page}} for page in doc['pages']]
         def answer():
             with core.execution_context(snap):
                 return providers.answer(body.text, sources, history)
@@ -158,7 +158,7 @@ def install(app, auth):
             raise HTTPException(502, 'The selected Chat model could not answer. Check the model connection or use a smaller document.') from error
         used = {int(value) for value in re.findall(r'\[(\d+)\]', text)}
         citations = [{'index': index + 1, 'document_name': doc['name'], 'page': source['page'],
-                      'excerpt': source['text'][:1200], 'temporary_document_id': doc['id']}
+                      'excerpt': source['text'][:1200], 'temporary_document_id': doc['id'], **{key:source[key] for key in ('text_origin','ocr') if key in source}}
                      for index, source in enumerate(sources) if index + 1 in used]
         selection = {key: snap[key] for key in ('model_id', 'model_name', 'model_version', 'provider_model', 'connection_profile_id', 'connection_profile_version')}
         return {'temporary': True, 'indexed': False, 'embedded': False,

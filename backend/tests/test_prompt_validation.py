@@ -65,8 +65,11 @@ def test_repeated_filename_uploads_update_one_template_and_keep_prior_versions(s
 def test_filename_replacement_is_scoped_to_dataset_and_owner(system):
     s=system;one=dataset(s,'One');two=dataset(s,'Two');body={'name':'Ignored','schema':BASE,'source_filename':'mani.json'}
     a=s.api.post('/api/templates',json={**body,'dataset_id':one['id']}).json()
+    preview=s.api.post('/api/templates/validate',json={**body,'dataset_id':two['id']}).json()
+    assert preview['existing_template_id'] is None
     b=s.api.post('/api/templates',json={**body,'dataset_id':two['id']}).json()
     assert a['id']!=b['id'] and b['version']==1
+    assert s.api.post('/api/templates/validate',json={**body,'dataset_id':one['id']}).json()['existing_template_id']==a['id']
     shared=s.api.post('/api/templates',json=body).json()
     s.owner='bob';other=s.api.post('/api/templates',json=body).json()
     assert other['id']!=shared['id'] and other['version']==1

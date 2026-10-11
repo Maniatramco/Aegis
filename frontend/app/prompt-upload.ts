@@ -1,4 +1,4 @@
-export type PromptUpload = { fileName: string; name: string; schema: Record<string, unknown>; preview: string; replacesExisting?:boolean };
+export type PromptUpload = { fileName: string; name: string; schema: Record<string, unknown>; instructions?:string; preview: string; replacesExisting?:boolean };
 export async function readPromptUpload(file: Pick<File, 'name' | 'size' | 'text'>): Promise<PromptUpload> {
   if (!/\.json$/i.test(file.name)) throw new Error('Upload a .json file for your prompt.');
   if (!file.size || file.size > 1024 * 1024) throw new Error('Prompt JSON must be a non-empty file of 1 MB or smaller.');
@@ -20,5 +20,6 @@ export async function readPromptUpload(file: Pick<File, 'name' | 'size' | 'text'
   if (!schema || Array.isArray(schema) || typeof schema !== 'object') throw new Error('The schema field must be a JSON object.');
   const name = file.name;
   if (!name.trim() || name.length > 200) throw new Error('The prompt filename must contain 1 to 200 characters.');
-  return { fileName: file.name, name, schema: schema as Record<string, unknown>, preview: JSON.stringify(parsed, null, 2) };
+  if(payload.instructions!==undefined&&(typeof payload.instructions!=='string'||payload.instructions.length>12000))throw new Error('Prompt instructions must be text of 12,000 characters or fewer.');
+  return { fileName: file.name, name, schema: schema as Record<string, unknown>, ...(payload.instructions?{instructions:payload.instructions as string}:{}), preview: JSON.stringify(parsed, null, 2) };
 }

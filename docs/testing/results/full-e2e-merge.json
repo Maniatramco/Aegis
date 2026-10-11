@@ -1,0 +1,18 @@
+{
+  "stage": "merge",
+  "dataset_id": "d21843dc-e3d8-403f-9234-c93bab97fcc0",
+  "authentication": "test-process owner scope; live server auth unchanged",
+  "passed": true,
+  "extraction_id": "3c7c1ab3-81a5-4305-bd37-b683ed8004e6",
+  "merged_filename": "merged-01-arjun-rao-backend-3-files-eb0eac23.pdf",
+  "source_files": [
+    "01-arjun-rao-backend.pdf",
+    "02-meera-iyer-devops.pdf",
+    "03-nikhil-shah-data.pdf"
+  ],
+  "profiles": 3,
+  "all_fields_match": true,
+  "pdf_pages": 3,
+  "resumed_two_saved_profiles": true,
+  "validation_seconds": 0.21
+}

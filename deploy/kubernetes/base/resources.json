@@ -1,0 +1,977 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "aegis-config"
+      },
+      "data": {
+        "DATABASE_PROVIDER": "oracle",
+        "ORACLE_HOST": "oracle",
+        "ORACLE_PORT": "1521",
+        "ORACLE_SERVICE_NAME": "FREEPDB1",
+        "ORACLE_USER": "AGS_OWNER",
+        "ORACLE_PASSWORD_FILE": "/run/secrets/aegis_oracle_password",
+        "AEGIS_STORAGE_ROOT": "/data",
+        "SEARCH_PROVIDER": "qdrant",
+        "QDRANT_URL": "http://qdrant:6333",
+        "MODEL_PROVIDER": "ollama",
+        "EMBEDDING_PROVIDER": "ollama",
+        "AEGIS_MODEL": "qwen3:4b",
+        "EMBEDDING_MODEL": "nomic-embed-text",
+        "AEGIS_OLLAMA_URL": "http://ollama:11434",
+        "AEGIS_OLLAMA_ENDPOINT_HOSTS": "ollama",
+        "AEGIS_ALLOW_MOCK": "false",
+        "AEGIS_TIMEOUT": "1200",
+        "API_INTERNAL_URL": "http://api:8000",
+        "ALLOWED_ORIGINS": "http://localhost:3003,http://127.0.0.1:3003",
+        "AEGIS_AGENT_ENGINE": "langgraph",
+        "LANGSMITH_TRACING": "false",
+        "AEGIS_OCR_ENABLED": "true",
+        "AEGIS_OCR_MODEL": "qwen2.5vl:3b",
+        "AEGIS_OCR_URL": "http://ollama:11434",
+        "AEGIS_OCR_TIMEOUT": "1200",
+        "AEGIS_OCR_CONTEXT": "8192",
+        "AEGIS_OCR_MAX_TOKENS": "3000",
+        "AEGIS_OCR_DPI": "180",
+        "AEGIS_OCR_BATCH": "128"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "oracle"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "50Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "storage"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "qdrant"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "10Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "ollama"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "name": "oracle"
+      },
+      "spec": {
+        "replicas": 1,
+        "serviceName": "oracle",
+        "selector": {
+          "matchLabels": {
+            "app": "oracle"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "oracle"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "oracle",
+                "image": "container-registry.oracle.com/database/free:23.26.3.0",
+                "ports": [
+                  {
+                    "containerPort": 1521
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "ORACLE_APP_USER",
+                    "valueFrom": {
+                      "configMapKeyRef": {
+                        "name": "aegis-config",
+                        "key": "ORACLE_USER"
+                      }
+                    }
+                  },
+                  {
+                    "name": "ORACLE_PWD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "aegis-secrets",
+                        "key": "oracle-password"
+                      }
+                    }
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "500m",
+                    "memory": "2Gi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "4Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "oracle",
+                    "mountPath": "/opt/oracle/oradata"
+                  },
+                  {
+                    "name": "db-secrets",
+                    "mountPath": "/run/secrets",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "oracle-scripts",
+                    "mountPath": "/opt/oracle/scripts/startup",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "oracle-health",
+                    "mountPath": "/opt/oracle/checkAegisDB.sh",
+                    "subPath": "healthcheck.sh",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "shm",
+                    "mountPath": "/dev/shm"
+                  }
+                ],
+                "startupProbe": {
+                  "exec": {
+                    "command": [
+                      "bash",
+                      "/opt/oracle/checkAegisDB.sh"
+                    ]
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 10,
+                  "failureThreshold": 180
+                },
+                "readinessProbe": {
+                  "exec": {
+                    "command": [
+                      "bash",
+                      "/opt/oracle/checkAegisDB.sh"
+                    ]
+                  },
+                  "periodSeconds": 15,
+                  "timeoutSeconds": 10,
+                  "failureThreshold": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "oracle",
+                "persistentVolumeClaim": {
+                  "claimName": "oracle"
+                }
+              },
+              {
+                "name": "db-secrets",
+                "secret": {
+                  "secretName": "aegis-secrets",
+                  "defaultMode": 292,
+                  "items": [
+                    {
+                      "key": "oracle-password",
+                      "path": "oracle_pwd"
+                    },
+                    {
+                      "key": "database-password",
+                      "path": "aegis_oracle_password"
+                    },
+                    {
+                      "key": "test-database-password",
+                      "path": "aegis_oracle_test_password"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "oracle-scripts",
+                "configMap": {
+                  "name": "oracle-scripts",
+                  "defaultMode": 365
+                }
+              },
+              {
+                "name": "oracle-health",
+                "configMap": {
+                  "name": "oracle-health",
+                  "defaultMode": 365
+                }
+              },
+              {
+                "name": "shm",
+                "emptyDir": {
+                  "medium": "Memory",
+                  "sizeLimit": "1Gi"
+                }
+              }
+            ],
+            "securityContext": {
+              "fsGroup": 54321
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "oracle"
+      },
+      "spec": {
+        "selector": {
+          "app": "oracle"
+        },
+        "ports": [
+          {
+            "port": 1521,
+            "targetPort": 1521
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "name": "qdrant"
+      },
+      "spec": {
+        "replicas": 1,
+        "serviceName": "qdrant",
+        "selector": {
+          "matchLabels": {
+            "app": "qdrant"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "qdrant"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "qdrant",
+                "image": "qdrant/qdrant:v1.19.1",
+                "ports": [
+                  {
+                    "containerPort": 6333
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "250m",
+                    "memory": "512Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "qdrant",
+                    "mountPath": "/qdrant/storage"
+                  }
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/readyz",
+                    "port": 6333
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 6
+                },
+                "livenessProbe": {
+                  "httpGet": {
+                    "path": "/livez",
+                    "port": 6333
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 6
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "qdrant",
+                "persistentVolumeClaim": {
+                  "claimName": "qdrant"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "qdrant"
+      },
+      "spec": {
+        "selector": {
+          "app": "qdrant"
+        },
+        "ports": [
+          {
+            "port": 6333,
+            "targetPort": 6333
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "name": "ollama"
+      },
+      "spec": {
+        "replicas": 1,
+        "serviceName": "ollama",
+        "selector": {
+          "matchLabels": {
+            "app": "ollama"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "ollama"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "ollama",
+                "image": "ollama/ollama:0.35.1",
+                "ports": [
+                  {
+                    "containerPort": 11434
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "OLLAMA_NO_CLOUD",
+                    "value": "1"
+                  },
+                  {
+                    "name": "OLLAMA_NUM_PARALLEL",
+                    "value": "1"
+                  },
+                  {
+                    "name": "OLLAMA_MAX_LOADED_MODELS",
+                    "value": "1"
+                  },
+                  {
+                    "name": "OLLAMA_CONTEXT_LENGTH",
+                    "value": "4096"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "2",
+                    "memory": "4Gi"
+                  },
+                  "limits": {
+                    "cpu": "8",
+                    "memory": "8Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "ollama",
+                    "mountPath": "/root/.ollama"
+                  }
+                ],
+                "startupProbe": {
+                  "exec": {
+                    "command": [
+                      "ollama",
+                      "list"
+                    ]
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 60
+                },
+                "readinessProbe": {
+                  "exec": {
+                    "command": [
+                      "ollama",
+                      "list"
+                    ]
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 6
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "ollama",
+                "persistentVolumeClaim": {
+                  "claimName": "ollama"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "ollama"
+      },
+      "spec": {
+        "selector": {
+          "app": "ollama"
+        },
+        "ports": [
+          {
+            "port": 11434,
+            "targetPort": 11434
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "api"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "api"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "api"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "image": "aegis-backend:release",
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "aegis-config"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "AEGIS_MASTER_KEY",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "aegis-secrets",
+                        "key": "master-key"
+                      }
+                    }
+                  },
+                  {
+                    "name": "AEGIS_BOOTSTRAP_TOKEN",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "aegis-secrets",
+                        "key": "bootstrap-token"
+                      }
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "storage",
+                    "mountPath": "/data"
+                  },
+                  {
+                    "name": "db-secrets",
+                    "mountPath": "/run/secrets",
+                    "readOnly": true
+                  }
+                ],
+                "securityContext": {
+                  "runAsUser": 10001,
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "name": "api",
+                "command": [
+                  "uvicorn",
+                  "app.main:app",
+                  "--host",
+                  "0.0.0.0",
+                  "--port",
+                  "8000"
+                ],
+                "ports": [
+                  {
+                    "containerPort": 8000
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "250m",
+                    "memory": "512Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/ready",
+                    "port": 8000
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 120
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/ready",
+                    "port": 8000
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 6
+                },
+                "livenessProbe": {
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 6
+                }
+              },
+              {
+                "image": "aegis-backend:release",
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "aegis-config"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "AEGIS_MASTER_KEY",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "aegis-secrets",
+                        "key": "master-key"
+                      }
+                    }
+                  },
+                  {
+                    "name": "AEGIS_BOOTSTRAP_TOKEN",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "aegis-secrets",
+                        "key": "bootstrap-token"
+                      }
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "storage",
+                    "mountPath": "/data"
+                  },
+                  {
+                    "name": "db-secrets",
+                    "mountPath": "/run/secrets",
+                    "readOnly": true
+                  }
+                ],
+                "securityContext": {
+                  "runAsUser": 10001,
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "name": "worker",
+                "command": [
+                  "python",
+                  "-m",
+                  "app.worker"
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "500m",
+                    "memory": "512Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "storage",
+                "persistentVolumeClaim": {
+                  "claimName": "storage"
+                }
+              },
+              {
+                "name": "db-secrets",
+                "secret": {
+                  "secretName": "aegis-secrets",
+                  "defaultMode": 292,
+                  "items": [
+                    {
+                      "key": "oracle-password",
+                      "path": "oracle_pwd"
+                    },
+                    {
+                      "key": "database-password",
+                      "path": "aegis_oracle_password"
+                    },
+                    {
+                      "key": "test-database-password",
+                      "path": "aegis_oracle_test_password"
+                    }
+                  ]
+                }
+              }
+            ],
+            "initContainers": [
+              {
+                "image": "aegis-backend:release",
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "aegis-config"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "AEGIS_MASTER_KEY",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "aegis-secrets",
+                        "key": "master-key"
+                      }
+                    }
+                  },
+                  {
+                    "name": "AEGIS_BOOTSTRAP_TOKEN",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "aegis-secrets",
+                        "key": "bootstrap-token"
+                      }
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "storage",
+                    "mountPath": "/data"
+                  },
+                  {
+                    "name": "db-secrets",
+                    "mountPath": "/run/secrets",
+                    "readOnly": true
+                  }
+                ],
+                "securityContext": {
+                  "runAsUser": 10001,
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "name": "prepare",
+                "command": [
+                  "python",
+                  "-m",
+                  "app.container_prepare"
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "256Mi"
+                  },
+                  "limits": {
+                    "cpu": "1",
+                    "memory": "1Gi"
+                  }
+                }
+              }
+            ],
+            "terminationGracePeriodSeconds": 60,
+            "securityContext": {
+              "fsGroup": 10001,
+              "fsGroupChangePolicy": "OnRootMismatch"
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "api"
+      },
+      "spec": {
+        "selector": {
+          "app": "api"
+        },
+        "ports": [
+          {
+            "port": 8000,
+            "targetPort": 8000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "web"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "web"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "web"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "web",
+                "image": "aegis-web:release",
+                "ports": [
+                  {
+                    "containerPort": 3000
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "API_INTERNAL_URL",
+                    "value": "http://api:8000"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "256Mi"
+                  },
+                  "limits": {
+                    "cpu": "1",
+                    "memory": "1Gi"
+                  }
+                },
+                "securityContext": {
+                  "runAsUser": 1001,
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/api/auth/status",
+                    "port": 3000
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 120
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/api/auth/status",
+                    "port": 3000
+                  },
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 6
+                }
+              }
+            ],
+            "volumes": []
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "web"
+      },
+      "spec": {
+        "selector": {
+          "app": "web"
+        },
+        "ports": [
+          {
+            "port": 3000,
+            "targetPort": 3000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "private-services"
+      },
+      "spec": {
+        "podSelector": {
+          "matchExpressions": [
+            {
+              "key": "app",
+              "operator": "In",
+              "values": [
+                "oracle",
+                "qdrant",
+                "ollama",
+                "api"
+              ]
+            }
+          ]
+        },
+        "policyTypes": [
+          "Ingress"
+        ],
+        "ingress": [
+          {
+            "from": [
+              {
+                "podSelector": {
+                  "matchExpressions": [
+                    {
+                      "key": "app",
+                      "operator": "In",
+                      "values": [
+                        "api",
+                        "web"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

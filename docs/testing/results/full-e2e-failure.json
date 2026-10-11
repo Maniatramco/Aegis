@@ -1,0 +1,12 @@
+{
+  "stage": "failure",
+  "dataset_id": "d21843dc-e3d8-403f-9234-c93bab97fcc0",
+  "authentication": "test-process owner scope; live server auth unchanged",
+  "passed": true,
+  "plan_id": "2aef01c3-9f63-4471-ab8c-850126d5f4f6",
+  "planning_seconds": 0.305,
+  "indexing_failure_detected": true,
+  "ready_files_only": true,
+  "extraction_id": "b3e22133-23c0-442c-82ed-0cbb6c7b59e8",
+  "fields_match": true
+}

@@ -5,7 +5,25 @@ Qdrant, and Ollama. It uses the official Full image pinned to
 `container-registry.oracle.com/database/free:23.26.3.0` (26ai Free). It is separate
 from the existing PostgreSQL Compose file and the native SQLite workspace.
 
+The application owner defaults to `AGS_OWNER` with twelve custom tables. Existing
+AEGIS data requires [the one-time migration](../DB/migrations/01_aegis_to_ags_owner.md).
+For tables, relationships, audit fields and model category mappings, see
+[the data model](../DB/docs/DATA-MODEL.md). To query the local
+database from VS Code, see [the connection guide](ORACLE-VSCODE.md) and
+[example SQL](oracle-queries.sql).
+
 ## Current verification status
+
+The latest Assistant resume and hardware checks are recorded in
+[the 2026-10-10 test report](testing/assistant-resume-2026-10-10.md), including
+actual timings, prior timeouts and memory limitations. Keep sufficient available
+RAM for CPU inference and host applications; GPU support does not remove the
+container memory requirement. For OKE, see [Kubernetes preparation](KUBERNETES.md).
+
+Scanned PDFs and visible DOCX images use local Qwen2.5-VL OCR before embedding.
+See [OCR configuration, accuracy and failure handling](OCR.md). Originals,
+transcriptions and extraction results remain outside Oracle; Oracle retains
+application metadata and audit information.
 
 The six application containers have been built and started on the development
 computer. All 20 Oracle checks passed, including actual database login,
@@ -14,7 +32,7 @@ The separate real-model check also passed with Qwen3, Nomic embeddings, and Qdra
 known invoice facts, agent confirmation/progress, JSON/schema validation,
 filename-based prompt versions, retained reviews after re-extraction, cited
 document chat, and logout/sign-in. Tests used a separate Oracle schema and removed
-their own records; the application workspace remains empty for first-account setup.
+their own records; the application workspace was left empty after those initial checks.
 These synthetic checks do not establish accuracy for every document or workload.
 
 ## Start on Windows
@@ -42,7 +60,7 @@ Oracle Free limits database processing to two CPU cores, database memory to 2 GB
 and user data to 12 GB. These are Oracle's limits, not the total application's
 requirements. Oracle's registry guide requires at least 13 GB free container
 storage for the Full database image, plus space for app images, models and
-documents. CPU inference works; an optional GPU configuration can be added later.
+documents. Startup selects an accessible NVIDIA GPU automatically, or uses CPU.
 
 ## Create your colleague's Aegis login
 
@@ -82,12 +100,54 @@ dataset, and use Model Registration/Model Mapping to configure:
 
 For a small test dataset on the CPU configuration, start with a 300-second timeout
 and these registration limits: Chat context 8,192 / output 1,024; Extraction
-context 4,096 / output 1,024; Embedding input 2,048 with default output dimensions.
+context 8,192 / output 2,048; Embedding input 2,048 with default output dimensions.
 The downloaded Nomic model returns 768-dimensional vectors. Chat needs the larger
 context for the Assistant's planning instructions and schema: a 4,096-token
 registration can pass Test Connection but still reject workflow planning before
 calling Ollama. Larger catalogs, prompts, or document scopes may need larger
 budgets within the model's supported capacity.
+
+For detailed resume templates, process one resume per extraction and allow a
+1,200-second extraction timeout on CPU (the registration permits up to 1,800).
+The detailed resume test exceeded 600 seconds on this laptop; this is a budget,
+not a speed guarantee. A 4,096-token extraction limit can reject
+the schema plus a single resume before inference. The output budget also covers
+field evidence, not only the extracted data.
+
+`./scripts/start-oracle.ps1` defaults to `-Hardware Auto`: it probes GPU access
+inside the pinned Ollama container image, chooses the NVIDIA override only when
+that succeeds, and otherwise starts CPU without requiring GPU tooling. If GPU
+startup subsequently fails in Auto, it retries the CPU configuration with the
+same volumes. `-Hardware Cpu` forces CPU and skips the device probe; `-Hardware Gpu`
+requires successful access and fails clearly if unavailable (`-Gpu` remains an
+alias). Linux startup uses `AEGIS_HARDWARE=auto|cpu|gpu`, default `auto`.
+
+Startup pulls the configured local models, then runs a real JSON-generation and
+embedding smoke test, reporting observed GPU offload through Ollama's `/api/ps`.
+Each tiny inference smoke request is limited to 180 seconds. A failing GPU smoke
+in Auto restarts only Ollama in CPU mode and retries, preserving its model volume.
+A host GPU listing is not proof of usable model acceleration. The selected mode
+does not promise all model layers fit in VRAM or that any template finishes within
+a particular time. The configured NVIDIA path follows Docker Desktop WSL 2/Linux
+NVIDIA runtime requirements; other GPU vendors are not configured here.
+
+For an already configured stack, without rerunning setup or replacing volumes:
+For an already configured stack, without rerunning setup or replacing volumes:
+
+```powershell
+docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.gpu.yaml up -d --no-deps ollama
+docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.gpu.yaml exec ollama ollama ps
+```
+
+Use the same two Compose files for later startup commands so Ollama keeps its
+GPU reservation. Check `ollama ps` after a model request for actual GPU use.
+The base configuration still supports CPU machines. This follows the official
+[Docker Compose GPU guide](https://docs.docker.com/compose/how-tos/gpu-support/)
+and [Ollama Docker guide](https://docs.ollama.com/docker).
+
+Run `./scripts/test-model-hardware.ps1` for selection/fallback regression checks.
+Kubernetes uses the same containers with deployment-specific environment and
+storage configuration; see [Oracle Kubernetes preparation](KUBERNETES.md).
 
 Use no authentication for Ollama. The server explicitly approves only the
 `ollama` container hostname in addition to the existing loopback endpoints.

@@ -1,0 +1,52 @@
+{
+  "steps": [
+    {
+      "name": "login and mapped dataset",
+      "seconds": 3.87
+    },
+    {
+      "name": "agent request: can you bring profiles who is skilled in python?",
+      "seconds": 36.52
+    },
+    {
+      "name": "agent request: who is expert in react",
+      "seconds": 21.73
+    },
+    {
+      "name": "agent request: can you bring me summarized on profiles",
+      "seconds": 19
+    },
+    {
+      "name": "agent request: only three profiles are there?",
+      "seconds": 15.06
+    }
+  ],
+  "errors": [],
+  "extraction_id": "982262ef-b010-4afa-8cc4-a1ff8bb35f68",
+  "exact_fields_passed": true,
+  "answers": [
+    {
+      "question": "can you bring profiles who is skilled in python?",
+      "text": "Found 3 matching saved profiles/items in \"LangGraph final browser QA\".\n\n- Dev Patel: professional title: QA Automation Engineer; email: dev.patel@example.com; phone: +1 202 555 0105; location: Ahmedabad, India; professional summary: QA engineer testing API workflows and browser applications with automated regression checks.; skills: Python, Pytest, Playwright, Postman, SQL, Git, API testing, Regression testing [1]\n- Arjun Rao: professional title: Backend Engineer; email: arjun.rao@example.com; phone: +1 202 555 0101; location: Bengaluru, India; professional summary: Backend engineer building Python APIs and reliable transactional services.; skills: Python, FastAPI, PostgreSQL, Redis, Docker, Git, REST APIs, Pytest [2]\n- Nikhil Shah: professional title: Data Engineer; email: nikhil.shah@example.com; phone: +1 202 555 0103; location: Pune, India; professional summary: Data engineer developing batch pipelines and trustworthy analytical datasets.; skills: Python, SQL, Apache Spark, Apache Airflow, Snowflake, dbt, Parquet, Data quality [3]\n\nThese are saved extraction values; inspect the originals in Review. Skill listings alone do not establish an expertise level.\n\nExtraction IDs: 982262ef-b010-4afa-8cc4-a1ff8bb35f68, 9dd182c7-999b-417b-ba0e-e1b07b9b50e7. Open Review to inspect the complete results.",
+      "citation_count": 3
+    },
+    {
+      "question": "who is expert in react",
+      "text": "Found 1 matching saved profiles/items in \"LangGraph final browser QA\".\n\n- Sara Khan: professional title: Frontend Engineer; skills: React, TypeScript, Next.js, HTML, CSS, Playwright, Accessibility, Figma [1]\n\nThese are saved extraction values; inspect the originals in Review. Skill listings alone do not establish an expertise level.\n\nExtraction IDs: 982262ef-b010-4afa-8cc4-a1ff8bb35f68. Open Review to inspect the complete results.",
+      "citation_count": 1
+    },
+    {
+      "question": "can you bring me summarized on profiles",
+      "text": "Summary of 5 saved profiles/items in \"LangGraph final browser QA\".\n\n- Sara Khan: professional title: Frontend Engineer; email: sara.khan@example.com; phone: not provided; location: Hyderabad, India; professional summary: Frontend engineer creating accessible React interfaces and responsive web applications. [1]\n- Dev Patel: professional title: QA Automation Engineer; email: dev.patel@example.com; phone: +1 202 555 0105; location: Ahmedabad, India; professional summary: QA engineer testing API workflows and browser applications with automated regression checks. [2]\n- Arjun Rao: professional title: Backend Engineer; email: arjun.rao@example.com; phone: +1 202 555 0101; location: Bengaluru, India; professional summary: Backend engineer building Python APIs and reliable transactional services. [3]\n- Meera Iyer: professional title: DevOps and Platform Engineer; email: meera.iyer@example.com; phone: +1 202 555 0102; location: Chennai, India; professional summary: Platform engineer maintaining Kubernetes deployments and automated cloud infrastructure. [4]\n- Nikhil Shah: professional title: Data Engineer; email: nikhil.shah@example.com; phone: +1 202 555 0103; location: Pune, India; professional summary: Data engineer developing batch pipelines and trustworthy analytical datasets. [5]\n\nThese are saved extraction values; inspect the originals in Review.\n\nExtraction IDs: 982262ef-b010-4afa-8cc4-a1ff8bb35f68, 9dd182c7-999b-417b-ba0e-e1b07b9b50e7. Open Review to inspect the complete results.",
+      "citation_count": 5
+    },
+    {
+      "question": "only three profiles are there?",
+      "text": "There are 5 saved profiles/items in \"LangGraph final browser QA\", across 2 completed extraction runs in this scope. [1] [2] [3] [4] [5]\n\nExtraction IDs: 982262ef-b010-4afa-8cc4-a1ff8bb35f68, 9dd182c7-999b-417b-ba0e-e1b07b9b50e7. Open Review to inspect the complete results.",
+      "citation_count": 5
+    }
+  ],
+  "source_pdf_http_passed": true,
+  "review_passed": true,
+  "passed": true
+}

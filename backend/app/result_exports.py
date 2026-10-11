@@ -17,8 +17,13 @@ def rows(record,data):
         source=evidence.get(path,{})
         # Sources without field-level evidence remain document provenance, not verified claims.
         sources=[source] if source else data.get('sources',[]) or [{}]
+        match=re.match(r'^/records/(\d+)/',path)
+        if not source and data.get('merge_records') and match:
+            index=int(match[1]);original=data['merge']['sources'][index]
+            sources=[item for item in sources if item.get('source_key')==original['key']] if data['merge'].get('document_id') else [item for item in sources if item.get('document_id')==original['document_id']]
+            sources=sources or [{}]
         for origin in sources:
-            yield [record.id,record.version,path,value if isinstance(value,str) else json.dumps(value,ensure_ascii=False),type(value).__name__,origin.get('document_id',''),origin.get('document_name',''),origin.get('page') or '',origin.get('chunk_id',''),source.get('quote',''),data.get('review_status','unreviewed'),'verified quote' if source else 'unverified field']
+            yield [record.id,record.version,path,value if isinstance(value,str) else json.dumps(value,ensure_ascii=False),type(value).__name__,origin.get('document_id',''),origin.get('document_name',''),origin.get('page') or '',origin.get('chunk_id',''),source.get('quote',''),data.get('review_status','unreviewed'),('matched transcription quote; unverified image' if data.get('ocr_sources') else 'verified quote') if source else 'unverified field']
 
 def safe(value):
     text=str(value)
@@ -54,7 +59,7 @@ def xlsx(table):
 
 def render(record,data,format):
     table=[HEADERS,*rows(record,data)]
-    if format=='json':return json.dumps({'extraction_id':record.id,'version':record.version,'result':data['result'],'evidence':data.get('evidence',[]),'sources':data.get('sources',[]),'review_status':data.get('review_status','unreviewed'),'saved_values_only':True},ensure_ascii=False,indent=2).encode(),'application/json'
+    if format=='json':return json.dumps({'extraction_id':record.id,'version':record.version,'result':data['result'],'merge':data.get('merge'),'evidence':data.get('evidence',[]),'sources':data.get('sources',[]),'ocr_sources':data.get('ocr_sources',[]),'evidence_notice':data.get('evidence_notice'),'review_status':data.get('review_status','unreviewed'),'saved_values_only':True},ensure_ascii=False,indent=2).encode(),'application/json'
     if format=='xlsx':return xlsx(table),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     if format=='csv':
         out=io.StringIO(newline='');writer=csv.writer(out);writer.writerows([[safe(v) for v in row] for row in table]);return ('\ufeff'+out.getvalue()).encode('utf-8'),'text/csv; charset=utf-8'

@@ -1,8 +1,9 @@
 "use client";
 import {JobProgress} from './operation-progress';
+import {MergedDetails} from './merged-details';
 
 type Entity=Record<string,any>;
-const stageNames:Record<string,string>={prepare:'Preparing sources',generate:'Extracting fields',validate:'Validating result',ready:'Saving result'};
+const stageNames:Record<string,string>={extract:'Reading document / OCR',index:'Building index',prepare:'Preparing sources',generate:'Extracting fields',retrieving:'Retrieving evidence',reranking:'Reranking evidence',validate:'Validating result',writing_output:'Writing Parquet',ready:'Ready'};
 
 export function AgentJobProgress({job}:{job:Entity}) {
  const stages=Object.values(job.workflow?.stages||{}) as Entity[];
@@ -21,8 +22,9 @@ export function AgentResult({tool,onReview}:{tool:Entity;onReview:(id:string)=>v
  const result=tool.result;
  if(!result)return null;
  return <div className="agent-v2-tool-result">
-  {tool.status==='failed'&&<p>This tool stopped. Correct the file or service issue, then send a new request.</p>}
-  {result.documents&&<details><summary>{result.documents.length} document references</summary><ul>{result.documents.map((document:Entity)=><li key={document.id}>{document.name}<code>{document.id}</code></li>)}</ul></details>}
-  {tool.status==='completed'&&result.extraction_id&&<div className="agent-v2-result-actions"><details><summary>Extracted fields</summary><pre>{JSON.stringify(result.data,null,2)}</pre></details><button className="text-button" onClick={()=>onReview(result.extraction_id)}>Review result and evidence</button></div>}
+  {result.extraction_ids?.length>0&&<p role="status">Extraction accepted: {result.extraction_ids.map((id:string)=><code key={id}>{id} </code>)}</p>}
+  {result.documents&&<><details><summary>{result.documents.length} uploaded document references · indexing is separate from field extraction</summary><ul>{result.documents.map((document:Entity)=><li key={document.id}>{document.name}<code>{document.id}</code></li>)}</ul></details>{result.documents.filter((d:Entity)=>d.merge).map((d:Entity)=><MergedDetails key={d.id} merge={{...d.merge,document_id:d.id}}/>)}</>}
+  {result.extractions?.filter((entry:Entity)=>!entry.superseded).map((entry:Entity)=><section key={entry.extraction_id}><strong>{entry.name}</strong><span className="small"> · {entry.status==='completed'?'Ready for review':entry.status}</span><p className="small">Extraction ID: <code>{entry.extraction_id}</code></p><MergedDetails merge={entry.merge} extractionId={entry.extraction_id}/>{entry.record_progress&&<p role="status">{entry.record_progress.completed} of {entry.record_progress.total} source records extracted</p>}{entry.data?.records&&<p>{entry.data.records.length} separate records in this result</p>}{entry.status==='completed'&&<div className="agent-v2-result-actions"><details><summary>Extracted fields</summary><pre>{JSON.stringify(entry.data,null,2)}</pre></details><button className="text-button" onClick={()=>onReview(entry.extraction_id)}>Review result and evidence</button></div>}</section>)}
+  {!result.extractions&&tool.status==='completed'&&result.extraction_id&&<div className="agent-v2-result-actions"><p className="small">Extraction ID: <code>{result.extraction_id}</code></p><details><summary>Extracted fields</summary><pre>{JSON.stringify(result.data,null,2)}</pre></details><button className="text-button" onClick={()=>onReview(result.extraction_id)}>Review result and evidence</button></div>}
  </div>;
 }

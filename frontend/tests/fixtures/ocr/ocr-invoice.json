@@ -1,0 +1,1 @@
+{"schema": {"type": "object", "additionalProperties": false, "properties": {"reference": {"type": "string", "description": "Copy the invoice reference exactly"}, "total": {"type": "number", "description": "Total including tax in USD"}}, "required": ["reference", "total"]}}

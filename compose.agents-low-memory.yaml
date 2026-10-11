@@ -1,0 +1,7 @@
+# Add after compose.gpu.yaml on a constrained local GPU host.
+services:
+  ollama:
+    environment:
+      OLLAMA_MAX_LOADED_MODELS: '1'
+      OLLAMA_KEEP_ALIVE: '0'
+      OLLAMA_NUM_PARALLEL: '1'

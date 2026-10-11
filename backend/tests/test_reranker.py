@@ -1,7 +1,7 @@
 import os
 from types import SimpleNamespace
 import pytest
-from app import core, providers, reranker
+from app import core, main, providers, reranker
 from test_dataset_models import system, dataset, upload, conversation
 
 
@@ -18,7 +18,7 @@ def test_reranking_promotes_candidate_outside_original_top_five(monkeypatch):
         seen.append(limit);return pool[:limit]
     monkeypatch.setattr(providers,'_retrieve',retrieve)
     monkeypatch.setattr(reranker,'predict',lambda query,texts:[100 if text=='Passage 20' else 0 for text in texts])
-    trace={};result=providers.search('Question','alice',[object()],5,trace)
+    trace={};result=providers.search('Question','alice',[SimpleNamespace(owner='alice')],5,trace)
     assert seen==[25] and len(result)==5
     assert result[0]['chunk_id']=='20' and result[0]['retrieval_rank']==21
     assert result[0]['score']==.8 and result[0]['rerank_score']==100
@@ -31,7 +31,7 @@ def test_disabled_reranker_preserves_vector_ranking(monkeypatch):
     monkeypatch.setenv('AEGIS_RERANKER','none')
     monkeypatch.setattr(reranker,'predict',lambda *args:pytest.fail('Disabled reranker was called'))
     monkeypatch.setattr(providers,'_retrieve',lambda q,o,d,k:candidates(k))
-    trace={};result=providers.search('Question','alice',[object()],3,trace)
+    trace={};result=providers.search('Question','alice',[SimpleNamespace(owner='alice')],3,trace)
     assert [item['chunk_id'] for item in result]==['0','1','2']
     assert trace['candidate_limit']==3 and not trace['enabled']
 
@@ -66,15 +66,15 @@ def test_provider_reports_reranker_failure(monkeypatch):
     def fail(*args):raise reranker.RerankerError('Synthetic reranker failure')
     monkeypatch.setattr(reranker,'predict',fail)
     with pytest.raises(providers.ProviderError,match='Synthetic reranker failure'):
-        providers.search('Question','alice',[object()],5)
+        providers.search('Question','alice',[SimpleNamespace(owner='alice')],5)
 
 
 def test_reranker_only_receives_permitted_document_text(system,monkeypatch):
     d=dataset(system);doc=upload(system,d)['documents'][0]
     system.owner='bob';other=dataset(system);foreign=upload(system,other)['documents'][0]
     system.owner='alice'
-    allowed=SimpleNamespace(id=doc['id'],name='Allowed')
-    forbidden=SimpleNamespace(id=foreign['id'],name='Foreign')
+    allowed=main.get_record(doc['id'],'alice','document')
+    forbidden=main.get_record(foreign['id'],'bob','document')
     received=[]
     def predict(query,texts):received.extend(texts);return [1]*len(texts)
     monkeypatch.setenv('AEGIS_RERANKER','local');monkeypatch.setattr(reranker,'predict',predict)

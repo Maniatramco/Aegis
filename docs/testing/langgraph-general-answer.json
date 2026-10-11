@@ -1,0 +1,1 @@
+{"seconds": 6.91, "answer": "Kubernetes is an open-source system for automating deployment, scaling, and management of containerized applications. It provides tools to handle service discovery, load balancing, and orchestration across distributed systems.", "calls": [], "runtime": "langgraph", "passed": true}

@@ -6,13 +6,17 @@ import { FocusedChat } from "./focused-chat";
 import { readChatStream } from "./chat-stream";
 import { DatasetHome } from "./dataset-directory";
 import { ExtractionReview } from "./extraction-review";
+import { ExtractionDirectory, extractionDataset } from "./extraction-directory";
 import { PromptTemplates } from "./prompt-templates";
 import { ReExtract } from "./re-extract";
 import { OperationProgress, extractionProgressJob } from "./operation-progress";
 import "./workspace-flow.css";
 import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
+import { UserManagement } from "./user-management";
 import { AgentV2 } from "./agent-v2";
+import { AgentLogo } from "./agent-logo";
+import { rememberAssistantDataset } from "./agent-prompt-selection";
 import { fetchWithSessionCsrf } from "./session-request";
 import { ApiDocumentation } from "./api-documentation";
 import { TemporaryDocumentChat } from "./temporary-document-chat";
@@ -77,10 +81,12 @@ type View =
   | "Model Mapping"
   | "Services & migration"
   | "API Documentation"
+  | "Users & passwords"
   | "Setup";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Home", icon: Database, group: "WORKSPACE" },
   { name: "Aegis agent V2", icon: Bot, group: "WORKSPACE" },
+  { name: "Users & passwords", icon: KeyRound },
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Datasets", icon: BookOpen },
   { name: "Aegis Agent", icon: MessageSquare },
@@ -97,7 +103,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Setup", icon: Cog },
 ];
 // Keep saved route identifiers compatible while presenting the product names.
-const viewLabel = (name: View) => name === "Aegis agent V2" ? "Aegis Assistant" : name === "Aegis Agent" ? "Document Chat" : name;
+const viewLabel = (name: View) => name === "Aegis agent V2" ? "Aegis Agent" : name === "Aegis Agent" ? "Document Chat" : name;
 const descriptions: Record<View, string> = {
   Home: "Your registered datasets. Open one to view its documents and settings.",
   Dashboard:
@@ -120,6 +126,7 @@ const descriptions: Record<View, string> = {
     "A clear path from local deployment to your cloud environment.",
   Setup: "Get your workspace ready, one deliberate step at a time.",
   "API Documentation": "Learn the FastAPI endpoints behind Aegis, with requests, schemas, and workflow guides.",
+  "Users & passwords": "Manage users, passwords, and dataset assignments.",
 };
 const byteSize = (n: number) =>
   n > 1048576
@@ -216,7 +223,7 @@ function Download({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("Aegis agent V2");
+  const [view, setView] = useState<View>("Home");
   const [agentTab,setAgentTab]=useState("Chat");
   const [user, setUser] = useState<Entity | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -229,6 +236,8 @@ export default function App() {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordChangedNotice, setPasswordChangedNotice] = useState(false);
+  const [roleChangedNotice, setRoleChangedNotice] = useState(false);
   const [signInErrors, setSignInErrors] = useState<{ username?: string; password?: string; code?: string }>({});
   const [busy, setBusy] = useState(false);
   const operationLock=useRef(false);
@@ -329,6 +338,7 @@ export default function App() {
   const [templateFeedback,setTemplateFeedback]=useState('');
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
+  const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
   const reviewProgressJob = (view === "Extraction Review" || (view === "Aegis Agent" && agentTab === "Extract")) && extractionTab === "Review" && extraction?.status !== "ready" ? extractionProgressJob(extraction, jobs) : undefined;
   const [resultText, setResultText] = useState("");
   const reviewDirty = useRef(false);
@@ -545,6 +555,7 @@ export default function App() {
   const changeDataset = (id: string) => {
     if (id === kb) return;
     if (answering) { setError("Stop the current answer before changing datasets."); return; }
+    if(user)rememberAssistantDataset(sessionStorage,user.username,id);
     conversationRequest.current += 1;
     openingConversation.current = false;
     setKb(id);
@@ -566,19 +577,20 @@ export default function App() {
     if ((reviewDirty.current || templateDirty.current) && !window.confirm("Discard unsaved changes before leaving?")) { window.history.replaceState(null, "", "#" + encodeURIComponent(view)); return; }
     reviewDirty.current = false; templateDirty.current = false;
     let route: string;
-    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Aegis Assistant"; }
+    try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Home"; }
     if (["extract","aegis agent/extract","document chat/extract"].includes(route.toLowerCase())) {
       setAgentTab("Extract");setView("Aegis Agent");
     } else if (route.startsWith("dataset/")) {
       changeDataset(route.slice(8));
       setView("Datasets");
     } else {
-      if(["ask aegis","aegis assistant"].includes(route.toLowerCase()))route="Aegis agent V2";
+      if(["ask aegis","aegis assistant","aegis agent"].includes(route.toLowerCase()))route="Aegis agent V2";
       if(route.toLowerCase()==="document chat")route="Aegis Agent";
       if(route==="Aegis Agent")setAgentTab("Chat");
-      const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Aegis agent V2";
+      const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Home";
       if(next === "Extraction Review" && extractionTab === "Create")setExtractionTab("History");
       setView(next);
+      if(next==="Aegis agent V2")window.history.replaceState(null,"","#"+encodeURIComponent(viewLabel(next)));
       if (!["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extraction Review", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(next)) setAdminNavigation(true);
     }
     setMobile(false);
@@ -632,8 +644,10 @@ export default function App() {
         setSetupRequired(false);
       }
       const d = await api("/auth/login", "POST", { username, password });
-      navigate("Aegis Agent");
+      navigate("Home");
       setUser(d.user);
+      setPasswordChangedNotice(false);
+      setRoleChangedNotice(false);
       setCsrf(d.csrf_token || "");
       setPassword("");
     });
@@ -907,7 +921,7 @@ export default function App() {
         <section className="login-card" aria-labelledby="login-heading">
           <div className="login-brand"><img src="/aegis-logo.png" alt="" width={38} height={38} /><span>Aegis</span></div>
           <h1 id="login-heading">{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
-          <p className="login-description">{bootstrap ? "Set up your first account to get started." : "Sign in to your workspace."}</p>
+          <p className="login-description">{bootstrap ? "Set up your first account to get started." : roleChangedNotice ? "Your role changed. Sign in again to use your updated access." : passwordChangedNotice ? "Password changed. Sign in with your new password." : "Sign in to your workspace."}</p>
           {error && <div className="login-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}
           <form noValidate aria-busy={busy} onSubmit={e => {
             e.preventDefault();
@@ -989,12 +1003,12 @@ export default function App() {
         </div>
         <div className="brand-sub">AI Data Platform</div>
         <nav>
-          {sections.filter(s => ["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extraction Review", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => (
-            <button key={s.name} aria-label={viewLabel(s.name)} title={viewLabel(s.name)} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={18} /><span className="nav-item-label">{viewLabel(s.name)}</span></button>
+          {sections.filter(s => ["Home", "Datasets", "Aegis agent V2", "Extract", "Extraction Review", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name) && (user.is_admin || !["Model Registration","Model Mapping"].includes(s.name))).map(s => (
+            <button key={s.name} aria-label={viewLabel(s.name)} title={viewLabel(s.name)} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><>{s.name==="Aegis agent V2"?<AgentLogo size={24}/>:<s.icon size={18}/>}</><span className="nav-item-label">{viewLabel(s.name)}</span></button>
           ))}
           <button className="nav-item nav-more" aria-label="Manage workspace" title="Manage workspace" aria-expanded={adminNavigation} aria-controls="admin-navigation" onClick={() => setAdminNavigation(!adminNavigation)}><Settings2 size={18} /><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminNavigation ? "rotated" : ""} /></button>
           {adminNavigation && <div id="admin-navigation" className="admin-navigation">
-            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extraction Review", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name)).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
+            {sections.filter(s => !["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extraction Review", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(s.name) && (user.is_admin || ["Users & passwords","Jobs & activity","Index inspector","Dashboard"].includes(s.name))).map(s => <button key={s.name} aria-label={s.name} title={s.name} className={`nav-item ${view === s.name ? "selected" : ""}`} aria-current={view === s.name ? "page" : undefined} onClick={() => navigate(s.name)}><s.icon size={16} /><span className="nav-item-label">{s.name}</span></button>)}
           </div>}
         </nav>
         <div className="nav-footer">
@@ -1005,7 +1019,7 @@ export default function App() {
           Originals protected. Insights grounded.
         </div>
       </aside>
-      <div className={`shell ${view === "Aegis Agent" ? "chat-shell" : ""}`} inert={drawerOpen}>
+      <div className={`shell ${view === "Aegis Agent" ? "chat-shell" : view === "Aegis agent V2" ? "assistant-shell" : ""}`} inert={drawerOpen}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -1054,7 +1068,7 @@ export default function App() {
                   ? "CONFIGURE & CONNECT"
                   : "YOUR KNOWLEDGE, WORKING FOR YOU"}
               </div>
-              <h1>{view === "Dashboard" ? "Workspace overview" : viewLabel(view)}</h1>
+              <h1 className={view==="Aegis agent V2"?"agent-page-title":undefined}>{view==="Aegis agent V2"&&<AgentLogo size={28}/>} {view === "Dashboard" ? "Workspace overview" : viewLabel(view)}</h1>
               {view !== "Aegis agent V2" && <p className="muted small">{descriptions[view]}</p>}
             </div>
             <div className="row">
@@ -1327,12 +1341,13 @@ export default function App() {
               </section>
             </>
           )}
-          {view === "Home" && <DatasetHome datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis Agent"); }} />}
+          {view === "Home" && <DatasetHome canManage={Boolean(user.is_admin)} datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis Agent"); }} />}
+          {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
           {view === "API Documentation" && <ApiDocumentation api={api} />}
-          {view === "Aegis agent V2" && <AgentV2 api={api} stream={agentStream} username={user.username} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={id => run(async () => { const result = await api(`/extractions/${id}`); changeDataset(result.dataset_id || result.parent_id); setExtraction(result); navigate('Extraction Review', 'Review'); })} />}
+          {view === "Aegis agent V2" && <AgentV2 api={api} stream={agentStream} username={user.username} onDatasetChange={changeDataset} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={id => run(async () => { const result = await api(`/extractions/${id}`); changeDataset(result.dataset_id || result.parent_id); setExtraction(result); setReviewOpenRequest(n=>n+1); navigate('Extraction Review', 'Review'); })} />}
           {view === "Datasets" && (
             <>
-            <DatasetWorkspace datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus} onUploadWorkflowVisible={setUploadWorkflowVisible}
+            <DatasetWorkspace canManage={Boolean(user.is_admin)} datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus} onUploadWorkflowVisible={setUploadWorkflowVisible}
               onSelect={changeDataset} onCreated={d => { setKbs(current => [...current, d]); changeDataset(d.id); }}
               api={api} run={run} busy={busy || answering} reload={reload} notify={notify}
               onConnections={() => navigate("Model Registration")} onUse={navigate}
@@ -1468,10 +1483,17 @@ export default function App() {
               onFeedback={(id, rating) => run(async () => { await api(`/messages/${id}/feedback`, "POST", { rating }); notify("Feedback saved."); })}
             />
           )}
-          {(view === "Extraction Review" || (view === "Aegis Agent" && agentTab === "Extract")) && (
+          {view === "Extraction Review" && <>
+            <ExtractionDirectory datasets={kbs} extractions={extractions} documents={docs} selectedDataset={kb} selectedId={extraction?.id} busy={busy}
+              onDatasetChange={id=>{if(reviewDirty.current&&!window.confirm('Discard unsaved review changes before changing datasets?'))return;reviewDirty.current=false;setExtraction(null);changeDataset(id);}}
+              onOpen={id=>{if(reviewDirty.current&&!window.confirm('Discard unsaved review changes before opening another extraction?'))return;reviewDirty.current=false;run(async()=>{const d=await api(`/extractions/${id}`);changeDataset(d.dataset_id||d.parent_id);setExtraction(d);setReviewOpenRequest(n=>n+1);setExtractionTab('Review');});}}/>
+            {extraction&&(!kb||extractionDataset(extraction,docs)===kb)?<ExtractionReview openRequest={reviewOpenRequest} extraction={extraction} datasetName={kbs.find(d=>d.id===extractionDataset(extraction,docs))?.name} documents={docs} jobs={jobs} api={api} onDirty={onReviewDirty} onSaved={d=>{setExtraction(d);setExtractions(previous=>[d,...previous.filter(e=>e.id!==d.id)]);}}/>:
+              <div className="review-selection-empty"><FileSearch size={28}/><h2>Select an extraction to review</h2><p>Search its ID above, then open the saved fields and source files.</p></div>}
+          </>}
+          {(view === "Aegis Agent" && agentTab === "Extract") && (
             <>
               <div className="section-tabs" aria-label="Extraction sections">
-                {[...(view === "Extraction Review" ? [] : ["Create"]), "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => { if (reviewDirty.current && !window.confirm("Discard unsaved changes before changing sections?")) return; setExtractionTab(tab); }}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
+                {["Create", "History", ...(extraction ? ["Review"] : [])].map(tab => <button key={tab} className={`btn ${extractionTab === tab ? "primary" : ""}`} aria-pressed={extractionTab === tab} onClick={() => { if (reviewDirty.current && !window.confirm("Discard unsaved changes before changing sections?")) return; setExtractionTab(tab); }}>{tab === "Create" ? "New extraction" : tab === "History" ? "Extraction history" : "Review result"}</button>)}
               </div>
               <div className="extraction-focus">
                 <section className="panel" hidden={extractionTab !== "Create"}>
@@ -1526,7 +1548,7 @@ export default function App() {
                       <div className="item row between" key={e.id}>
                         <div>
                           <h3>
-                            {templates.find((t) => t.id === e.template_id)
+                            {e.merge?.filename || templates.find((t) => t.id === e.template_id)
                               ?.name ||
                               e.template_name ||
                               e.name ||
@@ -1534,7 +1556,7 @@ export default function App() {
                           </h3>
                           <p className="muted small">
                             {kbs.find(d => d.id === (e.dataset_id || e.parent_id || docs.find(document => e.document_ids?.includes(document.id))?.dataset_id || docs.find(document => e.document_ids?.includes(document.id))?.kb_id))?.name || "Dataset unavailable"}
-                            {e.document_ids?.length ? ` · ${e.document_ids.map((id: string) => docs.find(d => d.id === id)?.name || "Document unavailable").join(", ")}` : ""}
+                            <br />Extraction ID: {e.id}<br />{e.document_ids?.length ? e.document_ids.map((id: string) => docs.find(d => d.id === id)?.name || "Document unavailable").join(", ") : ""}
                           </p>
                           <span className="muted small">
                             {date(e.created_at)}{recordedModel(e) ? ` · ${recordedModel(e)}` : ""}
@@ -1549,6 +1571,7 @@ export default function App() {
                                 const d = await api(`/extractions/${e.id}`);
                                 changeDataset(d.dataset_id || d.parent_id);
                                 setExtraction(d);
+                                setReviewOpenRequest(n=>n+1);
                                 setExtractionTab("Review");
                                 setResultText(json(d.result || {}));
                               })
@@ -1568,11 +1591,11 @@ export default function App() {
                   )}
                 </section>
               </div>
-              {extraction && extractionTab === "Review" && <ExtractionReview extraction={extraction} documents={docs} jobs={jobs} api={api} onDirty={onReviewDirty} onSaved={d => { setExtraction(d); setResultText(json(d.result || {})); setExtractions(previous=>[d,...previous.filter(e=>e.id!==d.id)]); }} />}
+              {extraction && extractionTab === "Review" && <ExtractionReview openRequest={reviewOpenRequest} extraction={extraction} documents={docs} jobs={jobs} api={api} onDirty={onReviewDirty} onSaved={d => { setExtraction(d); setResultText(json(d.result || {})); setExtractions(previous=>[d,...previous.filter(e=>e.id!==d.id)]); }} />}
             </>
           )}
           {view === "Prompt templates" && <PromptTemplates templates={templates} datasets={kbs} selectedDataset={kb} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={d => { setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)]); chooseTemplate(d.id); notify("Prompt template saved."); }} onUse={id => { const saved=templates.find(t=>t.id===id); if(saved?.dataset_id&&saved.dataset_id!==kb)changeDataset(saved.dataset_id); chooseTemplate(id); setExtractionTab("Create"); navigate("Extract"); }} />}
-          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); navigate("Extraction Review", "Review"); }} />}
+          {view === "Re-extract" && <ReExtract documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id => { changeDataset(id); navigate("Datasets"); setDatasetModelsFocus(true); }} onReview={d => { changeDataset(d.dataset_id || d.parent_id); setExtraction(d); setReviewOpenRequest(n=>n+1); navigate("Extraction Review", "Review"); }} />}
           {view === "Index inspector" && (
             <>
               <section className="panel">
@@ -2770,7 +2793,7 @@ export default function App() {
           </section>
         </div>
       )}
-      <OperationProgress workspaceLoading={loading} requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobIds={view === "Aegis agent V2" ? agentVisibleJobIds : []} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
+      <OperationProgress compact={view === "Extraction Review" || view === "Re-extract"} workspaceLoading={loading} requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobIds={view === "Aegis agent V2" ? agentVisibleJobIds : []} visibleJobId={reviewProgressJob?.id || (view === "Re-extract" ? visibleExtractionJobId : null)}/>
     </>
   );
 }

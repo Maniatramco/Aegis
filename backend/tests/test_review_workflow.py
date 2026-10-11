@@ -18,6 +18,7 @@ def test_extraction_list_links_only_owned_documents_and_saved_versions(system):
     assert item['document_ids']==[doc['id']] and item['version']==saved['version']
     assert item['review_status']=='reviewed' and item['template_id']==e['template_id']
     assert 'result' not in item and 'schema' not in item
+    assert item['profile_count']==1
     s.owner='bob'
     assert s.api.get('/api/extractions').json()==[]
 
@@ -58,7 +59,7 @@ def test_versions_conflict_schema_and_saved_exports(system):
 def test_retry_failed_index_same_job_reuses_extraction(system,monkeypatch):
     s=system;d=dataset(s);data=upload(s,d,run=False);doc=data['documents'][0];jid=data['jobs'][0]['id']
     parse=worker.parse_document;calls=[]
-    def track(*args):calls.append(args[0]);return parse(*args)
+    def track(*args,**kwargs):calls.append(args[0]);return parse(*args,**kwargs)
     monkeypatch.setattr(worker,'parse_document',track);embed=providers.embed
     def fail(*args):raise providers.ProviderError('Synthetic embedding outage')
     monkeypatch.setattr(providers,'embed',fail);assert worker.run_once()
@@ -117,3 +118,13 @@ def test_temporary_cleanup_expiry_and_permanent_reference_protection(system):
     assert s.api.get('/api/documents/'+expired['id']).status_code==404
     assert s.api.get('/api/documents/'+permanent['id']).status_code==200
     s.owner='bob';assert s.api.delete('/api/temporary-chat/sessions/'+session['id']).status_code==404
+
+
+def test_extraction_directory_counts_saved_profiles_without_returning_payload(system):
+    s=system;d,doc,e=extracted(s)
+    r=main.get_record(e['id'],s.owner,'extraction');data=core.store.json(r.ref)
+    for result,count in [({'records':[{'fields':{'owner':'Alice'}},{'fields':{'owner':'Bob'}}]},2),({'records':[]},0),(None,0),({'owner':'Alice'},1)]:
+        core.store.put_json(r.ref,data|{'result':result})
+        row=next(x for x in s.api.get('/api/extractions').json() if x['id']==e['id'])
+        assert row['profile_count']==count
+        assert 'result' not in row

@@ -34,7 +34,7 @@ See [dataset configuration and existing-workspace migration](docs/DATASETS.md). 
 
 See [generic model registration and mapping](docs/MODEL_CONFIGURATION.md) for supported protocols, encrypted credentials, next-run changes, and embedding reindexing.
 
-Scanned/image-only PDFs require OCR first. Aegis does not silently invent OCR text. OpenAI chat/extraction sends the selected source content and your prompt to OpenAI after the UI's external-processing acknowledgment. OpenAI embeddings also send chunks when selected. API use is billed separately by the provider. Local embeddings keep document text local during indexing; downloading model weights still requires network access.
+Scanned PDF pages and visible raster images in DOCX are read with local Qwen2.5-VL before embedding. Unchanged originals and OCR provenance remain available for review; incomplete or unreadable scans produce an indexing error. See [OCR configuration and accuracy checks](docs/OCR.md). OpenAI chat/extraction sends the selected source content and your prompt to OpenAI after the UI's external-processing acknowledgment. OpenAI embeddings also send chunks when selected. API use is billed separately by the provider. Local embeddings keep document text local during indexing; downloading model weights still requires network access.
 
 ### Free local inference with Ollama
 

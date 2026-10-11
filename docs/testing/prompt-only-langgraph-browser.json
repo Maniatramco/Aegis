@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "name": "login and mapped dataset",
+      "seconds": 1.67
+    },
+    {
+      "name": "agent request: can you upload it",
+      "seconds": 13.23
+    }
+  ],
+  "errors": [],
+  "prompt_acknowledgement": "Saved prompt \"prompt-only-upload.json\" in \"LangGraph final browser QA\" - version 1. It is selected for extraction and available in Prompt templates. Uploading the same filename again creates a new version.",
+  "model_calls": 2,
+  "passed": true
+}

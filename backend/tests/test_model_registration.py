@@ -25,6 +25,15 @@ def body(category='chat', protocol='azure-openai', **values):
 def register(s, value):return post(s, '/api/model-registrations', value)
 
 
+def test_long_cpu_extraction_timeout_is_saved_and_bounded(system):
+    value = body('extraction', 'ollama', provider_model='qwen3:4b', timeout=1200)
+    model = register(system, value)
+    assert model['timeout'] == 1200
+    profile = routing.owned(model['connection_profile_id'], system.owner, 'config_profile')
+    assert routing.profile_snapshot(profile, model['connection_profile_version'])['settings']['timeout'] == 1200
+    assert system.api.post('/api/model-registrations', json=value | {'timeout': 1801}).status_code == 422
+
+
 def cloud_transport(monkeypatch, handler):
     original = httpx.Client
     def client(**kwargs):
@@ -117,13 +126,14 @@ def test_model_read_overlapping_edit_keeps_matching_connection_version(system, m
     owned = routing.owned
     # Simulate a request that read the model row immediately before the edit,
     # then reads the connection row immediately after its transaction commits.
-    monkeypatch.setattr(routing, 'owned', lambda id, owner, kind: before if kind=='model' and id==m['id'] else owned(id, owner, kind))
+    mapped_model = routing.mapped_model
+    monkeypatch.setattr(routing, 'mapped_model', lambda dataset, id: before if id==m['id'] else mapped_model(dataset, id))
     snapshot = routing.resolve_model(owned(d['id'], s.owner, 'knowledge_base'), 'chat')
     assert snapshot['model_version']==1 and snapshot['connection_profile_version']==1
     assert snapshot['settings']['model']=='deployment-one'
     with core.execution_context(snapshot):
         assert connections.credentials()['api_key']=='synthetic-secret'
-    monkeypatch.setattr(routing, 'owned', owned)
+    monkeypatch.setattr(routing, 'mapped_model', mapped_model)
     current = routing.resolve_model(owned(d['id'], s.owner, 'knowledge_base'), 'chat')
     assert current['model_version']==2 and current['connection_profile_version']==2
     assert current['settings']['model']=='deployment-two'

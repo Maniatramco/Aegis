@@ -31,7 +31,7 @@ def test_no_link_or_code_required_reset_revokes_sessions_preserves_data(local):
     original.write_bytes(b'Synthetic original retained during direct recovery')
     with sqlite3.connect(path) as database:
         records = database.execute('SELECT * FROM records ORDER BY id').fetchall()
-        database.execute("INSERT INTO sessions (id,owner,expires,csrf) VALUES ('other','different-owner',9999999999,'other-csrf')")
+        database.execute("INSERT INTO sessions (id,owner,expires,csrf,created_at,updated_at,created_via,updated_via) VALUES ('other','different-owner',9999999999,'other-csrf',0,0,'test','test')")
     prepare_local(client)
     assert reset_local(client).status_code == 200
     assert client.get('/api/auth/me', headers={'Cookie': 'aegis_session=' + previous}).status_code == 401
@@ -39,6 +39,7 @@ def test_no_link_or_code_required_reset_revokes_sessions_preserves_data(local):
     assert client.post('/api/auth/login', json={'username': 'Dottie', 'password': NEW}).status_code == 200
     with sqlite3.connect(path) as database:
         assert database.execute('SELECT id,username FROM users').fetchall() == [('administrator', 'Dottie')]
+        assert database.execute('SELECT updated_by,updated_via FROM users').fetchone() == ('administrator','recovery')
         assert database.execute('SELECT * FROM records ORDER BY id').fetchall() == records
         assert database.execute("SELECT owner FROM sessions WHERE id='other'").fetchone() == ('different-owner',)
     assert original.read_bytes() == b'Synthetic original retained during direct recovery'

@@ -1,0 +1,75 @@
+{
+  "steps": [
+    {
+      "name": "Prompt JSON bypasses OCR and appears under selected dataset",
+      "passed": true,
+      "seconds": 166.492
+    },
+    {
+      "name": "Independent scans: attachment handoff, completed exact invoice values, OCR provenance, review and originals",
+      "passed": true,
+      "seconds": 1.702
+    }
+  ],
+  "errors": [],
+  "started_at": "2026-10-10T19:47:58.588Z",
+  "planning": [
+    {
+      "text": "Save this prompt for this dataset.",
+      "seconds": 164.966
+    },
+    {
+      "text": "Upload and extract these attached invoices.",
+      "seconds": 27.908
+    }
+  ],
+  "invoice_plan_id": "398d27e4-fcb8-4a4f-9a89-1b45bd78c96b",
+  "previous_failure": "apiRequestContext.get: read ECONNRESET",
+  "recovered_from_ocr_interruption": true,
+  "transient_connections": [
+    {
+      "path": "/agent-v2/plans/398d27e4-fcb8-4a4f-9a89-1b45bd78c96b",
+      "status": 502
+    },
+    {
+      "path": "/agent-v2/plans/398d27e4-fcb8-4a4f-9a89-1b45bd78c96b",
+      "status": 502
+    }
+  ],
+  "confirmed_extraction_after_recovery": true,
+  "invoice_extractions": [
+    {
+      "id": "dc6d032b-d76e-4a28-831e-7445f27eab93",
+      "result": {
+        "reference": "OCR-A-42",
+        "total": 42.5
+      },
+      "ocr": [
+        {
+          "document_id": "c2b68454-6a93-481f-98a1-77b8ff91fdae",
+          "page": 1,
+          "source_filename": "ocr-invoice-a.pdf",
+          "model": "qwen2.5vl:3b"
+        }
+      ]
+    },
+    {
+      "id": "383dd371-d5f7-4bdf-a2be-8bd93092098c",
+      "result": {
+        "reference": "OCR-B-75",
+        "total": 75.25
+      },
+      "ocr": [
+        {
+          "document_id": "75f92e59-b1ff-41c2-9544-ebfb269426d9",
+          "page": 1,
+          "source_filename": "ocr-invoice-b.pdf",
+          "model": "qwen2.5vl:3b"
+        }
+      ]
+    }
+  ],
+  "cpu_invoice_workflow_passed": true,
+  "passed": true,
+  "scope": "CPU invoice acceptance; remaining scenarios recorded in a later phase"
+}

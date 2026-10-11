@@ -1,0 +1,39 @@
+{
+  "url": "https://hd260kx9-3003.inc1.devtunnels.ms",
+  "started_at": "2026-10-10T17:46:10.495Z",
+  "checks": [
+    {
+      "name": "HTTPS browser entry and secure context",
+      "passed": true,
+      "seconds": 2.32
+    },
+    {
+      "name": "Unauthenticated workspace API remains protected",
+      "passed": true,
+      "seconds": 0.322
+    },
+    {
+      "name": "Real sign-in through forwarded URL",
+      "passed": true,
+      "seconds": 0.964
+    },
+    {
+      "name": "Saved results load and Review button reveals selected result",
+      "passed": true,
+      "seconds": 0.775
+    },
+    {
+      "name": "Logout invalidates the forwarded session",
+      "passed": true,
+      "seconds": 0.31
+    }
+  ],
+  "page_errors": [],
+  "browser_context": {
+    "secure": true,
+    "uuid": "function"
+  },
+  "extraction_id": "a45b40e0-c3aa-4973-a8dd-0ff4c90f694c",
+  "passed": true,
+  "finished_at": "2026-10-10T17:46:17.090Z"
+}

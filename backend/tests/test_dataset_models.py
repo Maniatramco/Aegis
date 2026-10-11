@@ -11,6 +11,9 @@ from app import core, main, worker, providers, dataset_models as routing
 
 @pytest.fixture
 def system(tmp_path,monkeypatch):
+    # Existing regression fixtures explicitly exercise the retained legacy
+    # router. New graph tests override this and use scripted native tool calls.
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','legacy')
     engine=create_engine('sqlite:///'+str(tmp_path/'control.db'),connect_args={'check_same_thread':False});session=sessionmaker(engine,expire_on_commit=False)
     for module in (core,main,worker):monkeypatch.setattr(module,'Session',session)
     for module in (core,main):monkeypatch.setattr(module,'engine',engine)
@@ -264,7 +267,7 @@ def test_dataset_status_requires_an_explicit_boolean(system,body):
 
 def test_dataset_status_respects_owner_isolation_and_record_kind(system):
     s=system;d=dataset(s,mapped=False);c=conversation(s,d)
-    for owner in ('bob','administrator'):
+    for owner in ('bob','other-user'):
         s.owner=owner
         assert s.api.get('/api/datasets').json()==[]
         assert s.api.patch('/api/datasets/'+d['id']+'/status',json={'active':False}).status_code==404
@@ -277,7 +280,7 @@ def test_dataset_status_respects_owner_isolation_and_record_kind(system):
 def test_dataset_status_requires_session_and_csrf(system):
     s=system;s.owner='administrator';d=dataset(s,mapped=False)
     with core.Session.begin() as db:
-        db.add(core.User(id='administrator',username='admin',password_hash=core.password_hash('secure-test-pass')))
+        db.add(core.User(id='administrator',username='admin',password_hash=core.password_hash('secure-test-pass'),role='administrator'))
     main.app.dependency_overrides.clear()
     path='/api/datasets/'+d['id']+'/status'
     assert s.api.patch(path,json={'active':False}).status_code==401

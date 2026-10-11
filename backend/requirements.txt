@@ -7,7 +7,14 @@ python-multipart==0.0.32
 cryptography==50.0.2
 httpx==0.28.1
 pypdf==6.19.0
+pypdfium2==5.14.0
+Pillow==12.3.0
 python-docx==1.2.0
 qdrant-client==1.19.1
 jsonschema==4.26.0
 portalocker==3.2.0
+langgraph==1.2.14
+langgraph-checkpoint==4.2.0
+langchain-core==1.6.9
+
+pyarrow==26.0.0

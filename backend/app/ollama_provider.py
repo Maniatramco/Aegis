@@ -41,6 +41,8 @@ def request(path,payload,timeout):
         data=response.json()
         if not isinstance(data,dict) or data.get('error'):raise OllamaError('Local Ollama returned an invalid response.')
         return data
+    except httpx.TimeoutException as exc:
+        raise OllamaError(f'Local Ollama timed out after {timeout} seconds. CPU extraction can take longer for detailed templates. Increase Timeout in Model Registration or use a smaller document scope or template, then retry.') from exc
     except (httpx.HTTPError,ValueError) as exc:
         raise OllamaError('Local Ollama is unavailable or returned invalid data. Check the loopback service and installed model.') from exc
 
@@ -63,7 +65,7 @@ def generation_options(messages,max_output):
     try:extra=validate_parameters(cfg.get('extra_parameters',{}),'ollama','chat')
     except ValueError as exc:raise OllamaError(str(exc)) from exc
     return {'temperature':0.7,'top_p':0.8,'top_k':20,'repeat_penalty':1.1,
-            'num_ctx':context,'num_predict':max_output,'seed':42,**{k:v for k,v in extra.items() if k!='keep_alive'}}
+            'num_ctx':context,'num_predict':max_output,'seed':42,**{k:v for k,v in extra.items() if k!='keep_alive'},**({'num_gpu':0} if os.getenv('AEGIS_INFERENCE_DEVICE')=='cpu' else {})}
 
 
 def request_parameters(embedding=False):
@@ -156,7 +158,9 @@ def extract(model,text,schema,timeout,instruction=None):
     options['temperature']=core.settings().get('extra_parameters',{}).get('temperature',0.2)
     data=request('/api/chat',{'model':local_model_name(model),'messages':messages,
         'stream':False,'think':False,'format':schema,'options':options,**request_parameters()},timeout)
-    if not data.get('done') or data.get('done_reason')=='length':raise OllamaError('Local Ollama extraction was incomplete.')
+    if data.get('done_reason')=='length':
+        raise OllamaError(f'Local Ollama extraction reached its output limit ({options["num_predict"]:,} tokens). Increase Max output tokens and, if needed, Context limit in Model Registration, or use a smaller template, then retry. Partial JSON was not saved as a completed result.')
+    if not data.get('done'):raise OllamaError('Local Ollama extraction was incomplete. Check the model service, then retry.')
     try:
         result=json.loads(data.get('message',{}).get('content',''))
         validate(result,schema)
@@ -174,7 +178,7 @@ def embed(model,texts,timeout):
         for text in texts:check_budget(cfg,text,embedding=True)
     except ValueError as exc:raise OllamaError(str(exc)) from exc
     dim=(cfg.get('embedding_connection') or {}).get('dimensions')
-    data=request('/api/embed',{'model':local_model_name(model),'input':texts,'truncate':False,**({'dimensions':dim} if dim else {}),**request_parameters(embedding=True)},timeout)
+    data=request('/api/embed',{'model':local_model_name(model),'input':texts,'truncate':False,**({'dimensions':dim} if dim else {}),**({'options':{'num_gpu':0}} if os.getenv('AEGIS_INFERENCE_DEVICE')=='cpu' else {}),**request_parameters(embedding=True)},timeout)
     vectors=data.get('embeddings')
     if not isinstance(vectors,list) or len(vectors)!=len(texts):raise OllamaError('Local Ollama returned an invalid embedding count.')
     result=[];dimension=None

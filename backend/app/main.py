@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, PrivateAttr
 from sqlalchemy import select, text, update
@@ -10,6 +12,7 @@ from jsonschema import Draft202012Validator, validate, ValidationError, SchemaEr
 from .core import *
 from . import providers, reranker, workflow, temporary_files, dataset_models as routing
 from .json_documents import json_document_text
+from . import dataset_access as access
 
 @asynccontextmanager
 async def lifespan(app):
@@ -28,37 +31,59 @@ async def lifespan(app):
         with suppress(asyncio.CancelledError):
             await cleanup
 app=FastAPI(title='Aegis AI Data Platform',version='0.1.0',lifespan=lifespan)
+@app.exception_handler(RequestValidationError)
+async def safe_validation_errors(request, error):
+    # FastAPI's default error includes submitted values, including passwords.
+    return JSONResponse(status_code=422, content={'detail':[
+        {'loc':list(item['loc']), 'msg':item['msg'], 'type':item['type']}
+        for item in error.errors()]})
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv('ALLOWED_ORIGINS','http://localhost:3000,http://127.0.0.1:3000').split(','),allow_credentials=True,allow_methods=['*'],allow_headers=['Content-Type','X-CSRF-Token','Authorization'])
 @app.middleware('http')
 async def security_headers(request,call_next):
-    response=await call_next(request);response.headers['X-Content-Type-Options']='nosniff';response.headers['Cache-Control']='no-store';return response
+    actor_token=access.request_actor.set(None)
+    audit_token=relational.actor_override.set(None)
+    try:
+        response=await call_next(request);response.headers['X-Content-Type-Options']='nosniff';response.headers['Cache-Control']='no-store';return response
+    finally:
+        access.request_actor.reset(actor_token);relational.actor_override.reset(audit_token)
 
-def auth(request:Request):
+def authenticate(request:Request):
     token=request.cookies.get('aegis_session','');bearer=request.headers.get('authorization','')
     if bearer.startswith('Bearer '):token=bearer[7:]
     if not token:raise HTTPException(401,'Sign in required')
     with Session() as s:
         login=s.get(Login,hashlib.sha256(token.encode()).hexdigest())
         if not login or login.expires<time.time():raise HTTPException(401,'Session expired')
+        if not s.get(User,login.owner):raise HTTPException(401,'Account unavailable')
         if request.method not in ('GET','HEAD','OPTIONS') and not bearer.startswith('Bearer ') and not secrets.compare_digest(request.headers.get('x-csrf-token',''),login.csrf):raise HTTPException(403,'Invalid CSRF token')
         return login.owner
 
+async def auth(request:Request):
+    from starlette.concurrency import run_in_threadpool
+    owner=await run_in_threadpool(authenticate,request)
+    access.request_actor.set(owner);relational.actor_override.set(owner)
+    if request.method not in ('GET','HEAD','OPTIONS') and any(request.url.path==prefix or request.url.path.startswith(prefix+'/') for prefix in ('/api/datasets','/api/knowledge-bases','/api/models','/api/model-registrations','/api/settings')):
+        access.require_admin(owner)
+    return owner
+
 def get_record(id,owner,kind=None):
-    with Session() as s:r=s.get(Record,id)
-    if not r or r.owner!=owner or (kind and r.kind!=kind):raise HTTPException(404,'Not found')
-    return r
+    return access.get_record(id,owner,kind)
 
 def records(owner,kind):
-    with Session() as s:return list(s.scalars(select(Record).where(Record.owner==owner,Record.kind==kind).order_by(Record.created_at.desc())))
+    return access.rows(owner,kind)
 def new_record(kind,owner,name='',parent='',data=None,status='ready'):
+    if kind in access.SHARED and parent:owner=get_record(parent,owner,'knowledge_base').owner
     id=uid();ref=f'{kind}/{id}/v1.json'
     if data is not None:store.put_json(ref,data)
     r=Record(id=id,kind=kind,owner=owner,name=name,parent_id=parent,ref=ref,status=status,created_at=time.time(),updated_at=time.time())
     with Session.begin() as s:s.add(r)
     return r
 
-def enqueue(owner,kind,target,allow_external=False,snapshot=None):
-    j=Job(id=uid(),owner=owner,kind=kind,target_id=target,status='queued',created_at=time.time(),updated_at=time.time())
+def enqueue(owner,kind,target,allow_external=False,snapshot=None,initial_status='queued'):
+    with Session() as s:
+        record=s.get(Record,target)
+        if record:owner=record.owner
+    j=Job(id=uid(),owner=owner,kind=kind,target_id=target,status=initial_status,created_at=time.time(),updated_at=time.time())
     store.put_json('jobs/'+j.id+'.json',{'allow_external':allow_external,**({'execution':snapshot} if snapshot else {})})
     workflow.initialize(j.id,kind)
     with Session.begin() as s:s.add(j)
@@ -87,7 +112,7 @@ def setup(body:Credentials):
     with document_lock('bootstrap'):
         with Session.begin() as s:
             if s.scalar(select(User)):raise HTTPException(409,'Administrator already configured')
-            s.add(User(id='administrator',username=body.username,password_hash=password_hash(body.password)))
+            s.add(User(id='administrator',username=body.username,password_hash=password_hash(body.password),role='administrator'))
     return {'ok':True}
 _login_attempts={}
 @app.post('/api/auth/login')
@@ -102,7 +127,7 @@ def login(body:Credentials,response:Response,request:Request):
             if not u or not password_valid(body.password,u.password_hash):raise HTTPException(401,'Invalid username or password')
             token=secrets.token_urlsafe(40);csrf=secrets.token_urlsafe(32)
             s.add(Login(id=hashlib.sha256(token.encode()).hexdigest(),owner=u.id,expires=now+43200,csrf=csrf))
-            user={'id':u.id,'username':u.username}
+            user={'id':u.id,'username':u.username,'role':u.role,'is_admin':is_administrator(u.id,s)}
     _login_attempts.pop(client,None)
     response.set_cookie('aegis_session',token,httponly=True,secure=os.getenv('COOKIE_SECURE','false')=='true',samesite='strict',max_age=43200,path='/')
     return {'user':user,'csrf_token':csrf}
@@ -110,13 +135,15 @@ def login(body:Credentials,response:Response,request:Request):
 def me(request:Request,owner=Depends(auth)):
     with Session() as s:
         u=s.get(User,owner);token=request.cookies.get('aegis_session','');l=s.get(Login,hashlib.sha256(token.encode()).hexdigest())
-        return {'user':{'id':u.id,'username':u.username},'csrf_token':l.csrf if l else ''}
+        return {'user':{'id':u.id,'username':u.username,'role':u.role,'is_admin':is_administrator(u.id,s)},'csrf_token':l.csrf if l else ''}
 @app.post('/api/auth/logout')
 def logout(request:Request,response:Response,owner=Depends(auth)):
     with Session.begin() as s:
         row=s.get(Login,hashlib.sha256(request.cookies.get('aegis_session','').encode()).hexdigest())
         if row:s.delete(row)
     response.delete_cookie('aegis_session');return {'ok':True}
+from .user_management import install as install_user_management
+install_user_management(app, auth)
 @app.get('/health')
 def health():return {'status':'ok'}
 @app.get('/ready')
@@ -132,13 +159,15 @@ def ready():
 @app.get('/api/overview')
 def overview(owner=Depends(auth)):
     docs=records(owner,'document')
-    with Session() as s:jobs=list(s.scalars(select(Job).where(Job.owner==owner)))
+    jobs=access.jobs(owner)
     return {'documents':len(docs),'ready':sum(d.status=='ready' for d in docs),'jobs':sum(j.status in ('queued','running') for j in jobs),'knowledge_bases':len(records(owner,'knowledge_base')),'failed':sum(d.status=='failed' for d in docs)}
 class KBInput(BaseModel):name:str=Field(min_length=1,max_length=200);description:str='';active:bool=Field(default=True,strict=True)
 @app.get('/api/knowledge-bases')
 def kbs(owner=Depends(auth)):return [routing.dataset_public(r) for r in records(owner,'knowledge_base')]
 @app.post('/api/knowledge-bases')
-def create_kb(body:KBInput,owner=Depends(auth)):return routing.dataset_public(new_record('knowledge_base',owner,body.name,data=body.model_dump()|routing.ROUTING_DEFAULTS|{'routing_version':1}))
+def create_kb(body:KBInput,owner=Depends(auth)):
+    access.require_admin(owner)
+    return routing.dataset_public(new_record('knowledge_base',owner,body.name,data=body.model_dump()|routing.ROUTING_DEFAULTS|{'routing_version':1}))
 @app.get('/api/documents')
 def documents(kb_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
     scope=dataset_id or kb_id
@@ -146,7 +175,50 @@ def documents(kb_id:str|None=None,dataset_id:str|None=None,owner=Depends(auth)):
     snapshots={}
     return [routing.document_public(d,snapshots) for d in records(owner,'document') if not scope or d.parent_id==scope]
 @app.post('/api/documents/upload')
-async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:str=Form(''),allow_external:bool=Form(False),temporary_session_id:str=Form(''),owner=Depends(auth)):
+async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:str=Form(''),allow_external:bool=Form(False),temporary_session_id:str=Form(''),owner=Depends(auth),merge_files:bool=Form(False),template_id:str=Form(''),display_name:str=Form(''),idempotency_key:str=Form(''),merge_records:bool=Form(False)):
+    # Form defaults are descriptors on internal direct calls; normalize them.
+    template_id=template_id if isinstance(template_id,str) else ''
+    display_name=display_name if isinstance(display_name,str) else ''
+    idempotency_key=idempotency_key if isinstance(idempotency_key,str) else ''
+    merge_records=merge_records if isinstance(merge_records,bool) else False
+    if template_id:
+        template=get_record(template_id,owner,'template')
+        scope_id=dataset_id or kb_id
+        if template.parent_id and template.parent_id!=scope_id:raise HTTPException(400,'Choose a prompt belonging to the upload dataset')
+        # Validate routing before accepting originals or starting expensive jobs.
+        extraction_snapshot=routing.execution_snapshot(get_record(scope_id,owner,'knowledge_base'),'extraction')
+        external_check(allow_external,cfg=extraction_snapshot['settings'])
+    receipt='upload-receipts/'+hashlib.sha256(json.dumps([owner,idempotency_key]).encode()).hexdigest()+'.json' if idempotency_key else None
+    if receipt:
+        with document_lock('upload-'+hashlib.sha256(receipt.encode()).hexdigest()):
+            return await _upload_with_receipt(files,kb_id,dataset_id,allow_external,temporary_session_id,owner,merge_files,template_id,display_name,idempotency_key,merge_records,receipt)
+    return await _upload_with_receipt(files,kb_id,dataset_id,allow_external,temporary_session_id,owner,merge_files,template_id,display_name,idempotency_key,merge_records,None)
+
+async def _upload_with_receipt(files,kb_id,dataset_id,allow_external,temporary_session_id,owner,merge_files,template_id,display_name,idempotency_key,merge_records,receipt):
+    signature=hashlib.sha256(json.dumps([dataset_id or kb_id,template_id,display_name,merge_records]).encode())
+    for file in files:
+        signature.update((file.filename or '').encode());raw=await file.read(settings()['max_upload_mb']*1024*1024+1);await file.seek(0);signature.update(hashlib.sha256(raw).digest())
+    digest=signature.hexdigest()
+    if receipt:
+        try:previous=store.json(receipt)
+        except FileNotFoundError:previous=None
+        if previous:
+            if previous['signature']!=digest:raise HTTPException(409,'Upload idempotency key was already used for different inputs')
+            if previous.get('response'):return previous['response']
+            if not previous.get('uploaded'):raise HTTPException(409,'Upload submission was interrupted. Inspect dataset originals before resubmitting; automatic replay could duplicate files.')
+    else:previous=None
+    if previous and previous.get('uploaded'):response=previous['uploaded']
+    else:
+        if receipt:store.put_json(receipt,{'signature':digest})
+        response=await _upload_documents(files,kb_id,dataset_id,allow_external,temporary_session_id,owner,False if template_id else merge_files)
+        if receipt:store.put_json(receipt,{'signature':digest,'uploaded':response})
+    if template_id:
+        extraction=create_extraction(ExtractInput(dataset_id=dataset_id or kb_id,document_ids=[d['id'] for d in response['documents']],template_id=template_id,display_name=display_name or None,idempotency_key=idempotency_key+'-extract' if idempotency_key else None,merge_records=merge_records,wait_for_index=True,allow_external=allow_external),owner)
+        response=dict(response,extractions=[extraction],extraction_id=extraction['id'])
+    if receipt:store.put_json(receipt,{'signature':digest,'response':response})
+    return response
+
+async def _upload_documents(files,kb_id,dataset_id,allow_external,temporary_session_id,owner,merge_files):
     if temporary_session_id:raise HTTPException(409,'Temporary chat uploads use /api/temporary-chat/documents and never create an index.')
     if kb_id and dataset_id and kb_id!=dataset_id:raise HTTPException(400,'Conflicting dataset identifiers')
     kb_id=dataset_id or kb_id
@@ -154,6 +226,32 @@ async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:
     dataset=get_record(kb_id,owner,'knowledge_base');snapshot=routing.execution_snapshot(dataset,'embedding')
     if len(files)>20:raise HTTPException(400,'Upload at most 20 files at once')
     external_check(allow_external,True,snapshot['settings']);result=[];jobs=[]
+    if not files:raise HTTPException(400,'Choose at least one file')
+    limit=settings()['max_upload_mb']*1024*1024
+    for file in files:
+        name=(file.filename or '').replace('\\','/').split('/')[-1]
+        if name.rsplit('.',1)[-1].lower() not in ('txt','pdf','docx','json'):raise HTTPException(400,'Only PDF, DOCX, UTF-8 TXT and JSON files are supported')
+        raw=await file.read(limit+1);await file.seek(0)
+        if not raw or len(raw)>limit:raise HTTPException(413,'A file is empty or exceeds the upload size limit')
+        if name.lower().endswith('.txt'):
+            try:raw.decode('utf-8-sig')
+            except UnicodeDecodeError:raise HTTPException(400,'TXT must use UTF-8 encoding')
+        if name.lower().endswith('.json'):
+            try:json_document_text(raw)
+            except ValueError as error:raise HTTPException(400,str(error))
+    merged = None; original_parts = []
+    if merge_files is True and len(files)>1:
+        from . import merged_documents
+        import io
+        limit=settings()['max_upload_mb']*1024*1024
+        for file in files:
+            raw=await file.read(limit+1)
+            if not raw or len(raw)>limit:raise HTTPException(413,'An original file is empty or exceeds the upload size limit.')
+            original_parts.append((file.filename or 'document',raw))
+        try:name,raw,merged=merged_documents.prepare(original_parts)
+        except Exception as exc:raise HTTPException(422,'Cannot merge these files. Check their format, text content and page limits, or choose independent extraction.') from exc
+        if len(raw)>limit:raise HTTPException(413,'The merged file exceeds the upload size limit. Choose fewer files or independent extraction.')
+        files=[UploadFile(filename=name,file=io.BytesIO(raw))]
     for file in files:
         name=(file.filename or 'document').replace('\\','/').split('/')[-1][:200]
         if name.rsplit('.',1)[-1].lower() not in ('txt','pdf','docx','json'):raise HTTPException(400,'Only PDF, DOCX, UTF-8 TXT and JSON files are supported')
@@ -164,7 +262,9 @@ async def upload(files:list[UploadFile]=File(...),kb_id:str=Form(''),dataset_id:
             try:json_document_text(raw)
             except ValueError as exc:raise HTTPException(400,str(exc)) from exc
         id=uid();ref='documents/'+id+'/original';store.put(ref,raw)
-        r=Record(id=id,kind='document',owner=owner,name=name,ref=ref,parent_id=kb_id,status='queued',size=len(raw),created_at=time.time(),updated_at=time.time())
+        r=Record(id=id,kind='document',owner=dataset.owner,name=name,ref=ref,parent_id=kb_id,status='queued',size=len(raw),created_at=time.time(),updated_at=time.time())
+        if merged:
+            merged_documents.save(id,merged,original_parts)
         with Session.begin() as s:s.add(r)
         j=enqueue(owner,'index',id,allow_external,snapshot);result.append(routing.document_public(r));jobs.append(job_repr(j))
     return {'documents':result,'jobs':jobs}
@@ -185,6 +285,35 @@ def source_document(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'document');ext=r.name.rsplit('.',1)[-1].lower()
     if ext not in ('pdf','txt','json'):raise HTTPException(415,'Inline original preview supports PDF, UTF-8 TXT and JSON. Download DOCX to review its original layout.')
     return Response(store.get(r.ref),media_type={'pdf':'application/pdf','json':'application/json'}.get(ext,'text/plain; charset=utf-8'),headers={'Content-Disposition':"inline; filename*=UTF-8''"+quote(r.name),'Content-Security-Policy':"sandbox"})
+
+def original_page_image(raw,page):
+    if page<1 or page>10000:raise HTTPException(422,'Choose a valid original PDF page.')
+    from . import ocr
+    try:image,_,_=ocr.render_pdf(raw,page-1,120)
+    except Exception:raise HTTPException(422,'This original PDF page could not be rendered. Download the original to inspect it.') from None
+    return Response(image,media_type='image/png',headers={'Cache-Control':'private, max-age=300','X-Content-Type-Options':'nosniff'})
+
+@app.get('/api/documents/{id}/page-image')
+def document_page_image(id:str,page:int=1,owner=Depends(auth)):
+    r=get_record(id,owner,'document')
+    if not r.name.lower().endswith('.pdf'):raise HTTPException(415,'Page images are available for original PDF files.')
+    return original_page_image(store.get(r.ref),page)
+
+@app.get('/api/documents/{id}/merged-sources/{key}/{action}')
+def merged_source(id:str,key:str,action:str,page:int=1,owner=Depends(auth)):
+    from . import merged_documents
+    from urllib.parse import quote
+    get_record(id,owner,'document')
+    metadata=merged_documents.manifest(id)
+    source=next((s for s in (metadata or {}).get('sources',[]) if s['key']==key),None)
+    if not source or action not in ('preview','source','download','page-image'):raise HTTPException(404,'Merged source not found')
+    if action=='preview':return {'text':'\n\n'.join(p['text'] for p in metadata['pages'] if p['source_key']==key)}
+    ext=source['name'].rsplit('.',1)[-1].lower()
+    if action=='page-image':
+        if ext!='pdf':raise HTTPException(415,'Page images are available for original PDF files.')
+        return original_page_image(store.get(f'documents/{id}/merged-sources/{key}/original'),page)
+    if action=='source' and ext not in ('pdf','txt','json'):raise HTTPException(415,'Download this original to inspect its layout.')
+    return Response(store.get(f'documents/{id}/merged-sources/{key}/original'),media_type={'pdf':'application/pdf','json':'application/json','txt':'text/plain; charset=utf-8'}.get(ext,'application/octet-stream'),headers={'Content-Disposition':('inline' if action=='source' else 'attachment')+"; filename*=UTF-8''"+quote(source['name']),'Content-Security-Policy':'sandbox'})
 class Consent(BaseModel):allow_external:bool=False
 @app.post('/api/documents/{id}/reindex')
 def reindex(id:str,body:Consent,owner=Depends(auth)):
@@ -222,7 +351,10 @@ def delete_document(id:str,owner=Depends(auth)):
     with document_lock(id):
         try:providers.delete_vectors(id)
         except Exception:raise HTTPException(503,'Vector cleanup failed; document is unavailable for retrieval. Retry deletion when vector storage recovers.')
-        for suffix in ['original','parsed.json','chunks.json','index.json','index-execution.json','retention.json']:store.delete('documents/'+id+'/'+suffix)
+        from . import merged_documents
+        merged=merged_documents.manifest(id)
+        for item in (merged or {}).get('sources',[]):store.delete(f'documents/{id}/merged-sources/{item["key"]}/original')
+        for suffix in ['original','parsed.json','chunks.json','index.json','index-execution.json','retention.json','merged.json']:store.delete('documents/'+id+'/'+suffix)
         for n in range(1,r.version+1):
             for suffix in ('parsed.json','chunks.json','index.json','index-execution.json'):store.delete(f'documents/{id}/versions/v{n}/{suffix}')
         with Session.begin() as s:s.delete(s.get(Record,id))
@@ -314,6 +446,7 @@ class TemplateInput(BaseModel):
     name:str=Field(min_length=1,max_length=200)
     schema_:dict=Field(alias='schema')
     dataset_id:str|None=None
+    instructions:str=Field(default='',max_length=12000)
     source_filename:str|None=Field(default=None,max_length=200,pattern=r'(?i)^[^/\\\x00-\x1f\x7f]+\.json$')
 
 def uploaded_template(body,owner):
@@ -369,7 +502,7 @@ def create_template(body:TemplateInput,owner=Depends(auth)):
         existing=uploaded_template(body,owner)
         if existing:return update_template(existing.id,body,owner)
         name=body.source_filename or body.name
-        r=new_record('template',owner,name,parent=body.dataset_id or '',data={'name':name,'schema':body.schema_,'version':1,'dataset_id':body.dataset_id,'source_filename':body.source_filename})
+        r=new_record('template',owner,name,parent=body.dataset_id or '',data={'name':name,'schema':body.schema_,'instructions':body.instructions,'version':1,'dataset_id':body.dataset_id,'source_filename':body.source_filename})
         return representation(r)|store.json(r.ref)
     if not body.source_filename:return save()
     key=hashlib.sha256(json.dumps([owner,body.dataset_id or '',body.source_filename.casefold()]).encode()).hexdigest()
@@ -383,7 +516,7 @@ def update_template(id:str,body:TemplateInput,owner=Depends(auth)):
         if body.dataset_id and body.dataset_id!=r.parent_id:raise HTTPException(400,'Template dataset association cannot be changed. Import a new template for the destination dataset.')
         source_filename=body.source_filename or store.json(r.ref).get('source_filename')
         name=source_filename or body.name
-        store.put_json(ref,{'name':name,'schema':body.schema_,'version':version,'dataset_id':r.parent_id or None,'source_filename':source_filename})
+        store.put_json(ref,{'name':name,'schema':body.schema_,'instructions':body.instructions,'version':version,'dataset_id':r.parent_id or None,'source_filename':source_filename})
         with Session.begin() as s:r=s.get(Record,id);r.version=version;r.ref=ref;r.name=name;r.updated_at=time.time()
         return representation(r)|store.json(ref)
 @app.get('/api/templates/{id}/versions')
@@ -399,29 +532,93 @@ def export_template(id:str,version:int|None=None,owner=Depends(auth)):
     name=data.get('source_filename') or data['name'];safe=re.sub(r'[<>:"/\\|?*\x00-\x1f]','-',name.strip())[:100].rstrip('. ') or 'prompt-template'
     filename=data.get('source_filename') or f'{safe}-v{number}.json'
     disposition=f"attachment; filename=\"prompt-template-v{number}.json\"; filename*=UTF-8''{quote(filename,safe='')}"
-    return Response(json.dumps({'name':name,'schema':data['schema']},ensure_ascii=False,indent=2)+'\n',media_type='application/json',headers={'Content-Disposition':disposition})
-class ExtractInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=20);template_id:str;dataset_id:str|None=None;model_id:str|None=None;allow_external:bool=False
+    return Response(json.dumps({'name':name,'schema':data['schema'],'instructions':data.get('instructions','')},ensure_ascii=False,indent=2)+'\n',media_type='application/json',headers={'Content-Disposition':disposition})
+class ExtractInput(BaseModel):
+    document_ids:list[str]=Field(min_length=1,max_length=20)
+    template_id:str
+    dataset_id:str|None=None
+    model_id:str|None=None
+    allow_external:bool=False
+    merge_records:bool=False
+    display_name:str|None=Field(default=None,min_length=1,max_length=200)
+    idempotency_key:str|None=Field(default=None,min_length=1,max_length=160)
+    wait_for_index:bool=False
 @app.get('/api/extractions')
 def extractions(owner=Depends(auth)):
     output=[]
     for r in records(owner,'extraction'):
         data=store.json(r.ref)
-        output.append(representation(r)|{key:data.get(key) for key in ('document_ids','template_id','template_version','review_status','model_selection')})
+        result=data.get('result')
+        profile_count=len(result['records']) if isinstance(result,dict) and isinstance(result.get('records'),list) else (1 if result is not None else 0)
+        output.append(representation(r)|{'profile_count':profile_count}|{key:data.get(key) for key in ('document_ids','template_id','template_version','review_status','model_selection','merge','merge_records')})
     return output
 @app.post('/api/extractions')
 def create_extraction(body:ExtractInput,owner=Depends(auth)):
+    key=hashlib.sha256(json.dumps([owner,body.idempotency_key or uid()]).encode()).hexdigest()
+    with document_lock('extraction-submit-'+key):
+        if body.idempotency_key:
+            for existing in records(owner,'extraction'):
+                previous=store.json(existing.ref)
+                if previous.get('idempotency_key')==body.idempotency_key:
+                    if previous.get('document_ids')!=body.document_ids or previous.get('template_id')!=body.template_id or previous.get('dataset_id')!=(body.dataset_id or existing.parent_id):raise HTTPException(409,'Idempotency key was already used for different extraction inputs')
+                    if any(previous.get(key)!=body.model_dump().get(key) for key in ('model_id','display_name','merge_records','allow_external')):raise HTTPException(409,'Idempotency key was already used for different extraction inputs')
+                    with Session() as session:job=session.scalar(select(Job).where(Job.target_id==existing.id).order_by(Job.created_at.desc()))
+                    return representation(existing)|previous|{'job':job_repr(job) if job else None}
+        return _create_extraction(body,owner)
+
+def _create_extraction(body,owner):
     t=get_record(body.template_id,owner,'template');dataset,docs=routing.documents_scope(owner,body.dataset_id,body.document_ids)
     if t.parent_id and t.parent_id!=dataset.id:raise HTTPException(400,'Choose a prompt template belonging to the selected dataset.')
-    snapshot=routing.execution_snapshot(dataset,'extraction',body.model_id);routing.require_indexes(docs,snapshot)
+    snapshot=routing.execution_snapshot(dataset,'extraction',body.model_id)
+    pending=[d for d in docs if d.status!='ready']
+    if not pending:routing.require_indexes(docs,snapshot)
     external_check(body.allow_external,cfg=snapshot['settings'])
-    if any(d.status!='ready' for d in docs):raise HTTPException(409,'Documents must be ready before extraction')
+    if pending and (not body.wait_for_index or any(d.status not in ('queued','processing') for d in pending)):raise HTTPException(409,'Documents must be ready before extraction')
     for doc in docs:temporary_files.keep(doc.id)
-    data=body.model_dump()|{'dataset_id':dataset.id,'model_selection':routing.public_selection(snapshot),'schema':store.json(t.ref)['schema'],'template_version':t.version,'result':None,'sources':[]}
-    r=new_record('extraction',owner,t.name,parent=dataset.id,data=data,status='queued');j=enqueue(owner,'extract',r.id,body.allow_external,snapshot)
+    from . import merged_documents
+    original_schema=store.json(t.ref)['schema'];merged=None;combined=None
+    if len(docs)==1:
+        value=merged_documents.manifest(docs[0].id)
+        if value:merged=merged_documents.public(value)|{'document_id':docs[0].id}
+    elif len(docs)>1 and body.wait_for_index:
+        merged={'filename':body.display_name or 'merged-'+docs[0].name.rsplit('.',1)[0]+'-'+str(len(docs))+'-files',
+            'logical':True,'source_count':len(docs),'sources':[{'key':str(n+1),'name':d.name,'size':d.size,'document_id':d.id} for n,d in enumerate(docs)]}
+    elif len(docs)>1:
+        try:
+            filename,combined,value=merged_documents.prepare([(d.name,store.get(d.ref)) for d in docs])
+            merged=merged_documents.public(value)
+            for source,doc in zip(merged['sources'],docs):source['document_id']=doc.id
+        except Exception as exc:raise HTTPException(422,'Could not create the merged file. Choose independent extraction or check the original files.') from exc
+    schema=merged_documents.records_schema(original_schema,merged['sources']) if body.merge_records and merged else original_schema
+    data=body.model_dump()|{'dataset_id':dataset.id,'model_selection':routing.public_selection(snapshot),'schema':schema,'record_schema':original_schema,'merge':merged,'template_version':t.version,'result':None,'sources':[]}
+    name=body.display_name or (merged['filename'] if merged else docs[0].name.rsplit('.',1)[0])
+    if merged:merged['filename']=name
+    data['prompt_instructions']=store.json(t.ref).get('instructions','')
+    data['schema']=dict(schema,description='\n'.join(filter(None,[schema.get('description',''),data['prompt_instructions']])))
+    data['record_schema']=dict(original_schema,description='\n'.join(filter(None,[original_schema.get('description',''),data['prompt_instructions']])))
+    r=new_record('extraction',owner,name,parent=dataset.id,data=data,status='queued')
+    if combined is not None:store.put(f'extraction/{r.id}/merged-original',combined)
+    j=enqueue(owner,'extract',r.id,body.allow_external,snapshot,initial_status='blocked' if pending else 'queued')
+    if pending:
+        with Session.begin() as session:session.get(Job,j.id).status='blocked'
+        j.status='blocked'
+        workflow.transition(j.id,'prepare','blocked')
     return representation(r)|data|{'job':job_repr(j)}
 @app.get('/api/extractions/{id}')
 def extraction(id:str,owner=Depends(auth)):
-    r=get_record(id,owner,'extraction');return representation(r)|store.json(r.ref)
+    r=get_record(id,owner,'extraction')
+    from .parquet_results import load
+    try:data=load(store.json(r.ref)) if r.status=='ready' else store.json(r.ref)
+    except (ValueError,OSError):raise HTTPException(503,'Saved Parquet could not be read. Retry loading; no draft was overwritten.')
+    return representation(r)|data|{'extraction_id':r.id,'prompt_version':data.get('template_version'),'status_name':'completed' if r.status=='ready' else r.status,'output_url':f'/api/extractions/{id}/export?format=parquet' if data.get('output_reference') else None}
+
+@app.get('/api/extractions/{id}/merged-file')
+def merged_extraction_file(id:str,owner=Depends(auth)):
+    from urllib.parse import quote
+    r=get_record(id,owner,'extraction');data=store.json(r.ref);merged=data.get('merge')
+    if not merged or merged.get('logical'):raise HTTPException(404,'This run retains separate originals. Download each source document.')
+    raw=store.get(get_record(merged['document_id'],owner,'document').ref) if merged.get('document_id') else store.get(f'extraction/{id}/merged-original')
+    return Response(raw,media_type='application/pdf' if merged['filename'].endswith('.pdf') else 'text/plain; charset=utf-8',headers={'Content-Disposition':"attachment; filename*=UTF-8''"+quote(merged['filename'])})
 class ReviewInput(BaseModel):
     result:Any
     version:int=Field(ge=1)
@@ -429,6 +626,9 @@ class ReviewInput(BaseModel):
 def review_extraction(id:str,body:ReviewInput,owner=Depends(auth)):
     with document_lock(id):
         r=get_record(id,owner,'extraction');data=store.json(r.ref)
+        from . import parquet_results
+        try:data=parquet_results.load(data)
+        except (ValueError,OSError):raise HTTPException(503,'Saved Parquet could not be read. Your edits are retained; retry loading.')
         if r.status!='ready':raise HTTPException(409,'Wait for extraction to complete')
         if body.version!=r.version:raise HTTPException(409,'This result changed in another session. Reload the latest saved version before saving; your draft is retained.')
         try:validate(body.result,data['schema'])
@@ -441,13 +641,50 @@ def review_extraction(id:str,body:ReviewInput,owner=Depends(auth)):
         prior_evidence=data.get('evidence',[])
         data['original_evidence']=data.get('original_evidence',prior_evidence)
         data['evidence']=[item for item in prior_evidence if not any((item.get('field') or item.get('path') or item.get('json_pointer') or '')==path or path.startswith((item.get('field') or item.get('path') or item.get('json_pointer') or '')+'/') for path in changed)]
-        data.update(result=body.result,review_status='reviewed',reviewed_at=time.time(),reviewed_by=owner,evidence_notice='Edited fields are unverified; original quotes and source provenance are retained.',edited_fields=sorted(set(data.get('edited_fields',[]))|changed))
+        data.update(result=body.result,review_status='reviewed',reviewed_at=time.time(),reviewed_by=owner,reviewed_extraction_version=r.version,evidence_notice='Edited fields are unverified; original quotes and source provenance are retained.',edited_fields=sorted(set(data.get('edited_fields',[]))|changed))
+        try:data.update(parquet_results.persist(r.id,r.version+1,data))
+        except ValueError as error:raise HTTPException(503,str(error))
         r=routing.write_version(r,data)
-        return representation(r)|data
+        return extraction(id,owner)
 
 class ReextractInput(Consent):
     version:int=Field(ge=1)
     confirm_reviewed:bool=False
+
+class ResumeExtraction(Consent):
+    version:int=Field(ge=1)
+    template_id:str
+
+@app.post('/api/extractions/{id}/resume')
+def resume_extraction(id:str,body:ResumeExtraction,owner=Depends(auth)):
+    with document_lock('submit-'+id),document_lock(id):
+        r=get_record(id,owner,'extraction')
+        if r.status!='failed' or r.version!=body.version:raise HTTPException(409,'Reload the failed extraction before correcting its prompt')
+        with Session() as session:
+            if session.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running','blocked']))):raise HTTPException(409,'This extraction already has an active job')
+        data=store.json(r.ref);template=get_record(body.template_id,owner,'template')
+        if template.parent_id and template.parent_id!=r.parent_id:raise HTTPException(400,'Choose a prompt in this extraction dataset')
+        prompt=store.json(template.ref);check_schema(prompt['schema'])
+        dataset,docs=routing.documents_scope(owner,r.parent_id,data['document_ids'])
+        snapshot=routing.execution_snapshot(dataset,'extraction',data.get('model_id'))
+        if all(d.status=='ready' for d in docs):routing.require_indexes(docs,snapshot)
+        if any(d.status not in ('ready','queued','processing') for d in docs):raise HTTPException(409,'Correct/retry failed document indexing before resuming extraction')
+        external_check(body.allow_external,cfg=snapshot['settings'])
+        from .merged_documents import records_schema
+        schema=records_schema(prompt['schema'],data['merge']['sources']) if data.get('merge_records') and data.get('merge') else prompt['schema']
+        for key in ('output_reference','output_sha256','output_format','review_revision','retrieval','index_versions','record_results','record_progress'):
+            data.pop(key,None)
+        instructions=prompt.get('instructions','')
+        data.update(template_id=template.id,template_version=template.version,prompt_instructions=instructions,
+            schema=dict(schema,description='\n'.join(filter(None,[schema.get('description',''),instructions]))),
+            record_schema=dict(prompt['schema'],description='\n'.join(filter(None,[prompt['schema'].get('description',''),instructions]))),
+            result=None,evidence=[],sources=[],previous_version=r.version,model_selection=routing.public_selection(snapshot),allow_external=body.allow_external)
+        r=routing.write_version(r,data)
+        with Session.begin() as session:session.get(Record,id).status='queued';session.get(Record,id).error=''
+        waiting=any(d.status!='ready' for d in docs)
+        job=enqueue(owner,'extract',id,body.allow_external,snapshot,initial_status='blocked' if waiting else 'queued')
+        return extraction(id,owner)|{'job':job_repr(job)}
+
 @app.post('/api/extractions/{id}/reextract')
 def reextract_result(id:str,body:ReextractInput,owner=Depends(auth)):
     if get_record(id,owner,'extraction').status!='ready':raise HTTPException(409,'Wait for extraction to complete.')
@@ -460,7 +697,7 @@ def reextract_result(id:str,body:ReextractInput,owner=Depends(auth)):
         external_check(body.allow_external,cfg=snapshot['settings'])
         with Session() as s:
             if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'An extraction job is already active')
-        for key in ('reviewed_at','reviewed_by','evidence_notice'):
+        for key in ('reviewed_at','reviewed_by','evidence_notice','record_results','record_progress','output_reference','output_sha256','output_format','review_revision','retrieval','index_versions'):
             data.pop(key,None)
         data.update(result=None,evidence=[],original_evidence=[],edited_fields=[],sources=[],review_status='unreviewed',previous_version=r.version,allow_external=body.allow_external,model_selection=routing.public_selection(snapshot))
         r=routing.write_version(r,data)
@@ -476,27 +713,40 @@ def extraction_versions(id:str,owner=Depends(auth)):
 def export_extraction(id:str,format:str='json',owner=Depends(auth)):
     r=get_record(id,owner,'extraction');data=store.json(r.ref)
     if r.status!='ready':raise HTTPException(409,'Extraction is not complete')
+    from .parquet_results import load
+    try:data=load(data)
+    except (ValueError,OSError):raise HTTPException(503,'Persisted result could not be read; retry.')
+    if format=='parquet':
+        if not data.get('output_reference'):raise HTTPException(409,'This historical result predates Parquet. Save a review revision or re-extract to create Parquet.')
+        return Response(store.get(data['output_reference']),media_type='application/vnd.apache.parquet',headers={'Content-Disposition':f'attachment; filename="extraction-v{r.version}.parquet"'})
     from .result_exports import render
     try:payload,media=render(r,data,format)
     except ValueError as error:raise HTTPException(400,str(error))
     return Response(payload,media_type=media,headers={'Content-Disposition':f'attachment; filename="extraction-v{r.version}.{format}"'})
 @app.get('/api/jobs')
 def jobs(owner=Depends(auth)):
-    with Session() as s:return [job_repr(j) for j in s.scalars(select(Job).where(Job.owner==owner).order_by(Job.created_at.desc()))]
+    return [job_repr(j) for j in access.jobs(owner)]
 @app.post('/api/jobs/{id}/retry')
 def retry_job(id:str,owner=Depends(auth)):
     initial=None
     with Session() as s:initial=s.get(Job,id)
-    if not initial or initial.owner!=owner:raise HTTPException(404,'Not found')
+    with Session() as s:
+        if not access.job_allowed(initial,owner,s):raise HTTPException(404,'Not found')
     with document_lock('submit-'+initial.target_id),Session.begin() as s:
         j=s.get(Job,id)
-        if not j or j.owner!=owner:raise HTTPException(404,'Not found')
+        if not access.job_allowed(j,owner,s):raise HTTPException(404,'Not found')
         if j.status not in ('failed','cancelled'):raise HTTPException(409,'Only failed or cancelled jobs can be retried')
         target=s.get(Record,j.target_id)
-        if not target or target.owner!=owner:raise HTTPException(404,'Target deleted')
+        if not target or not access.allowed(target,owner,s):raise HTTPException(404,'Target deleted')
         if target.parent_id:routing.require_active(routing.owned(target.parent_id,owner,'knowledge_base'))
         if s.scalar(select(Job).where(Job.target_id==j.target_id,Job.id!=id,Job.status.in_(['queued','running']))):raise HTTPException(409,'Another job is already active for this target')
-        j.status='queued';j.progress=0;j.attempts=0;j.error='';j.lease_until=0;target.status='queued'
+        if j.kind=='extract':
+            data=store.json(target.ref)
+            docs=[s.get(Record,did) for did in data['document_ids']]
+            waiting=any(d and d.status in ('queued','processing') for d in docs)
+            if any(not d or d.status in ('failed','deleting') for d in docs):raise HTTPException(409,'Retry the failed source indexing jobs first')
+        else:waiting=False
+        j.status='blocked' if waiting else 'queued';j.progress=0;j.attempts=0;j.error='';j.lease_until=0;target.status='queued'
         target.error='';workflow.retry(id)
     from .queue_transport import get_transport
     get_transport(settings()['queue_provider']).notify(j.id)
@@ -505,7 +755,7 @@ def retry_job(id:str,owner=Depends(auth)):
 def cancel_job(id:str,owner=Depends(auth)):
     with Session.begin() as s:
         j=s.get(Job,id)
-        if not j or j.owner!=owner:raise HTTPException(404,'Not found')
+        if not access.job_allowed(j,owner,s):raise HTTPException(404,'Not found')
         if j.status not in ('queued','running'):raise HTTPException(409,'Job already finished')
         j.status='cancelled';j.lease_token='';j.error='Cancelled by user';r=s.get(Record,j.target_id)
         if r:r.status='cancelled'
@@ -562,7 +812,7 @@ def _save_settings(body,owner):
         try:get_transport('oci').test_connection()
         except Exception:raise HTTPException(400,'OCI Queue is not configured or reachable')
     if 'mock' in (cfg['model_provider'],cfg['embedding_provider']) and os.getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true')
-    for key,low,high in [('chunk_size',200,6000),('chunk_overlap',0,2000),('top_k',1,20),('timeout',5,180),('max_upload_mb',1,100)]:
+    for key,low,high in [('chunk_size',200,6000),('chunk_overlap',0,2000),('top_k',1,20),('timeout',5,1800),('max_upload_mb',1,100)]:
         if not isinstance(cfg[key],int) or not low<=cfg[key]<=high:raise HTTPException(400,'Invalid '+key)
     if cfg['chunk_overlap']>=cfg['chunk_size']:raise HTTPException(400,'Chunk overlap must be smaller than chunk size')
     if any(cfg[k]!=settings()[k] for k in ('storage_provider','oci_storage_namespace','oci_storage_bucket','oci_storage_prefix','oci_storage_region')):
@@ -613,9 +863,10 @@ def test_settings(owner=Depends(auth)):
     return {'ok':all(status[k] for k in ('storage','database','vector_store','queue')),'checks':status,'note':'Storage, database, vector and queue checks may contact configured services. OpenAI key presence is not live authentication. No model inference was requested; OCI storage check is read-only bucket access, not a full write/delete validation.'}
 @app.get('/api/capabilities')
 def capabilities(owner=Depends(auth)):
+    from . import ocr
     from .oci_adapters import capability_report
     from .queue_transport import get_transport
-    return {'reranker':reranker.status(),'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'openai_responses':True,'sentence_transformers':True,'ollama':True,'ocr':False,'streaming':True},'oci':capability_report(),'active':settings()}
+    return {'reranker':reranker.status(),'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'openai_responses':True,'sentence_transformers':True,'ollama':True,'ocr':ocr.config()['enabled'],'streaming':True},'ocr':{'enabled':ocr.config()['enabled'],'model':ocr.config()['model'],'provider':'ollama','availability':'Check the container OCR smoke test; enabled does not imply a loaded model.'},'oci':capability_report(),'active':settings()}
 
 CHAT_HEARTBEAT_SECONDS=10
 

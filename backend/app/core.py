@@ -3,7 +3,7 @@ import os, json, uuid, hashlib, secrets, time
 from pathlib import Path
 from contextlib import contextmanager
 from contextvars import ContextVar
-from sqlalchemy import create_engine, String, Integer, Float, Text, select
+from sqlalchemy import create_engine, String, Integer, Float, Text, select, ForeignKey, inspect, CheckConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from cryptography.fernet import Fernet
 from .database import database_url, engine_options, StoredString, timestamp_type
@@ -11,14 +11,21 @@ from .database import database_url, engine_options, StoredString, timestamp_type
 DATA = Path(os.getenv('AEGIS_STORAGE_ROOT', os.getenv('DATA_DIR', './data'))).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
 URL = database_url(DATA)
-engine = create_engine(URL, **engine_options(URL))
+engine = create_engine(URL, hide_parameters=True, **engine_options(URL))
 Session = sessionmaker(engine, expire_on_commit=False)
 class Base(DeclarativeBase): pass
-class Record(Base):
-    __tablename__='records'
+ORACLE_NAMES = URL.get_backend_name() == 'oracle'
+USER_TABLE = 'user_tbl' if ORACLE_NAMES else 'users'
+class Audit:
+    created_by:Mapped[str|None]=mapped_column(String(80),ForeignKey(USER_TABLE+'.id'),nullable=True)
+    updated_by:Mapped[str|None]=mapped_column(String(80),ForeignKey(USER_TABLE+'.id'),nullable=True)
+    created_via:Mapped[str]=mapped_column(String(24),default='api')
+    updated_via:Mapped[str]=mapped_column(String(24),default='api')
+class Record(Audit,Base):
+    __tablename__='aegis_items' if ORACLE_NAMES else 'records'
     id:Mapped[str]=mapped_column(String(80),primary_key=True)
     kind:Mapped[str]=mapped_column(String(32),index=True)
-    owner:Mapped[str]=mapped_column(String(80),index=True)
+    owner:Mapped[str]=mapped_column(String(80),ForeignKey(USER_TABLE+'.id'),index=True)
     name:Mapped[str]=mapped_column(StoredString(250),default='')
     status:Mapped[str]=mapped_column(String(32),default='ready')
     ref:Mapped[str]=mapped_column(StoredString(500),default='')
@@ -28,12 +35,14 @@ class Record(Base):
     size:Mapped[int]=mapped_column(Integer,default=0)
     version:Mapped[int]=mapped_column(Integer,default=1)
     error:Mapped[str]=mapped_column(StoredString(500),default='')
-class Job(Base):
-    __tablename__='jobs'
+class Job(Audit,Base):
+    __tablename__='job_tbl' if ORACLE_NAMES else 'jobs'
     id:Mapped[str]=mapped_column(String(80),primary_key=True)
-    owner:Mapped[str]=mapped_column(String(80),index=True)
+    owner:Mapped[str]=mapped_column(String(80),ForeignKey(USER_TABLE+'.id'),index=True)
     kind:Mapped[str]=mapped_column(String(32))
     target_id:Mapped[str]=mapped_column(String(80),index=True)
+    document_id:Mapped[str|None]=mapped_column(String(80),ForeignKey('document_tbl.document_id',ondelete='SET NULL'),nullable=True,index=True)
+    extract_id:Mapped[str|None]=mapped_column(String(80),ForeignKey('extract_tbl.extract_id',ondelete='SET NULL'),nullable=True,index=True)
     status:Mapped[str]=mapped_column(String(32),default='queued',index=True)
     progress:Mapped[int]=mapped_column(Integer,default=0)
     attempts:Mapped[int]=mapped_column(Integer,default=0)
@@ -42,17 +51,30 @@ class Job(Base):
     error:Mapped[str]=mapped_column(StoredString(500),default='')
     created_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
     updated_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
-class User(Base):
-    __tablename__='users'
+class User(Audit,Base):
+    __tablename__=USER_TABLE
+    __table_args__=(CheckConstraint("role IN ('user', 'administrator')",name='ck_user_role'),)
     id:Mapped[str]=mapped_column(String(80),primary_key=True)
     username:Mapped[str]=mapped_column(String(120),unique=True)
     password_hash:Mapped[str]=mapped_column(Text)
-class Login(Base):
-    __tablename__='sessions'
+    role:Mapped[str]=mapped_column(String(20),default='user',server_default='user')
+    created_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
+    updated_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
+class Login(Audit,Base):
+    __tablename__='sessions_tbl' if ORACLE_NAMES else 'sessions'
     id:Mapped[str]=mapped_column(String(100),primary_key=True)
-    owner:Mapped[str]=mapped_column(String(80))
+    owner:Mapped[str]=mapped_column(String(80),ForeignKey(USER_TABLE+'.id'))
     expires:Mapped[float]=mapped_column(timestamp_type())
     csrf:Mapped[str]=mapped_column(String(100))
+    created_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
+    updated_at:Mapped[float]=mapped_column(timestamp_type(),default=time.time)
+
+def is_administrator(user_id, session=None):
+    """Read the persisted role; IDs and client-supplied flags grant no access."""
+    if session is None:
+        with Session() as active:return is_administrator(user_id,active)
+    user=session.get(User,user_id)
+    return bool(user and user.role=='administrator')
 
 class FileStorage:
     def path(self,key):
@@ -94,12 +116,18 @@ def init():
         from sqlalchemy import text
         with engine.begin() as connection:
             connection.execute(text('SELECT pg_advisory_xact_lock(741936)'))
+            bootstrap_assignments=not inspect(connection).has_table('user_dataset_tbl')
             Base.metadata.create_all(connection)
+            from .relational import upgrade_legacy
+            upgrade_legacy(connection,bootstrap_assignments=bootstrap_assignments)
     else:
         # API and worker share this volume. Oracle DDL auto-commits; serialize
         # first-start schema creation rather than relying on transaction locks.
         with document_lock('database-schema'):
+            bootstrap_assignments=not inspect(engine).has_table('user_dataset_tbl')
             Base.metadata.create_all(engine)
+            from .relational import upgrade_legacy
+            with engine.begin() as connection:upgrade_legacy(connection,bootstrap_assignments=bootstrap_assignments)
 def secret_cipher():
     key=os.getenv('AEGIS_MASTER_KEY', os.getenv('MASTER_KEY'))
     if not key: raise ValueError('MASTER_KEY is required to save provider credentials (generate a Fernet key)')
@@ -177,3 +205,6 @@ def document_lock(document_id):
         lock(handle)
         try:yield
         finally:unlock(handle)
+
+# Register the relational tables and transaction hooks after storage exists.
+from . import relational

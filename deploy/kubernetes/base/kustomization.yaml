@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: aegis
+resources:
+  - resources.json
+configMapGenerator:
+  - name: oracle-scripts
+    files:
+      - 01-aegis-users.sh
+  - name: oracle-health
+    files:
+      - healthcheck.sh

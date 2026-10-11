@@ -1,9 +1,11 @@
 "use client";
-import {AlertCircle, CheckCircle2, Loader2} from "lucide-react";
+import {Loader2} from "lucide-react";
+import {useState} from "react";
 import { BatchProgress } from "./batch-progress";
+import {WorkflowStepper} from "./workflow-stepper";
 import { currentUploadStep, readableUploadError, type UploadProgressItem } from "./batch-workflow";
 type Entity=Record<string,any>;
-const labels:Record<string,string>={upload:'Upload',extract:'Read document',index:'Build index',prepare:'Prepare sources',generate:'Extract fields',validate:'Validate and save',ready:'Ready'};
+const labels:Record<string,string>={upload:'Upload',extract:'Read document / OCR',index:'Build index',prepare:'Prepare sources',generate:'Extract fields',retrieving:'Retrieve evidence',reranking:'Rerank evidence',validate:'Validate fields',writing_output:'Write Parquet',ready:'Ready'};
 export function extractionProgressJob(extraction:Entity|null,jobs:Entity[]):Entity|undefined {
  if(!extraction)return undefined;
  const recorded=extraction.job;
@@ -23,36 +25,43 @@ export function JobProgress({job}:{job:Entity}) {
   return <div className="job-progress" aria-label="Processing workflow"><section className="batch-progress is-compact" aria-label="Extraction workflow">
    <div className="batch-progress-heading"><strong>Extraction workflow</strong><span>{job.status==='completed'?'Ready':failed?'Needs attention':job.status==='running'?'In progress':'Queued'}</span></div>
    <div className="batch-progress-track" role="progressbar" aria-label="Extraction progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={stages.length?`${completed} of ${stages.length} stages completed`:'Stage details unavailable'}><span style={{width:`${progress}%`}}/></div>
-   {stages.length>0&&<ol className="workflow-stages batch-stages">{stages.map(([name,stage])=><li key={name} className={`stage-${stage.status==='completed'?'completed':stage.status==='running'?'running':stage.status==='failed'?'failed':'waiting'}`}><span className="stage-symbol">{stage.status==='completed'?<CheckCircle2 size={21}/>:stage.status==='running'?<Loader2 size={21} className="animate-spin"/>:stage.status==='failed'?<AlertCircle size={21}/>:<span className="stage-dot"/>}</span><strong>{labels[name]||name}</strong><small>{stage.status==='blocked'?'Waiting':stage.status==='completed'?'Done':stage.status==='running'?'Active':stage.status}</small></li>)}</ol>}
+   <WorkflowStepper label="Extraction workflow steps" steps={stages.map(([name,stage])=>({id:name,label:labels[name]||name,status:stage.status,statusLabel:stage.status==='blocked'?'Waiting':undefined}))}/>
    <p className="batch-progress-summary" role="status">{summary}</p>
    {job.error&&<p role="alert" className="review-error">{job.error}</p>}
   </section></div>;
  }
+ if(job.kind==='index'&&stages.length)return <div className="job-progress" aria-label="Processing workflow"><BatchProgress compact items={[{id:job.target_id||job.id,name:'Document',status:'submitted',document:{status:job.status==='completed'?'ready':'processing'},job,ready:job.status==='completed',failed:['failed','cancelled'].includes(job.status),processing:['queued','running'].includes(job.status)}]}/>{job.error&&<p role="alert" className="review-error">{job.error}</p>}</div>;
  return <div className="job-progress" aria-label="Processing workflow">
   <div className="row between"><strong>{job.kind==='extract'?'Extraction':'Document processing'}</strong><span>{job.status==='running'?'In progress':job.status}</span></div>
   <progress max={100} value={job.progress||0} aria-label="Processing progress" />
-  {stages.length>0&&<ol className="job-stage-list">{stages.map(([name,stage])=><li key={name} data-status={stage.status}><span>{stage.status==='completed'?'✓':stage.status==='running'?'●':'○'}</span>{labels[name]||name}<small>{stage.status==='blocked'?'Waiting':stage.status}</small></li>)}</ol>}
+  {job.workflow?.stages?.extract?.detail&&<p role="status" className="small muted">{job.workflow.stages.extract.detail}</p>}
+  <WorkflowStepper label="Document processing steps" steps={stages.map(([name,stage])=>({id:name,label:labels[name]||name,status:stage.status,statusLabel:stage.status==='blocked'?'Waiting':undefined}))}/>
   {job.status==='running'&&<p className="small muted">{job.workflow?.current==='generate'?'The model is extracting your fields. This may take a few minutes for long documents.':'Processing continues in the background.'} Progress reports completed stages, not an estimated time.</p>}
   {job.error&&<p role="alert" className="review-error">{job.error}</p>}
  </div>;
 }
-export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false,visibleJobId=null,visibleJobIds=[],workspaceLoading=false}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean;visibleJobId?:string|null;visibleJobIds?:string[];workspaceLoading?:boolean}) {
+export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false,visibleJobId=null,visibleJobIds=[],workspaceLoading=false,compact=false}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean;visibleJobId?:string|null;visibleJobIds?:string[];workspaceLoading?:boolean;compact?:boolean}) {
+ const [expanded,setExpanded]=useState(false);
  const active=jobs.filter(j=>['queued','running'].includes(j.status)&&j.id!==visibleJobId&&!visibleJobIds.includes(j.id));
- const tracked=new Set(uploadItems.flatMap(item=>item.document?[item.id,item.document.id]:[]));
- const processingBatch=uploadItems.some(item=>item.status==='uploading'||item.processing);
+ const backgroundUploads=uploadItems.filter(item=>!item.job?.id||(item.job.id!==visibleJobId&&!visibleJobIds.includes(item.job.id)));
+ const tracked=new Set(backgroundUploads.flatMap(item=>item.document?[item.id,item.document.id]:[]));
+ const processingBatch=backgroundUploads.some(item=>item.status==='uploading'||item.processing);
  const untracked=active.filter(job=>job.kind==='index'&&!tracked.has(job.document_id||job.target_id)).map(job=>{
   const document=documents.find(d=>d.id===(job.document_id||job.target_id));
   return {id:job.document_id||job.target_id,name:document?.name||'Document',status:'submitted',document:document||{status:'processing'},job,processing:true};
  });
- const batchItems:UploadProgressItem[]=[...(processingBatch?uploadItems:[]),...untracked];
+ const batchItems:UploadProgressItem[]=[...(processingBatch?backgroundUploads:[]),...untracked];
  const otherJobs=active.filter(job=>job.kind!=='index');
  const requestLabels=Array.from(new Set(requests.map(request=>request.label)));
  const loadingTitle=requestLabels.length===1?requestLabels[0]:requestLabels.every(label=>label.startsWith('Loading '))?'Loading workspace…':'Updating workspace…';
  if(!workspaceLoading&&!requests.length&&!otherJobs.length&&(!batchItems.length||uploadWorkflowVisible))return null;
  return <aside className={`operation-popup${workspaceLoading||requests.length?' is-loading':''}`} aria-label="Workspace progress" role="status" aria-live="polite">
   <div className="operation-popup-heading"><span className="operation-popup-icon"><Loader2 size={20} className="animate-spin" aria-hidden="true"/></span><div><strong>{workspaceLoading?'Loading your workspace…':requests.length?loadingTitle:'Processing in background'}</strong>{(workspaceLoading||requests.length>0)&&<p className="operation-popup-description">{workspaceLoading?'Getting your datasets, documents, and models ready.':'This will close automatically when complete.'}</p>}</div></div>
+  {compact&&<button className="text-button" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}>{expanded?'Hide background progress':'Show background progress'}</button>}
+  {(!compact||expanded)&&<>
   {!workspaceLoading&&requestLabels.length>1&&<ul className="operation-request-list">{requestLabels.map(label=><li key={label}>{label}</li>)}</ul>}
   {!uploadWorkflowVisible&&batchItems.length>0&&<><BatchProgress items={batchItems} compact/><ul className="batch-popup-documents" aria-label="Background document statuses">{batchItems.map(item=>{const error=item.error||(item.failed&&(item.document?.error||item.job?.error));return <li key={item.id}><strong>{item.name}</strong><span>{currentUploadStep(item)}</span>{error&&<p className="batch-popup-error">{readableUploadError(error)}</p>}</li>;})}</ul></>}
   {otherJobs.map(job=><JobProgress key={job.id} job={job}/>)}
+  </>}
  </aside>;
 }

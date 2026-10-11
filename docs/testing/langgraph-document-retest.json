@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "name": "login and mapped dataset",
+      "seconds": 2.97
+    },
+    {
+      "name": "agent request: Search the original uploaded resumes: which candidate has Kubernetes experience? Cite the document passage.",
+      "seconds": 98.83
+    }
+  ],
+  "errors": [],
+  "document_answer": "Meera Iyer has Kubernetes experience. The relevant passage is from page 2 of the document: \"Platform engineer maintaining Kubernetes deployments and automated cloud infrastructure.\" (Document: merged-01-arjun-rao-backend-3-files-208daf2c.pdf, Page 2) [1]",
+  "passed": true
+}

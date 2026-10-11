@@ -88,8 +88,17 @@ def recover(database, username, password, confirmation, *, grant_token=None):
         finally:
             destination.close()
             source.close()
-        connection.execute('UPDATE users SET password_hash=? WHERE id=?',
-                           (hashed, account[0]))
+        # Older native workspaces have no audit columns; preserve compatibility
+        # while updating audit metadata when the upgraded schema provides it.
+        import time
+        columns={row[1] for row in connection.execute('PRAGMA table_info(users)')}
+        values={'password_hash':hashed}
+        values.update({key:value for key,value in {
+            'updated_at':time.time(),'updated_by':account[0],'updated_via':'recovery'
+        }.items() if key in columns})
+        assignments=', '.join(key+'=?' for key in values)
+        connection.execute('UPDATE users SET '+assignments+' WHERE id=?',
+                           (*values.values(), account[0]))
         revoked = connection.execute('DELETE FROM sessions WHERE owner=?',
                                      (account[0],)).rowcount
         if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='recovery_grants'").fetchone():

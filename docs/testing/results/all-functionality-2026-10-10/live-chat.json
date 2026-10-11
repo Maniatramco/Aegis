@@ -1,0 +1,24 @@
+{
+  "phase": "chat",
+  "steps": [
+    {
+      "name": "Real login and session",
+      "passed": true,
+      "seconds": 5.3
+    },
+    {
+      "name": "Document Chat retrieval, citation source, feedback, export and history",
+      "passed": true,
+      "seconds": 75.82
+    },
+    {
+      "name": "Temporary Document Chat parses one file, answers, clears without indexing",
+      "passed": true,
+      "seconds": 3.94
+    }
+  ],
+  "errors": [],
+  "started_at": "2026-10-10T16:32:58.913Z",
+  "passed": true,
+  "completed_at": "2026-10-10T16:34:26.177Z"
+}

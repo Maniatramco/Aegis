@@ -1,0 +1,29 @@
+{
+  "phase": "setup",
+  "steps": [
+    {
+      "name": "Real login and session",
+      "passed": true,
+      "seconds": 5.69
+    },
+    {
+      "name": "Register/test local Chat, Extraction and Embedding models",
+      "passed": true,
+      "seconds": 171.11
+    },
+    {
+      "name": "Create dataset, preserve mapping draft through refresh, save mappings",
+      "passed": true,
+      "seconds": 1.83
+    },
+    {
+      "name": "Home dataset search and navigation; dataset upload TXT, DOCX and PDF",
+      "passed": true,
+      "seconds": 8.29
+    }
+  ],
+  "errors": [],
+  "started_at": "2026-10-10T19:41:15.697Z",
+  "passed": true,
+  "completed_at": "2026-10-10T19:44:38.247Z"
+}

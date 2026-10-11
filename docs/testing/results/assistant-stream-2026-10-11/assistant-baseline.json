@@ -1,0 +1,136 @@
+{
+  "started_at": "2026-10-11T08:16:09.467Z",
+  "checks": [
+    {
+      "name": "Conversation and composer fit desktop, short viewport and mobile",
+      "passed": true,
+      "seconds": 1.175
+    }
+  ],
+  "layouts": [
+    {
+      "viewport": {
+        "width": 938,
+        "height": 668
+      },
+      "thread": {
+        "x": 26,
+        "y": 197,
+        "width": 886,
+        "height": 305,
+        "bottom": 502
+      },
+      "composer": {
+        "x": 26,
+        "y": 502,
+        "width": 886,
+        "height": 138,
+        "bottom": 640
+      },
+      "box": {
+        "x": 89,
+        "y": 512,
+        "width": 760,
+        "height": 97,
+        "bottom": 609
+      },
+      "body_scroll": 0,
+      "body_width": 0,
+      "font": "16px"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "thread": {
+        "x": 271,
+        "y": 204,
+        "width": 972,
+        "height": 537,
+        "bottom": 741
+      },
+      "composer": {
+        "x": 271,
+        "y": 741,
+        "width": 972,
+        "height": 138,
+        "bottom": 879
+      },
+      "box": {
+        "x": 377,
+        "y": 751,
+        "width": 760,
+        "height": 97,
+        "bottom": 848
+      },
+      "body_scroll": 32,
+      "body_width": 0,
+      "font": "16px"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "thread": {
+        "x": 17,
+        "y": 192,
+        "width": 356,
+        "height": 452,
+        "bottom": 644
+      },
+      "composer": {
+        "x": 17,
+        "y": 644,
+        "width": 356,
+        "height": 153,
+        "bottom": 797
+      },
+      "box": {
+        "x": 27,
+        "y": 652,
+        "width": 336,
+        "height": 97,
+        "bottom": 749
+      },
+      "body_scroll": 0,
+      "body_width": 0,
+      "font": "16px"
+    },
+    {
+      "viewport": {
+        "width": 938,
+        "height": 500
+      },
+      "thread": {
+        "x": 26,
+        "y": 197,
+        "width": 886,
+        "height": 137,
+        "bottom": 334
+      },
+      "composer": {
+        "x": 26,
+        "y": 334,
+        "width": 886,
+        "height": 138,
+        "bottom": 472
+      },
+      "box": {
+        "x": 89,
+        "y": 344,
+        "width": 760,
+        "height": 97,
+        "bottom": 441
+      },
+      "body_scroll": 0,
+      "body_width": 0,
+      "font": "16px"
+    }
+  ],
+  "page_errors": [],
+  "streams": [],
+  "passed": true,
+  "finished_at": "2026-10-11T08:16:16.134Z"
+}

@@ -1,0 +1,12 @@
+{
+  "proposal_seconds": 71.72,
+  "worker_jobs_submitted": 0,
+  "scope": "Real LangGraph proposal plus small known-value extraction; not full CPU browser benchmark",
+  "total_seconds": 77.86,
+  "model": "qwen3:4b",
+  "device_requests": null,
+  "confirmed": false,
+  "size_vram_bytes": 0,
+  "hardware": "CPU",
+  "passed": true
+}

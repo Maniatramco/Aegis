@@ -1,0 +1,4 @@
+ Container aegis-oracle-oracle-test-run-9bd5148f954d Creating
+ Container aegis-oracle-oracle-test-run-9bd5148f954d Created
+....................                                                     [100%]
+20 passed in 9.64s

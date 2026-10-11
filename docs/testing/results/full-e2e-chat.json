@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "conversation_id": "7ea7e6bc-7ca7-4f74-9d10-6e3ec0bde2af",
+  "seconds": 85.02,
+  "answer": "The candidate is Meera Iyer, a DevOps and Platform Engineer based in Chennai, India with Kubernetes experience including managing deployments for 30 containerized services and creating Helm charts and Terraform modules [1]. Her resume mentions certifications as Certified Kubernetes Administrator (2023) and HashiCorp Certified: Terraform Associate (2024) [1].",
+  "citations": 1,
+  "feedback_and_export": true,
+  "authentication": "test-process owner scope; live server auth unchanged",
+  "general_chat": true,
+  "general_seconds": 31.31,
+  "general_answer": "Kubernetes is an open-source container orchestration platform that automates deployment, scaling, and management of containerized applications."
+}

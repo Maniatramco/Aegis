@@ -32,7 +32,7 @@ class RegistrationInput(BaseModel):
     category: Literal['embedding', 'chat', 'extraction']
     provider_model: str = Field(min_length=1, max_length=200)
     connection: ConnectionInput
-    timeout: int = Field(default=60, ge=5, le=600)
+    timeout: int = Field(default=60, ge=5, le=1800)
     context_limit: int | None = Field(default=None, ge=1, le=2097152, strict=True)
     max_output_tokens: int | None = Field(default=None, ge=1, le=131072, strict=True)
     extra_parameters: dict | None = None

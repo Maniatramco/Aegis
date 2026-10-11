@@ -7,8 +7,10 @@ import json
 import sys
 from sqlalchemy import select
 from . import core
+from .relational import audit_as
 
 
+@audit_as('operator')
 def create_account(username, password):
     if not isinstance(username, str) or not 1 <= len(username.strip()) <= 120 or username != username.strip():
         raise ValueError('Use a username of 1–120 characters without surrounding spaces.')

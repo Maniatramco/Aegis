@@ -17,7 +17,8 @@ def fingerprint(cfg=None):
     c=cfg or settings()
     if c['search_provider']=='oci':return hashlib.sha256(('oci:'+c.get('oci_region','')+':'+c.get('oci_project_id','')+':'+c.get('oci_vector_store_id','')+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')).encode()).hexdigest()[:16]
     name=c['embedding_model'] if c['embedding_provider'] in ('openai','ollama','registered') else 'sentence-transformers/all-MiniLM-L6-v2' if c['embedding_provider']=='sentence_transformers' else 'mock-sha256-v1'
-    connection=':'+json.dumps(c['embedding_connection'],sort_keys=True) if c.get('embedding_connection') else ''
+    connection=(':nomic-prefix-v1' if c['embedding_model'].split(':')[0]=='nomic-embed-text' and c['embedding_provider'] in ('ollama','registered') else '')
+    connection+=(':'+json.dumps(c['embedding_connection'],sort_keys=True) if c.get('embedding_connection') else '')
     if c.get('embedding_context_limit') or c.get('embedding_extra_parameters'):
         connection+=':'+json.dumps({key:c.get(key) for key in ('embedding_context_limit','embedding_extra_parameters')},sort_keys=True)
     return hashlib.sha256((c['embedding_provider']+':'+name+connection+(':'+c['_index_namespace'] if c.get('_index_namespace') else '')+(':'+c['_embedding_digest'] if c.get('_embedding_digest') else '')).encode()).hexdigest()[:16]
@@ -57,7 +58,10 @@ def embed(texts,query=False):
     if p=='ollama':
         expected=cfg.get('_embedding_digest')
         if expected and ollama_call('model_digest',cfg['embedding_model'])!=expected:raise ProviderError('Installed embedding weights changed. Reindex with the current model before retrieval; indexes are not mixed.')
-        vectors=ollama_call('embed',cfg['embedding_model'],texts,cfg['timeout'])
+        nomic=cfg['embedding_model'].split(':')[0]=='nomic-embed-text'
+        inputs=[('search_query: ' if query else 'search_document: ')+text for text in texts] if nomic else texts
+        vectors=ollama_call('embed',cfg['embedding_model'],inputs,cfg['timeout'])
+        if nomic and any(len(vector)!=768 for vector in vectors):raise ProviderError('Nomic Embed Text v1.5 requires 768 dimensional vectors')
         if expected and ollama_call('model_digest',cfg['embedding_model'])!=expected:raise ProviderError('Embedding model changed during inference. Retry with a current pinned index.')
         return vectors
     if p=='mock':
@@ -88,7 +92,7 @@ def put_vectors(document_id,owner,kb_id,chunks,vectors):
         try:q.create_collection(name,vectors_config=VectorParams(size=len(vectors[0]),distance=Distance.COSINE))
         except Exception:
             if not q.collection_exists(name):raise
-    q.upsert(name,points=[PointStruct(id=c['id'],vector=v,payload={'document_id':document_id,'owner':owner,'kb_id':kb_id,'chunk_id':c['id'],'fingerprint':fingerprint()}) for c,v in zip(chunks,vectors)],wait=True)
+    q.upsert(name,points=[PointStruct(id=c['id'],vector=v,payload={**c,'document_id':document_id,'owner':owner,'kb_id':kb_id,'dataset_id':kb_id,'chunk_id':c['id'],'index_version':fingerprint(),'fingerprint':fingerprint()}) for c,v in zip(chunks,vectors)],wait=True)
 def delete_vectors(document_id):
     try:previous=store.json('documents/'+document_id+'/index.json').get('search_provider')
     except FileNotFoundError:previous=None
@@ -107,11 +111,22 @@ def delete_vectors(document_id):
     for c in q.get_collections().collections:
         if c.name.startswith('aegis_'):q.delete(c.name,FilterSelector(filter=Filter(must=[FieldCondition(key='document_id',match=MatchValue(value=document_id))])),wait=True)
 def search(query,owner,documents,top_k,diagnostics=None):
-    from . import reranker
+    from . import reranker, core, dataset_access as access
+    # Recheck durable resources before reading vectors or giving text to reranking.
+    # Temporary chat documents are already private, transient objects.
+    if any(isinstance(document,core.Record) for document in documents):
+        with core.Session() as session:
+            datasets=access.dataset_ids(owner,session)
+            documents=[document for document in documents if not isinstance(document,core.Record) or access.allowed(document,owner,session,datasets)]
     try:
         active=reranker.enabled()
         limit=reranker.candidate_limit(top_k) if active else top_k
-        results=_retrieve(query,owner,documents,limit)
+        # Authorization already constrained documents to one assigned dataset.
+        # Indexed owner is the storage/workspace owner, not the chatting user.
+        results=[]
+        for storage_owner in {document.owner for document in documents}:
+            results.extend(_retrieve(query,storage_owner,[document for document in documents if document.owner==storage_owner],limit))
+        results=sorted(results,key=lambda item:item.get('score',0),reverse=True)[:limit]
         count=len(results);started=time.monotonic()
         results=reranker.rank(query,results,top_k) if active else results[:top_k]
         if diagnostics is not None:
@@ -125,7 +140,7 @@ def search(query,owner,documents,top_k,diagnostics=None):
 def _retrieve(query,owner,documents,top_k):
     if not documents:return []
     if settings()['search_provider']=='oci':return oci_vector().search(query,owner,documents,top_k,store)
-    v=(embed([query],query=True) if settings()['embedding_provider']=='registered' else embed([query]))[0];allowed={d.id:d for d in documents};found=[]
+    v=embed([query],query=True)[0];allowed={d.id:d for d in documents};found=[]
     if settings()['search_provider']=='local':
         for d in documents:
             try:data=store.json('vectors/'+d.id+'.json')
@@ -138,13 +153,13 @@ def _retrieve(query,owner,documents,top_k):
         from qdrant_client.models import Filter,FieldCondition,MatchValue,MatchAny
         q=client()
         if not q.collection_exists(collection()):return []
-        hits=q.query_points(collection(),query=v,query_filter=Filter(must=[FieldCondition(key='owner',match=MatchValue(value=owner)),FieldCondition(key='document_id',match=MatchAny(any=list(allowed)))]),limit=top_k).points
+        hits=q.query_points(collection(),query=v,query_filter=Filter(must=[FieldCondition(key='owner',match=MatchValue(value=owner)),FieldCondition(key='dataset_id',match=MatchAny(any=list({d.parent_id for d in documents}))),FieldCondition(key='document_id',match=MatchAny(any=list(allowed)))]),limit=top_k).points
         found=[(p.score,p.payload['document_id'],p.payload['chunk_id']) for p in hits]
     results=[]
     for score,did,cid in found:
         chunks=store.json('documents/'+did+'/chunks.json')['chunks']
         chunk=next((c for c in chunks if c['id']==cid),None)
-        if chunk:results.append({'document_id':did,'document_name':allowed[did].name,'chunk_id':cid,'text':chunk['text'],'excerpt':chunk['text'],'page':chunk.get('page'),'score':score})
+        if chunk:results.append({'document_id':did,'document_name':allowed[did].name,'chunk_id':cid,'text':chunk['text'],'excerpt':chunk['text'],'page':chunk.get('page'),'score':score,**{key:chunk[key] for key in ('text_origin','ocr','source_key','source_filename','source_page','section','coordinates') if key in chunk}})
     return results
 
 def response_text(data):
@@ -310,7 +325,10 @@ def evidence_limit(schema):
 
 
 def evidence_schema(schema,compact=False):
-    return {'type':'object','properties':{'data':schema,'evidence':{'type':'array',**({'maxItems':evidence_limit(schema)} if compact else {}),'items':{'type':'object','properties':{'field':{'type':'string'},'chunk_id':{'type':'string'},'quote':{'type':'string',**({'maxLength':240} if compact else {})}},'required':['field','chunk_id','quote'],'additionalProperties':False}}},'required':['data','evidence'],'additionalProperties':False}
+    # Evidence is optional per field. Large nested templates previously allowed
+    # 64 repeated quotes to consume the local output budget before JSON closed.
+    # Bound supporting quotes without limiting any extracted data/array items.
+    return {'type':'object','properties':{'data':schema,'evidence':{'type':'array',**({'maxItems':min(8,evidence_limit(schema))} if compact else {}),'items':{'type':'object','properties':{'field':{'type':'string'},'chunk_id':{'type':'string'},'quote':{'type':'string',**({'maxLength':160} if compact else {})}},'required':['field','chunk_id','quote'],'additionalProperties':False}}},'required':['data','evidence'],'additionalProperties':False}
 
 
 def extract_with_evidence(text,schema,sources):
@@ -388,5 +406,5 @@ def extract_with_evidence(text,schema,sources):
         key=(item.get('field'),item['chunk_id'],item['quote'])
         if key in seen_evidence:continue
         seen_evidence.add(key)
-        evidence.append(item|{'document_id':chunk['document_id'],'document_name':chunk['document_name'],'page':chunk['page']})
+        evidence.append(item|{'document_id':chunk['document_id'],'document_name':chunk['document_name'],'page':chunk['page'],**{k:chunk[k] for k in ('source_key','source_filename','source_page') if k in chunk}})
     return output['data'],evidence
