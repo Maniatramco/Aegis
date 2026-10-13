@@ -1,9 +1,0 @@
-{
-  "passed": true,
-  "authentication": "test-process owner scope; live server auth unchanged",
-  "scope": "all ready documents; no explicit document selection",
-  "conversation_id": "b625e860-fa60-4cda-a30c-97eb23299f51",
-  "seconds": 92.09,
-  "answer": "Meera Iyer has Kubernetes-related experience. Evidence: She lists \"Kubernetes\" under Technical Skills [1] and states she \"Managed Kubernetes deployments for 30 containerized services\" at Cloudbridge Fictional Technologies [1]. She also holds a \"Certified Kubernetes Administrator (2023)\" certification [1].",
-  "citations": 1
-}

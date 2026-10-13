@@ -139,7 +139,7 @@ Replace indefinite “Thinking” with real stages such as “Checking saved res
 
 Keep the existing business model, including `DATASET_TBL`, `DOCUMENT_TBL`, `PROMPT_TBL`, `EXTRACT_TBL`, `REVIEW_TBL`, `JOB_TBL`, and model/dataset configuration. `SESSIONS_TBL` remains authentication sessions, not conversation memory.
 
-Evaluate the official Oracle checkpointer in an isolated test schema first. Inspect its DDL, migration behavior, required privileges, table naming, and compatibility with the requested audit conventions before applying anything to `AGS_OWNER`. Do not predict an exact new table count before inspecting the pinned package. Place reviewed migration artifacts and the revised relationship diagram under `DB/`.
+Evaluate the official Oracle checkpointer in an isolated test schema first. Inspect its DDL, migration behavior, required privileges, table naming, and compatibility with the requested audit conventions before applying anything to `AGS_OWNER`. Do not predict an exact new table count before inspecting the pinned package. Place reviewed migration artifacts and the revised relationship diagram under `database/`.
 
 Application conversation/run/approval/event metadata needs ownership and dataset relationships plus `created_at/by/via` and `updated_at/by/via`. Existing `AEGIS_ITEMS` can support an initial compatibility phase; explicit business tables can follow a reviewed migration. Framework checkpoints and business audit records have different purposes. Preserve versioned result artifacts and Qdrant vectors rather than moving them merely because a new persistence package exists.
 

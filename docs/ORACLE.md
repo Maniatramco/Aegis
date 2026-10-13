@@ -6,11 +6,11 @@ Qdrant, and Ollama. It uses the official Full image pinned to
 from the existing PostgreSQL Compose file and the native SQLite workspace.
 
 The application owner defaults to `AGS_OWNER` with twelve custom tables. Existing
-AEGIS data requires [the one-time migration](../DB/migrations/01_aegis_to_ags_owner.md).
+AEGIS data requires [the one-time migration](../database/migrations/01_aegis_to_ags_owner.md).
 For tables, relationships, audit fields and model category mappings, see
-[the data model](../DB/docs/DATA-MODEL.md). To query the local
+[the data model](../database/docs/DATA-MODEL.md). To query the local
 database from VS Code, see [the connection guide](ORACLE-VSCODE.md) and
-[example SQL](oracle-queries.sql).
+[example SQL](../database/queries/oracle-queries.sql).
 
 ## Current verification status
 

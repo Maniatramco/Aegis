@@ -24,7 +24,7 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(core, 'Session', session)
     monkeypatch.setattr(main, 'Session', session)
     monkeypatch.setattr(worker, 'document_lock', lambda target: nullcontext())
-    monkeypatch.setattr(worker, 'settings', lambda: {'queue_provider': 'oci'})
+    monkeypatch.setattr(worker, 'settings', lambda: {'queue_provider': 'oci', 'search_provider': 'local'})
     monkeypatch.setattr(main, 'settings', lambda: {'queue_provider': 'oci'})
     monkeypatch.setattr(worker, '_last_reconcile', time.monotonic())
     monkeypatch.setattr(main, 'store', Mock())

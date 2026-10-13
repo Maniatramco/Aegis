@@ -4,7 +4,12 @@ const fs=require('node:fs');const path=require('node:path');const Module=require
 function compile(name,overrides={}){
  const filename=path.resolve(__dirname,'../app',name);const compiled=new Module(filename,module);compiled.filename=filename;compiled.paths=module.paths;
  const original=compiled.require.bind(compiled);
- compiled.require=id=>Object.hasOwn(overrides,id)?overrides[id]:original(id);
+ compiled.require=id=>{
+  if(Object.hasOwn(overrides,id))return overrides[id];
+  if(id.endsWith('.css'))return {};
+  if(id.startsWith('.')){const base=path.resolve(path.dirname(filename),id);const source=[base+'.tsx',base+'.ts'].find(file=>fs.existsSync(file));if(source)return compile(path.relative(path.resolve(__dirname,'../app'),source),overrides);}
+  return original(id);
+ };
  compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
  return compiled.exports;
 }
@@ -36,9 +41,9 @@ test('text drags are distinct from file drags',()=>{
 function assistant(apiHandler,streamHandler){
  const storage=new Map();global.sessionStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
  let index=0;const hooks=[],calls=[],savedPrompts=[];const effects=[];
- const react={useState(initial){const slot=index++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];},useRef(initial){const slot=index++;if(!(slot in hooks))hooks[slot]={current:initial};return hooks[slot];},useCallback:fn=>fn,useEffect:fn=>effects.push(fn)};
+ const react={useState(initial){const slot=index++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];},useRef(initial){const slot=index++;if(!(slot in hooks))hooks[slot]={current:initial};return hooks[slot];},useCallback:fn=>fn,useLayoutEffect:()=>{},useEffect:fn=>effects.push(fn)};
  const empty=new Proxy({},{get:(_target,key)=>key==='speechCapabilities'?()=>({input:false}):()=>null});
- const {AgentV2}=compile('agent-v2.tsx',{'react':react,'lucide-react':empty,'./agent-attachments':helpers,'./prompt-upload':compile('prompt-upload.ts'),'./prompt-upload-preview':empty,'./agent-prompt-progress':promptProgress,'./workflow-stepper':workflowStepper,'./agent-logo':empty,'./agent-onboarding':empty,'./agent-answer-workflow':empty,'./agent-prompt-selection':compile('agent-prompt-selection.ts'),'./agent-document-selection':compile('agent-document-selection.ts'),'./agent-v2.css':{},'./agent-document-filter':empty,'./chat-stream':streamHandler?compile('chat-stream.ts'):empty,'./agent-v2-chat':empty,'./batch-progress':empty,'./agent-v2-output':empty,'./batch-workflow':empty,'./agent-voice':empty});
+ const {AgentV2}=compile('agent-v2.tsx',{'react':react,'lucide-react':empty,'./agent-commands':compile('agent-commands.ts'),'./agent-consent':{useAgentConsent:()=>({request:async()=>({required:false,destinations:[]}),popup:null})},'./agent-attachments':helpers,'./prompt-upload':compile('prompt-upload.ts'),'./prompt-upload-preview':empty,'./agent-prompt-progress':promptProgress,'./workflow-stepper':workflowStepper,'./agent-logo':empty,'./agent-onboarding':empty,'./agent-answer-workflow':empty,'./agent-prompt-selection':compile('agent-prompt-selection.ts'),'./agent-document-selection':compile('agent-document-selection.ts'),'./agent-v2.css':{},'./agent-document-filter':empty,'./chat-stream':streamHandler?compile('chat-stream.ts'):empty,'./agent-v2-chat':empty,'./batch-progress':empty,'./agent-v2-output':empty,'./batch-workflow':empty,'./agent-voice':empty});
  const props={api:(...args)=>{calls.push(args);return apiHandler?apiHandler(...args):new Promise(()=>{});},stream:streamHandler||(()=>assert.fail('Dropping files must not start an answer')),username:'attachment-test',onJobs(){},onVisibleJobs(){},onReview(){},onPromptSaved:prompt=>savedPrompts.push(prompt),maxUploadMb:2};
  let root;function render(){index=0;effects.length=0;root=AgentV2(props);return root;}
  function elements(node){if(!node||typeof node!=='object')return [];if(Array.isArray(node))return node.flatMap(elements);return [node,...elements(node.props?.children)];}
@@ -63,10 +68,10 @@ test('folders are rejected and dragging text retains normal browser handling',()
  const view=assistant();const text=drag([],['text/plain']);view.root.props.onDrop(text);view.render();assert.equal(text.prevented,false);
  view.root.props.onDrop(drag([file('folder.txt')],['Files'],[{kind:'file',webkitGetAsEntry:()=>({isDirectory:true})}]));view.render();assert.deepEqual(view.names(),[]);assert.ok(view.find('role','alert'));
 });
-test('files-only Send proposes an upload; files are never sent before confirmation',()=>{
+test('files-only Send proposes an upload; files are never sent before confirmation',async()=>{
  const view=assistant();assert.equal(view.find('aria-label','Send agent request').props.disabled,true);
  view.root.props.onDrop(drag([file('invoice.pdf')]));view.render();assert.equal(view.find('aria-label','Send agent request').props.disabled,false);
- view.find('aria-label','Agent Model').props.onChange({target:{value:'chat-model'}});view.render();view.find('aria-label','Send agent request').props.onClick();view.render();
+ view.find('aria-label','Agent Model').props.onChange({target:{value:'chat-model'}});view.render();view.find('aria-label','Send agent request').props.onClick();await flush();view.render();
  assert.equal(view.calls.length,1);assert.equal(view.calls[0][0],'/agent-v2/plans');assert.equal(view.calls[0][2].text,'Upload the attached documents.');assert.deepEqual(view.calls[0][2].attached_filenames,['invoice.pdf']);assert.equal(view.calls[0][2] instanceof FormData,false);
  const event=drag([file('later.txt')]);view.root.props.onDragOver(event);assert.equal(event.dataTransfer.dropEffect,'none');view.root.props.onDrop(event);view.render();assert.deepEqual(view.names(),[]);assert.ok(view.find('role','alert'));
  assert.deepEqual(sentRequests(view).at(-1).props.attachments.map(file=>file.name),['invoice.pdf']);
@@ -134,7 +139,7 @@ test('clear chat detaches saved context and the next request starts a fresh conv
 test('submitted files leave the composer immediately and remain with their question; confirmation uploads their original bytes',async()=>{
  let resolvePlan;const attached=new File(['Original invoice content'],'invoice.txt',{type:'text/plain'});
  const view=assistant((path,method,body)=>path==='/agent-v2/plans'?new Promise(resolve=>{resolvePlan=()=>resolve(uploadPlan(body));}):Promise.resolve({...uploadPlan({text:'pls run extract',attached_filenames:['invoice.txt']}),calls:[{tool:'upload',title:'Upload documents',status:'completed'}]}));
- selectContext(view);view.root.props.onDrop(drag([attached]));view.render();setRequest(view);view.find('aria-label','Send agent request').props.onClick();view.render();
+ selectContext(view);view.root.props.onDrop(drag([attached]));view.render();setRequest(view);view.find('aria-label','Send agent request').props.onClick();await flush();view.render();
  assert.deepEqual(view.names(),[]);assert.equal(sentRequests(view).at(-1).props.text,'pls run extract');assert.equal(sentRequests(view).at(-1).props.attachments[0].name,'invoice.txt');assert.equal(view.calls.length,1);
  resolvePlan();await flush();view.render();assert.deepEqual(view.names(),[]);assert.equal(button(view,'Confirm upload').props.disabled,false);
  // A later draft must not replace the bytes bound to this submitted message.
@@ -163,7 +168,7 @@ test('failed upload keeps submitted bytes for retry, and clarification carries t
 });
 
 test('submitted attachment cards render compact read-only names and sizes with the question',()=>{
- const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');const {AgentRequest}=compile('agent-v2-chat.tsx',{'./agent-attachments':helpers});
+ const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');const {AgentRequest}=compile('agent-v2-chat.tsx',{'./agent-commands':compile('agent-commands.ts'),'./agent-consent':{useAgentConsent:()=>({request:async()=>({required:false,destinations:[]}),popup:null})},'./agent-attachments':helpers});
  const html=renderToStaticMarkup(React.createElement(AgentRequest,{text:'pls run extract',attachments:[{name:'resume.pdf',size:3072},{name:'saved.txt'}]}));
  assert.match(html,/Files sent with this message/);assert.match(html,/resume.pdf/);assert.match(html,/3 KB/);assert.match(html,/pls run extract/);assert.doesNotMatch(html,/<button|Clear files|Remove attachment/);
 });
@@ -188,12 +193,12 @@ test('partial extraction exposes successful review while a sibling fails, hiding
 const jsonFile=(name='prompt.json',body=JSON.stringify({name:'Owner',schema:promptSchema}))=>({...file(name,Buffer.byteLength(body)),text:async()=>body});
 const button=(view,name)=>view.elements().find(node=>node.type==='button'&&node.props.children===name);
 const preview=view=>view.elements().find(node=>node.props?.onConfirm&&Object.hasOwn(node.props,'prompt'));
-test('only JSON attachments ask for a role, and unresolved JSON cannot be sent',()=>{
+test('only JSON attachments ask for a role, and unresolved JSON cannot be sent',async()=>{
  const view=assistant();view.root.props.onDrop(drag([file('notes.txt'),jsonFile('data.JSON')]));view.render();
  assert.equal(view.find('aria-label','Use notes.txt as'),undefined);assert.ok(view.find('aria-label','Use data.JSON as'));
  assert.equal(view.find('aria-label','Send agent request').props.disabled,true);view.find('aria-label','Send agent request').props.onClick();view.render();assert.equal(view.calls.length,0);
  button(view,'Document').props.onClick();view.render();assert.equal(view.find('aria-label','Send agent request').props.disabled,false);
- view.find('aria-label','Agent Model').props.onChange({target:{value:'chat-model'}});view.render();view.find('aria-label','Send agent request').props.onClick();
+ view.find('aria-label','Agent Model').props.onChange({target:{value:'chat-model'}});view.render();view.find('aria-label','Send agent request').props.onClick();await flush();view.render();
  assert.deepEqual(view.calls[0][2].attached_filenames,['notes.txt','data.JSON']);assert.equal(view.calls[0][0],'/agent-v2/plans');
 });
 test('prompt choice validates, reviews, then saves once without document upload or model inference',async()=>{

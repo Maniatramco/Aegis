@@ -8,7 +8,7 @@ test("Extract row re-extraction preserves reviewed results and original files th
  const original=await (await page.request.get(`/api/documents/${doc.id}/download`)).body();
  const result=await checked(await page.request.post('/api/extractions',{headers,data:{dataset_id:dataset.id,document_ids:[doc.id],template_id:template.id}}));
  await expect.poll(async()=> (await checked(await page.request.get(`/api/extractions/${result.id}`))).status,{timeout:90000}).toBe('ready');
- await page.goto('/#Extract');await page.getByLabel('Extraction dataset filter').selectOption(dataset.id);await page.getByRole('button',{name:'Review extraction '+result.id,exact:true}).click();
+ await page.goto('/#Review');await page.getByLabel('Extraction dataset filter').selectOption(dataset.id);await page.getByRole('button',{name:'Review extraction '+result.id,exact:true}).click();
  const options=page.getByRole('dialog',{name:'Re-extract options'});
  await page.getByLabel('Value /reference',{exact:true}).fill('Reviewed safe reference');await page.getByRole('button',{name:'Reviewed',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Reviewed · locked'})).toBeVisible();
  await page.getByRole('button',{name:'Back to Review',exact:true}).click();await page.getByRole('button',{name:'Re-extract extraction '+result.id,exact:true}).click();
@@ -17,7 +17,7 @@ test("Extract row re-extraction preserves reviewed results and original files th
  const rerunning=page.waitForResponse(r=>r.url().endsWith('/api/extractions')&&r.request().method()==='POST');
  await options.getByRole('button',{name:'Start re-extraction',exact:true}).click();const replacement=await checked(await rerunning);expect(replacement.id).not.toBe(result.id);
  await expect(options.getByRole('button',{name:'Review results',exact:true})).toBeVisible({timeout:90000});
- await expect(options.getByRole('progressbar')).toHaveAttribute('value','100');
+ await expect(options.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');
  const saved=await checked(await page.request.get(`/api/extractions/${result.id}`));expect(saved.version).toBe(2);expect(saved.result.reference).toBe('Reviewed safe reference');
  const versions=await checked(await page.request.get(`/api/extractions/${result.id}/versions`));expect(versions).toHaveLength(2);
  expect(await (await page.request.get(`/api/documents/${doc.id}/download`)).body()).toEqual(original);
@@ -30,8 +30,8 @@ test("saved review, source fallback, conflict, cancel and downloads use the real
  const doc=await uploadReady(page.request,headers,d,'Synthetic-review.txt','Reference INV-4242. Alice reviews this safe synthetic document.');const t=await seedTemplate(page.request,headers,'Review export '+Date.now());
  const e=await checked(await page.request.post('/api/extractions',{headers,data:{dataset_id:d.id,document_ids:[doc.id],template_id:t.id}}));
  await expect.poll(async()=> (await checked(await page.request.get(`/api/extractions/${e.id}`))).status,{timeout:90000}).toBe('ready');
- await page.goto('/#Home');const directory=page.getByRole('article',{name:`Dataset ${d.name}`,exact:true});await directory.getByRole('button',{name:'Open chat',exact:true}).click();await expect(page.getByLabel('Chat dataset',{exact:true})).toHaveValue(d.id);
- await page.goto('/#Extract');await page.getByLabel('Extraction dataset filter').selectOption(d.id);await page.getByRole('button',{name:'Review extraction '+e.id,exact:true}).click();await expect(page).toHaveURL(new RegExp('Review(?:%2F|/)'+e.id));await expect(page.getByRole('heading',{name:'Review',exact:true})).toBeVisible();
+ await page.goto('/#Home');const directory=page.getByRole('article',{name:`Dataset ${d.name}`,exact:true});await directory.getByRole('button',{name:'Open chat',exact:true}).click();await expect(page.getByLabel('Agent dataset',{exact:true})).toHaveValue(d.id);
+ await page.goto('/#Review');await page.getByLabel('Extraction dataset filter').selectOption(d.id);await page.getByRole('button',{name:'Review extraction '+e.id,exact:true}).click();await expect(page).toHaveURL(new RegExp('Review(?:%2F|/)'+e.id));await expect(page.getByRole('heading',{name:'Review',exact:true})).toBeVisible();
  const field=page.getByLabel('Value /reference',{exact:true});await expect(field).toHaveValue('MOCK TEST VALUE');await page.getByRole('button',{name:'Show source for /reference',exact:true}).click();await expect(page.getByText(/Region coordinates are unavailable/)).toBeVisible();
  await field.fill('Café 東京, INV-reviewed');await expect(page.getByRole('status').filter({hasText:'Unsaved changes'})).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();await expect(field).toHaveValue('MOCK TEST VALUE');
  await field.fill('Café 東京, INV-reviewed');await page.getByRole('button',{name:'Reviewed',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Reviewed · locked'})).toBeVisible();await page.getByRole('button',{name:'Reload extraction',exact:true}).click();await expect(field).toHaveValue('Café 東京, INV-reviewed');await expect(field).toHaveAttribute('readonly','');

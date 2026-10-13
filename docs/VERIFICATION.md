@@ -1,5 +1,26 @@
 # Verification record
 
+## Current browser suite
+
+`frontend/tests/current-workspace.spec.ts` exercises the current grouped navigation,
+model tables, onboarding/upload/extraction, re-extraction, published citations,
+fresh chat sessions, retry and consent UI, composer sizing and responsive layouts.
+It replaces the retired workspace/chat-upload/responsive/screenshot specifications
+for the previous combined chat/extraction UI. Review and password-recovery flows
+remain in their dedicated specs; detailed streaming, attachment and selection
+contracts remain in frontend unit tests and backend integration tests.
+
+Browser tests use the real API, worker, storage and authorization with an explicitly
+scripted mock model in `backend/tests/browser_app.py`. `compose.test.yaml` enables
+that fixture only for an isolated mock deployment. It refuses real model providers.
+These tests measure application behavior, not AI answer accuracy or live OCI access.
+Earlier sections below describe historical checks and may reference retired specs.
+
+The frontend uses stable base CSS retained from its previous build, with its MIT
+license in `frontend/licenses/tailwindcss.txt`, plus application-owned styles.
+Tailwind's obsolete build-time dependency chain is removed. Base rule/declaration
+comparison, the dependency audit and browser checks verify this cleanup.
+
 Verified in the build workspace and GitHub-hosted CI on 2026-10-02. Mock-provider checks never claim live model answer quality.
 
 All four jobs passed on commit `c9f211b415e183746bc00529aea27042df224802`: [Validate Aegis run](https://github.com/Maniatramco/Aegis/actions/runs/36995570646). Subsequent documentation-only commits may have their own repeat runs.

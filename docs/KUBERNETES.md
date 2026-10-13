@@ -81,7 +81,7 @@ which becomes `ORACLE_PWD`. Do not commit the generated Secret manifest.
 The included Oracle account startup/health scripts mirror Docker's scripts.
 The application owner is `AGS_OWNER`; fresh volumes create it automatically.
 Existing AEGIS data must be migrated during a maintenance window using
-[the migration procedure](../DB/migrations/01_aegis_to_ags_owner.md), with the same
+[the migration procedure](../database/migrations/01_aegis_to_ags_owner.md), with the same
 application storage mounted. Changing the ConfigMap alone does not migrate data.
 Adjust `aegis-config.ALLOWED_ORIGINS` to the real HTTPS origin if adding an ingress.
 Configure TLS, ingress upload limits (20 files, each up to the app limit), request

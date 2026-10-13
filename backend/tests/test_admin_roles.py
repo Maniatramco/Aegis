@@ -28,6 +28,8 @@ def test_promotion_grants_admin_scope_and_demoting_bootstrap_is_persistent(accou
     assert client.put('/api/datasets/'+d['id']+'/models',json=mapping_body).status_code==200
     model=next(item for item in client.get('/api/models').json() if 'chat' in item['capabilities'])
     registration={key:model[key] for key in ('connection_profile_id','provider_model','capabilities')}|{'name':'Second admin model'}
+    assert client.post('/api/models',json=registration).status_code==409  # Equivalent registrations are intentionally rejected.
+    registration['provider_model']='gpt-4.1'
     assert client.post('/api/models',json=registration).status_code==200
     assert client.patch('/api/datasets/'+d['id']+'/status',json={'active':False}).status_code==200
     assert client.patch('/api/datasets/'+d['id']+'/status',json={'active':True}).status_code==200

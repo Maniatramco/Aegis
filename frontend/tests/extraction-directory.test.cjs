@@ -29,7 +29,7 @@ test('review directory displays dataset identity, complete extraction ID, merged
 test('saved-result citations render clickable references and extraction source actions',()=>{
  const {AgentChatAnswer}=compile('agent-v2-chat.tsx',{'./agent-attachments':compile('agent-attachments.ts')});
  const html=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:{id:'m',text:'Python listed. [1]',status:'completed',citations:[{kind:'extraction',index:1,extraction_id:'extract-a',version:2,review_status:'reviewed',document_name:'one.pdf',text:'{"skills":["Python"]}'}]},api:async()=>{},onError(){},onReview(){}}));
- assert.match(html,/Open citation 1/);assert.match(html,/Open extraction source/);assert.match(html,/version 2/);
+ assert.match(html,/Open citation 1/);assert.match(html,/Saved extraction/);assert.match(html,/class="text-button"/);assert.match(html,/version 2/);
  assert.ok(!html.includes('/api/documents/undefined'));
 });
 

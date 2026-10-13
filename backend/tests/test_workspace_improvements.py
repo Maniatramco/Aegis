@@ -34,7 +34,7 @@ def test_dataset_template_import_scope_validation_and_extraction_stages(system):
     other_doc=upload(system,other)['documents'][0]
     assert system.api.post('/api/extractions',json={'dataset_id':other['id'],'document_ids':[other_doc['id']],'template_id':template['id']}).status_code==400
     run=post(system,'/api/extractions',{'dataset_id':d['id'],'document_ids':[document['id']],'template_id':template['id']})
-    assert list(run['job']['workflow']['stages'])==['prepare','generate','validate','ready']
+    assert list(run['job']['workflow']['stages'])==['prepare','retrieving','reranking','generate','validate','writing_output','ready']
     assert worker.run_once()
     result=system.api.get('/api/extractions/'+run['id']).json()
     assert result['status']=='ready' and result['template_id']==template['id']
@@ -50,11 +50,11 @@ def test_template_json_download_versions_and_owner_scope(system):
     response=system.api.put('/api/templates/'+t['id'],json={'name':'Invoice totals','schema':updated,'dataset_id':d['id']})
     assert response.status_code==200
     current=system.api.get('/api/templates/'+t['id']+'/export')
-    assert current.status_code==200 and current.json()=={'name':'Invoice totals','schema':updated}
+    assert current.status_code==200 and current.json()=={'name':'Invoice totals','schema':updated,'instructions':''}
     assert current.headers['content-type'].startswith('application/json')
     assert 'attachment;' in current.headers['content-disposition'] and 'Invoice%20totals-v2.json' in current.headers['content-disposition']
     old=system.api.get('/api/templates/'+t['id']+'/export?version=1')
-    assert old.json()=={'name':'Invoice / totals','schema':schema}
+    assert old.json()=={'name':'Invoice / totals','schema':schema,'instructions':''}
     assert 'Invoice%20-%20totals-v1.json' in old.headers['content-disposition']
     assert system.api.get('/api/templates/'+t['id']+'/export?version=0').status_code==404
     assert system.api.get('/api/templates/'+t['id']+'/export?version=3').status_code==404

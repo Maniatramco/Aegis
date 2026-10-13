@@ -6,7 +6,7 @@ password in the private wallet, rather than a password in the repository.
 
 1. Open Oracle SQL Developer from the VS Code activity bar.
 2. Refresh Connections if needed, then connect to **Aegis-Local**.
-3. Open `DB/queries/oracle-queries.sql`. Select **Aegis-Local** using the connection
+3. Open `database/queries/oracle-queries.sql`. Select **Aegis-Local** using the connection
    selector at the bottom of the editor, if the file is not already attached.
 4. Select a statement and press **Ctrl+Enter**. You can also right-click the
    connection and open a SQL Worksheet, then paste a query.
@@ -31,9 +31,9 @@ seconds. The query file intentionally does not select password hashes or login
 tokens from the `USER_TBL` / `SESSIONS_TBL` tables.
 
 For table responsibilities, columns, relationships, statuses and storage layout,
-see [the Aegis data model](../DB/docs/DATA-MODEL.md). The current AGS_OWNER schema
+see [the Aegis data model](../database/docs/DATA-MODEL.md). The current AGS_OWNER schema
 has eleven custom tables, including categorized model configuration and dataset
-mappings. Table scripts and migration details are under `DB/`.
+mappings. Table scripts and migration details are under `database/`.
 
 ## Keep the laptop connection available after recreating containers
 

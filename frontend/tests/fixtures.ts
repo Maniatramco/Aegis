@@ -27,7 +27,7 @@ export async function seedMockCatalog(request: APIRequestContext, headers: Heade
     ["Local test embedding", "mock-embedding", ["embedding"]],
   ] as const;
   const prior = definitions.map(([label, providerModel, capabilities]) => existing.find(model =>
-    model.name === `${prefix} · ${label}` && model.provider === "mock" && model.enabled !== false &&
+    model.provider === "mock" && model.enabled !== false &&
     model.provider_model === providerModel && JSON.stringify(model.capabilities) === JSON.stringify(capabilities),
   ));
   if (prior.every(Boolean)) {
@@ -77,6 +77,11 @@ export async function uploadReady(request: APIRequestContext, headers: Headers, 
     if (current.status === "failed") throw new Error(`Synthetic document indexing failed: ${name}`);
     return current.status;
   }, { timeout: 120000 }).toBe("ready");
+  // These fixtures seed through the standalone document API rather than an
+  // Agent workflow. Publish their knowledge explicitly before testing reads.
+  await checked(await request.post('/api/knowledge/search', { headers, data: {
+    text: 'Synthetic browser fixture', dataset_id: dataset.id, source_types: ['document'],
+  } }));
   return document;
 }
 

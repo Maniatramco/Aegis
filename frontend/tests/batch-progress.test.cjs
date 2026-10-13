@@ -27,7 +27,7 @@ test('V2 shares saved chat history and canonical sources without fabricating unf
  const conversation={id:'saved-chat',mode:'documents',dataset_id:'dataset-a',document_ids:['doc-a'],messages:[{id:'q1',role:'user',text:'Question',model_selection:{model_id:'m',model_name:'Local model'}},{id:'a1',role:'assistant',text:'Supported answer [1]',status:'completed',citations:[{index:1,document_id:'doc-a',document_name:'Evidence.txt',text:'Canonical excerpt',page:2}]},{id:'q2',role:'user',text:'Follow-up'}]};
  const exchanges=conversationExchanges(conversation);assert.equal(exchanges.length,2);assert.equal(exchanges[0].conversation_id,'saved-chat');assert.equal(exchanges[1].chat,undefined);assert.deepEqual(exchanges[0].calls,[]);
  const html=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:exchanges[0].chat,api:()=>{},onError:()=>{}}));
- assert.match(html,/Sources · 1/);assert.match(html,/Canonical excerpt/);assert.match(html,/\/api\/documents\/doc-a\/source#page=2/);assert.match(html,/Copy agent answer/);assert.doesNotMatch(html,/Helpful agent answer|Unhelpful agent answer/);
+ assert.match(html,/Sources · 1/);assert.match(html,/Open citation 1/);assert.match(html,/Evidence.txt · page 2/);assert.equal(exchanges[0].chat.citations[0].text,'Canonical excerpt');assert.doesNotMatch(html,/Canonical excerpt/);assert.match(html,/Copy agent answer/);assert.doesNotMatch(html,/Helpful agent answer|Unhelpful agent answer/);
 });
 test('compact chat formatting escapes HTML and preserves readable code',()=>{
  const html=renderToStaticMarkup(React.createElement(AgentAnswerText,{text:'**Bold** and `value`\n```python\nprint("hello")\n```\n<script>alert(1)</script>'}));
@@ -38,10 +38,10 @@ test('compact chat formatting escapes HTML and preserves readable code',()=>{
 
 test('unified knowledge citations open the authorized source rather than a missing document',()=>{
  const html=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:{text:'Supplier dataset [1]',status:'completed',citations:[{index:1,kind:'knowledge',source_type:'dataset',knowledge_id:'point-id',knowledge_collection:'aegis_knowledge_abc',document_name:'Supplier dataset',text:'Canonical dataset description',source_version:2}]},api:()=>{},onError:()=>{}}));
- assert.match(html,/dataset · version 2/);
- assert.match(html,/\/api\/knowledge\/sources\/point-id\?collection=aegis_knowledge_abc/);
+ assert.match(html,/Supplier dataset/);assert.match(html,/Open citation 1/);
+ assert.match(html,/class="text-button"/);
  assert.doesNotMatch(html,/documents\/undefined/);
- assert.match(html,/Canonical dataset description/);
+ assert.doesNotMatch(html,/Canonical dataset description/);
 });
 const items=Array.from({length:10},(_,i)=>({id:'row-'+i,name:'invoice-'+i+'.txt',status:'submitted',processing:true,document:{id:'doc-'+i,status:'processing'},job:{status:'running',workflow:{current:'extract',stages:{extract:{status:'running'}}}}}));
 const jobs=items.map((item,i)=>({...item.job,id:'job-'+i,kind:'index',document_id:item.document.id}));

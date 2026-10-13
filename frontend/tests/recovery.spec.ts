@@ -178,17 +178,17 @@ test("direct reset needs only a username and matching new passwords", async ({ p
   await expect(username).toHaveValue("Dottie");
   await username.fill("");
   await submit.click();
-  await expect(page.getByRole("alert")).toHaveText("Enter your username.");
+  await expect(page.locator("[role=alert]:not(#__next-route-announcer__)")).toHaveText("Enter your username.");
   await expect(username).toBeFocused();
   await username.fill("Dottie");
   await password.fill("short");
   await confirmation.fill("short");
   await submit.click();
-  await expect(page.getByRole("alert")).toContainText("12 to 200");
+  await expect(page.locator("[role=alert]:not(#__next-route-announcer__)")).toContainText("12 to 200");
   await password.fill("synthetic-direct-new-password");
   await confirmation.fill("different-password");
   await submit.click();
-  await expect(page.getByRole("alert")).toHaveText("Passwords do not match.");
+  await expect(page.locator("[role=alert]:not(#__next-route-announcer__)")).toHaveText("Passwords do not match.");
   expect(submissions).toEqual([]);
   await confirmation.fill("synthetic-direct-new-password");
   await submit.click();
@@ -205,16 +205,19 @@ test("direct reset reports a failed transaction and clears password fields", asy
   await page.getByLabel("New password", { exact: true }).fill("synthetic-new-password");
   await page.getByLabel("Confirm new password", { exact: true }).fill("synthetic-new-password");
   await page.getByRole("button", { name: "Reset password", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Nothing was committed");
+  await expect(page.locator("[role=alert]:not(#__next-route-announcer__)")).toContainText("Nothing was committed");
   await expect(page.getByLabel("New password", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Confirm new password", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Reset password", exact: true })).toBeEnabled();
+  await page.getByLabel("New password", { exact: true }).fill("synthetic-new-password");
+  await page.getByLabel("Confirm new password", { exact: true }).fill("synthetic-new-password");
   await expect(page.getByRole("button", { name: "Reset password", exact: true })).toBeEnabled();
 });
 
 test("network deployments give a clear unavailable message", async ({ page }) => {
   await page.route("**/api/local-recovery", route => route.fulfill({ status: 403, json: { detail: "Direct password reset is available only in the local desktop app." } }));
   await page.goto("/recover-password");
-  await expect(page.getByRole("alert")).toContainText("only in the local desktop app");
+  await expect(page.locator("[role=alert]:not(#__next-route-announcer__)")).toContainText("only in the local desktop app");
   await expect(page.locator("input")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Back to sign in" })).toBeVisible();
 });

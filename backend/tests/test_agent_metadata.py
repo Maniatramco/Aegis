@@ -230,7 +230,7 @@ def test_initial_reads_cannot_bypass_normal_argument_and_source_selection(system
         raise main.providers.ProviderError('Test stops at normal tool selection.')
     monkeypatch.setattr(agent_model,'complete',complete)
     before=s.api.get('/api/jobs').json()
-    response=s.api.post('/api/agent-v2/plans',json={'text':'Read the current scope','dataset_id':d['id'],
+    response=s.api.post('/api/agent-v2/plans',json={'text':'Read specific.txt' if route.get('document_names') else 'Read the current scope','dataset_id':d['id'],
         'planner_model_id':next(m['id'] for m in d['models'] if 'chat' in m['capabilities'])})
     assert len(seen)==1
     assert s.api.get('/api/jobs').json()==before

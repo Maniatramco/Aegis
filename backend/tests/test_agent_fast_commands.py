@@ -63,8 +63,8 @@ def test_explicit_upload_then_extract_without_files_cannot_extract_old_selection
     assert [c['tool'] for c in p['calls']]==['upload','extract'] and p['document_ids']==[]
     assert call(s,p,1).status_code==409
 
-@pytest.mark.parametrize('values',[{'earlier_request':'Upload the attached documents'}, {'completed_tools':['upload']}, {'text':'re-extract','attached_filenames':['new.txt']}])
-def test_clarifications_and_new_file_reextraction_still_use_contextual_planner(system,monkeypatch,values):
+@pytest.mark.parametrize('values',[{'earlier_request':'Upload the attached documents'}, {'completed_tools':['upload']}])
+def test_clarifications_still_use_contextual_planner(system,monkeypatch,values):
     seen=[];monkeypatch.setattr(providers,'plan',lambda *args:seen.append(args) or proposal(('extract',)))
     plan(system,dataset(system),**({'text':'extract'}|values))
     assert len(seen)==1

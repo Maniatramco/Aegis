@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import './base.css';
 :root {
   --nav: #111c32;
   --ink: #1a2941;
