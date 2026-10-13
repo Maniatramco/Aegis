@@ -1,0 +1,12 @@
+# Self-hosted inference only. Supply explicit hostnames/URLs; no paid fallback.
+services:
+  api:
+    environment:
+      AEGIS_OLLAMA_URL: ${AEGIS_REMOTE_OLLAMA_URL:?Set your self-hosted Ollama endpoint}
+      AEGIS_OCR_URL: ${AEGIS_REMOTE_OCR_URL:?Set your self-hosted OCR endpoint}
+      AEGIS_OLLAMA_ENDPOINT_HOSTS: ${AEGIS_REMOTE_INFERENCE_HOSTS:?Approve the inference service hostnames}
+  worker:
+    environment:
+      AEGIS_OLLAMA_URL: ${AEGIS_REMOTE_OLLAMA_URL:?Set your self-hosted Ollama endpoint}
+      AEGIS_OCR_URL: ${AEGIS_REMOTE_OCR_URL:?Set your self-hosted OCR endpoint}
+      AEGIS_OLLAMA_ENDPOINT_HOSTS: ${AEGIS_REMOTE_INFERENCE_HOSTS:?Approve the inference service hostnames}

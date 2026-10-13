@@ -1,5 +1,8 @@
 .git
 .env
+.env.*
+!local/.env.example
+!local/.env.oracle.example
 secrets
 backups
 data
@@ -8,3 +11,12 @@ data
 **/.venv
 **/__pycache__
 **/.pytest_cache
+ags_runtime
+output
+work
+local-models
+**/test-results
+**/playwright-report
+**/screenshots
+**/coverage
+*.log

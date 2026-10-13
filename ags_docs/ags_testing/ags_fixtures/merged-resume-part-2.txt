@@ -1,0 +1,5 @@
+FICTIONAL TEST RESUME — PART 2 OF 2
+Continuation of Arjun Rao's resume.
+Current employer: Northstar Sample Labs
+Skills: Python, FastAPI, PostgreSQL, Docker
+This is synthetic QA data, not a real applicant.

@@ -1,0 +1,9 @@
+{
+  "name": "Prompt upload reload QA",
+  "schema": {
+    "type": "object",
+    "properties": { "reference": { "type": "string" }, "total": { "type": "number" } },
+    "required": ["reference", "total"],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,6 @@
+Fictional Aegis consent popup QA resume.
+Name: Avery Example
+Role: Data Engineer
+Skills: Python, SQL
+Experience: 4 years
+This document is synthetic test data only.

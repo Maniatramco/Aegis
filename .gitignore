@@ -1,9 +1,11 @@
 .env
 .env.*
-!.env.example
+!local/.env.example
+!local/.env.oracle.example
 secrets/
 backups/
 data/
+local-models/
 *.sqlite*
 *.db
 __pycache__/
@@ -21,3 +23,10 @@ test-results/
 *.tsbuildinfo
 
 frontend/screenshots/
+ags_frontend/screenshots/
+/ags_runtime/
+
+# Local verification artifacts can contain workspace data and large binaries.
+/output/
+/work/
+/docs/testing/results/

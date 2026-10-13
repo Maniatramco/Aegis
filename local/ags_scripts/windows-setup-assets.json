@@ -1,0 +1,22 @@
+{
+  "python": {
+    "version": "3.13.16",
+    "url": "https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.exe",
+    "sha256": "fb4f9f5d438b2396da0086dc70b935c530cb578e37adc6d354f7ad2037fee83b"
+  },
+  "node": {
+    "version": "22.23.3",
+    "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-win-x64.zip",
+    "sha256": "2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71"
+  },
+  "ollama": {
+    "version": "0.35.1",
+    "url": "https://github.com/ollama/ollama/releases/download/v0.35.1/ollama-windows-amd64.zip",
+    "sha256": "dc50b9ca7f9023c86525012632cd1615b093d0407987444a7f62ecab617e8e93"
+  },
+  "models": [
+    "qwen3:4b",
+    "smollm2:1.7b-instruct-q4_K_M",
+    "nomic-embed-text:latest"
+  ]
+}

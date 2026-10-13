@@ -1,0 +1,44 @@
+# Mount an existing OCI config/key read-only; private keys never enter images.
+services:
+  api:
+    environment:
+      OCI_NAMESPACE: ${OCI_NAMESPACE:-}
+      OCI_BUCKET: ${OCI_BUCKET:-}
+      OCI_REGION: ${OCI_REGION:-}
+    build:
+      args:
+        INSTALL_OCI: 'true'
+    volumes:
+      - type: bind
+        source: ${AEGIS_OCI_CONFIG_HOST_PATH:-C:/Users/Laya/.oci/config}
+        target: /run/oci/config
+        read_only: true
+      - type: bind
+        source: ${AEGIS_OCI_KEY_HOST_PATH:-C:/Users/Laya/.oci/aegis_api_key.pem}
+        target: /run/oci/aegis_api_key.pem
+        read_only: true
+      - type: bind
+        source: ${AEGIS_OCI_DATABASE_HOST_PATH:-C:/Users/Laya/.oci/database}
+        target: /run/aegis-db
+        read_only: true
+  worker:
+    environment:
+      OCI_NAMESPACE: ${OCI_NAMESPACE:-}
+      OCI_BUCKET: ${OCI_BUCKET:-}
+      OCI_REGION: ${OCI_REGION:-}
+    build:
+      args:
+        INSTALL_OCI: 'true'
+    volumes:
+      - type: bind
+        source: ${AEGIS_OCI_CONFIG_HOST_PATH:-C:/Users/Laya/.oci/config}
+        target: /run/oci/config
+        read_only: true
+      - type: bind
+        source: ${AEGIS_OCI_KEY_HOST_PATH:-C:/Users/Laya/.oci/aegis_api_key.pem}
+        target: /run/oci/aegis_api_key.pem
+        read_only: true
+      - type: bind
+        source: ${AEGIS_OCI_DATABASE_HOST_PATH:-C:/Users/Laya/.oci/database}
+        target: /run/aegis-db
+        read_only: true

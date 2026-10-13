@@ -1,0 +1,9 @@
+"use client";
+type Entity=Record<string,any>;
+export function ReviewSelectors({datasets,templates,extractions,dataset,template,extraction='',onDataset,onTemplate,onExtraction,allDatasets=false,allExtractions=false,disabled=false,datasetLabel='Review dataset'}:{datasets:Entity[];templates:Entity[];extractions:Entity[];dataset:string;template:string;extraction?:string;onDataset:(id:string)=>void;onTemplate:(id:string)=>void;onExtraction:(id:string)=>void;allDatasets?:boolean;allExtractions?:boolean;disabled?:boolean;datasetLabel?:string}){
+ return <div className="review-filters" aria-label="Review selectors">
+  <label>Dataset<select aria-label={datasetLabel} value={dataset} disabled={disabled} onChange={event=>onDataset(event.target.value)}>{allDatasets?<option value="">All datasets</option>:!dataset&&<option value="" disabled>Choose dataset</option>}{datasets.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+  <label>Prompt template<select aria-label="Review prompt template" value={template} disabled={disabled||!templates.length} onChange={event=>onTemplate(event.target.value)}>{!templates.length?<option value="">No prompt templates available</option>:!template&&<option value="" disabled>Choose prompt template</option>}{templates.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+  <label>Extraction name<select aria-label="Review extraction name" value={extraction} disabled={disabled||!extractions.length} onChange={event=>onExtraction(event.target.value)}>{allExtractions?<option value="">All extractions for this prompt</option>:!extraction&&<option value="" disabled>{extractions.length?'Choose extraction':'No extractions available'}</option>}{extractions.map(item=><option key={item.id} value={item.id}>{item.name||'Extraction'} · v{item.version||1} · {item.id.slice(0,8)}</option>)}</select></label>
+ </div>;
+}

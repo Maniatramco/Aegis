@@ -1,0 +1,15 @@
+{
+  "name": "Merged resume QA",
+  "schema": {
+    "type": "object",
+    "description": "These files are two parts of ONE fictional candidate's resume. Combine facts across both files. Return null for missing scalar values and an empty array for missing skills. Never guess or rank candidates.",
+    "properties": {
+      "full_name": {"type": ["string", "null"], "description": "Candidate's full name"},
+      "email": {"type": ["string", "null"], "description": "Candidate's email"},
+      "current_employer": {"type": ["string", "null"], "description": "Explicit current employer"},
+      "skills": {"type": "array", "maxItems": 20, "items": {"type": "string"}, "description": "Explicitly listed skills from all supplied parts"}
+    },
+    "required": ["full_name", "email", "current_employer", "skills"],
+    "additionalProperties": false
+  }
+}

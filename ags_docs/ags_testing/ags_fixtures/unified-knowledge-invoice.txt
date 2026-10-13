@@ -1,0 +1,4 @@
+Fictional invoice for automated verification.
+Supplier: Blue Harbor Demo Supplies.
+Invoice number: UK-2026-001.
+Total amount: 1640 USD.

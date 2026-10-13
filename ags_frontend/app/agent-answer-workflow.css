@@ -1,0 +1,33 @@
+.agent-answer-workflow{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;max-width:100%;color:#27456f;font-size:10px}
+.answer-workflow-summary{display:flex;align-items:center;gap:4px;padding:2px 6px;cursor:pointer;min-height:20px;border:1px solid #dae7fb;border-radius:20px;background:#f4f9ff;max-width:100%;min-width:0;flex-shrink:1;font:inherit;color:inherit;line-height:1.4}
+.answer-workflow-label{min-width:0;max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.agent-answer-workflow time{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:9px;color:#526e94}
+.answer-workflow-toggle{color:#0667ef;white-space:nowrap}.answer-workflow-toggle::after{content:'⌄'}.agent-answer-workflow[data-expanded=true] .answer-workflow-toggle::after{content:'⌃'}
+/* The live rail stays beside the speaker in normal flow, never covering the answer. */
+.answer-workflow-expanded{position:relative;flex:0 1 330px;width:330px;max-width:100%;min-width:0;box-sizing:border-box;padding:2px 25px 2px 5px;border:1px solid #dae7fb;border-radius:9px;background:#f4f9ff}
+.answer-workflow-expanded>p{margin:3px 0;font-size:10px;color:#526e94}
+.answer-workflow-expanded>.workflow-frame{max-width:none;margin:0}
+.answer-workflow-expanded .workflow-frame[data-compact=true]{--workflow-marker-max:20px}
+.answer-workflow-expanded .workflow-frame[data-compact=true] .horizontal-workflow-stepper{padding:8px 6px 6px}
+.answer-workflow-expanded .workflow-frame[data-compact=true]>.workflow-stage-caption{grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:0 6px 4px;font-size:10px;line-height:1.35}
+.answer-workflow-expanded .workflow-frame[data-compact=true]>.workflow-stage-caption strong{grid-column:1/-1;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+.answer-workflow-expanded .workflow-frame[data-compact=true]>.workflow-stage-caption span{font-size:9px}
+.answer-workflow-expanded .workflow-frame[data-compact=true]>.workflow-stage-caption small{grid-column:2;grid-row:2;font-size:9px}
+.answer-workflow-expanded[hidden]{display:none}
+.answer-workflow-close{position:absolute;right:3px;top:3px;display:grid;place-items:center;width:20px;height:20px;min-height:0;padding:0;border:0;border-radius:50%;background:transparent;color:#526e94;cursor:pointer}
+.answer-workflow-close:hover{background:#e5efff}.answer-workflow-close:focus-visible{outline:2px solid #0667ef;outline-offset:1px}
+.answer-workflow-summary:focus-visible{outline:2px solid #0667ef;outline-offset:2px}
+.answer-workflow-preview{position:fixed;z-index:65;width:min(640px,calc(100vw - 24px));max-height:calc(100dvh - 24px);box-sizing:border-box;padding:12px;background:#f4f9ff;border:1px solid #cbdffa;border-radius:12px;box-shadow:0 8px 26px #17386b20;overflow:auto;color:#27456f;font-size:12px}
+.answer-workflow-preview-heading{position:relative;display:grid;gap:3px;padding-right:24px;margin-bottom:8px;min-width:0}
+.answer-workflow-preview-heading>strong{font-size:13px}.answer-workflow-preview-heading>span{overflow-wrap:anywhere;line-height:1.4;color:#526e94}
+.answer-workflow-preview>.workflow-frame{max-width:none;margin:0 0 8px}
+.answer-workflow-detail-scroll{max-height:min(260px,40dvh);overflow:auto;overscroll-behavior:contain;border:1px solid #dae7fb;border-radius:7px;background:#fff}
+.answer-workflow-detail-table{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:11px;line-height:1.45}
+.answer-workflow-detail-table :is(th,td){padding:7px 9px;white-space:normal;overflow-wrap:anywhere;text-align:left;border-bottom:1px solid #edf2fa}
+.answer-workflow-detail-table th{position:sticky;top:0;background:#edf4ff;color:#27456f;font-size:10px;z-index:1}
+.answer-workflow-detail-table :is(th,td):first-child{width:62%}.answer-workflow-detail-table :is(th,td):nth-child(2){width:23%}.answer-workflow-detail-table :is(th,td):last-child{width:15%;text-align:right}
+.answer-workflow-detail-table tr[data-status=running]{background:#edf4ff;color:#0b316f;font-weight:600}.answer-workflow-detail-table tr[data-status=failed]{color:#bc1733;background:#fff4f5}
+.answer-workflow-detail-table time{font-size:11px;color:inherit}.answer-workflow-detail-table tr:last-child td{border-bottom:0}
+.agent-v2-speaker .answer-workflow-state{color:inherit;flex-shrink:0}.agent-answer-workflow[data-status=running] .answer-workflow-state{animation:answer-status-spin 1.2s linear infinite}.agent-answer-workflow[data-status=failed]{color:#bc1733}
+@keyframes answer-status-spin{to{transform:rotate(360deg)}}
+@media(max-width:480px){.answer-workflow-label{max-width:100px}.answer-workflow-summary{gap:3px;padding:2px 5px}}
+@media(prefers-reduced-motion:reduce){.agent-answer-workflow[data-status=running] .answer-workflow-state{animation:none}}

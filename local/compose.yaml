@@ -1,0 +1,101 @@
+name: aegis
+x-backend: &backend
+  build:
+    context: ./ags_backend
+    args:
+      INSTALL_LOCAL_EMBEDDINGS: ${INSTALL_LOCAL_EMBEDDINGS:-true}
+      INSTALL_CLOUD_MODELS: ${INSTALL_CLOUD_MODELS:-true}
+  restart: unless-stopped
+  environment: &backend-env
+    DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD:?Run local/ags_scripts/setup.sh first}@db:5432/aegis
+    AEGIS_STORAGE_ROOT: /data
+    AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Run local/ags_scripts/setup.sh first}
+    AEGIS_BOOTSTRAP_TOKEN: ${AEGIS_BOOTSTRAP_TOKEN:?Run local/ags_scripts/setup.sh first}
+    QDRANT_URL: http://qdrant:6333
+    MODEL_PROVIDER: ${MODEL_PROVIDER:-openai}
+    EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-sentence_transformers}
+    SEARCH_PROVIDER: ${SEARCH_PROVIDER:-qdrant}
+    AEGIS_ALLOW_MOCK: ${AEGIS_ALLOW_MOCK:-false}
+    AEGIS_LOCAL_ONLY: ${AEGIS_LOCAL_ONLY:-false}
+    AEGIS_MODEL_ENDPOINT_HOSTS: ${AEGIS_MODEL_ENDPOINT_HOSTS:-}
+    HF_HOME: /data/model-cache
+    OCI_REGION: ${OCI_REGION:-}
+    OCI_NAMESPACE: ${OCI_NAMESPACE:-}
+    OCI_BUCKET: ${OCI_BUCKET:-}
+    OCI_OBJECT_PREFIX: ${OCI_OBJECT_PREFIX:-aegis}
+    OCI_AUTH_MODE: ${OCI_AUTH_MODE:-config_file}
+    OCI_CONFIG_FILE: /run/oci/config
+    OCI_PROFILE: ${OCI_PROFILE:-DEFAULT}
+    OCI_QUEUE_ID: ${OCI_QUEUE_ID:-}
+    OCI_QUEUE_ENDPOINT: ${OCI_QUEUE_ENDPOINT:-}
+  volumes:
+    - storage:/data
+  depends_on:
+    db:
+      condition: service_healthy
+    qdrant:
+      condition: service_started
+  networks: [private, outbound]
+services:
+  web:
+    build: ./ags_frontend
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - '127.0.0.1:${AEGIS_PORT:-3000}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/auth/status').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 10s
+    # A publishable bridge is required for the localhost-bound UI port.
+    # Database/vector services stay exclusively on the internal network.
+    networks: [private, edge]
+  api:
+    <<: *backend
+    command: uvicorn ags_app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready',timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 20s
+  worker:
+    <<: *backend
+    command: python -m ags_app.worker
+    depends_on:
+      api:
+        condition: service_healthy
+  db:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aegis
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run local/ags_scripts/setup.sh first}
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U aegis -d aegis']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [private]
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    restart: unless-stopped
+    volumes: [qdrant:/qdrant/storage]
+    networks: [private]
+volumes:
+  postgres:
+  storage:
+  qdrant:
+networks:
+  private:
+    internal: true
+  outbound: {}
+  edge: {}
