@@ -1,5 +1,14 @@
 # Unified Aegis knowledge
 
+Publication version 3 preserves auxiliary metadata floats (audit timestamps and
+OCR timings) as lossless decimal strings. JSON transport can otherwise round a
+float and invalidate an intact payload's content digest. Extracted business values
+retain their numeric types in canonical JSON text; read-only assembly decodes that
+text. Integrity verification remains exact, and latest-workflow selection compares
+timestamps numerically. Existing manifests are republished by the normal worker
+reconciliation/write workflows; originals, Parquet and database timestamps stay
+unchanged.
+
 Implemented 2026-10-12. Oracle records and persistent originals, JSON and Parquet are authoritative. Qdrant is a rebuildable semantic discovery index. A saved extraction has both a canonical result file and derived vectors; editing a result publishes a new file revision and replaces its indexed revision.
 
 ## Sources and scope

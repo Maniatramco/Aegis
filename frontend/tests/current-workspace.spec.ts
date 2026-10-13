@@ -114,7 +114,7 @@ test('ReExtract uses the chosen prompt and keeps the original saved extraction',
  await page.getByRole('button',{name:'Confirm re-extraction',exact:true}).click();await expect(page.getByRole('button',{name:'Review result and evidence'})).toBeVisible({timeout:90000});
  const runs=(await checked(await page.request.get('/api/extractions'))).filter((item:any)=>(item.dataset_id||item.kb_id||item.parent_id)===w.dataset.id);expect(runs).toHaveLength(2);expect(runs.some((item:any)=>item.id===first.id)).toBe(true);
  const old=await extractionReady(page,first.id);expect(old.version).toBe(1);expect(await (await page.request.get(`/api/documents/${doc.id}/download`)).text()).toBe(source);
- await expect.poll(async()=> (await checked(await page.request.get(`/api/agent-v2/plans/${plan.id}`))).goal.status,{timeout:90000}).toBe('completed');
+ await expect.poll(async()=>{const saved=await checked(await page.request.get(`/api/agent-v2/plans/${plan.id}`));if(saved.calls.some((c:any)=>c.publication_error))throw new Error('Synthetic re-extract publication failed: '+JSON.stringify(saved.calls.map((c:any)=>({status:c.status,error:c.error}))));return saved.goal.status;},{timeout:90000}).toBe('completed');
 });
 
 test('chat cites published knowledge and opens and closes source evidence',async({page})=>{

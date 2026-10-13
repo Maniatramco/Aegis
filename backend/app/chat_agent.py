@@ -78,7 +78,7 @@ class ChatAgent:
                 completed=[r for r in workflows if isinstance(r['value'],dict) and
                     (r['value'].get('status')=='completed' or r['value'].get('steps') and all(s['status']=='completed' for s in r['value']['steps']))]
                 if completed:
-                    latest=max(completed,key=lambda r:r.get('source_updated_at',0))['value']
+                    latest=max(completed,key=lambda r:float(r.get('source_updated_at') or 0))['value']
                     ids=set(latest.get('extraction_ids',[]))|{id for s in latest.get('steps',[]) for id in s.get('extraction_ids',[])}
                     records=[r for r in records if r['entity_id'].split(':',1)[0] in ids]
             if body.template_id and source=='prompt':records=[r for r in records if r['entity_id']==body.template_id]

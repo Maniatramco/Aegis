@@ -17,7 +17,7 @@ from . import core, dataset_models as routing, dataset_access as access, provide
 TYPES = {'dataset', 'document', 'document_chunk', 'extraction', 'prompt', 'model', 'workflow', 'application'}
 KINDS = {'knowledge_base', 'document', 'extraction', 'template', 'model', 'agent_plan', 'agent_onboarding'}
 SCHEMA_VERSION = 1
-PUBLICATION_VERSION = 2
+PUBLICATION_VERSION = 3
 TEXT_BYTES = 2400
 GUIDE = {
     'datasets': 'Create a dataset with a name and description. Aegis Agent onboarding collects embedding, chat and extraction model mappings, documents and a JSON Schema prompt. Confirm setup before creating it. Dataset access governs shared documents and results.',
@@ -50,11 +50,24 @@ def fragments(text):
     if current: yield ''.join(current)
 
 
+def payload_metadata(value):
+    """Preserve exact audit/OCR metadata through vector backends' JSON codecs.
+
+    Qdrant may round floating-point payload numbers during a JSON round trip.
+    Business values remain numeric in the canonical JSON text, which assemble()
+    decodes. Only auxiliary metadata floats use lossless decimal strings.
+    """
+    if isinstance(value,float):return repr(value)
+    if isinstance(value,dict):return {key:payload_metadata(item) for key,item in value.items()}
+    if isinstance(value,(list,tuple)):return [payload_metadata(item) for item in value]
+    return value
+
+
 def point(source_type, entity_id, dataset_id, owner, title, text, version=1, **extra):
     pieces=list(fragments(text))
     for part, excerpt in enumerate(pieces):
         payload = dict(source_type=source_type, entity_id=entity_id, dataset_id=dataset_id or '',
-            owner_id=owner, title=title, text=excerpt, source_version=version, part=part, part_count=len(pieces), **extra)
+            owner_id=owner, title=title, text=excerpt, source_version=version, part=part, part_count=len(pieces), **payload_metadata(extra))
         payload['content_digest'] = digest(payload)
         id = str(uuid.uuid5(uuid.NAMESPACE_URL, f'aegis-knowledge:{source_type}:{entity_id}:{version}:{part}'))
         yield {'id': id, 'payload': payload}
