@@ -14,10 +14,10 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: backend/requirements*.txt
-      - run: pip install -r backend/requirements-dev.txt
+          cache-dependency-path: ags_backend/requirements*.txt
+      - run: pip install -r ags_backend/requirements-dev.txt
       - run: pytest -q
-        working-directory: backend
+        working-directory: ags_backend
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -26,21 +26,21 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: ags_frontend/package-lock.json
       - run: npm ci
-        working-directory: frontend
+        working-directory: ags_frontend
       - run: npm run test:unit && npm run typecheck && npm run build
-        working-directory: frontend
+        working-directory: ags_frontend
   local-embedding-image:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Build the default laptop image with CPU embeddings
-        run: docker build --build-arg INSTALL_LOCAL_EMBEDDINGS=true -t aegis-local-embedding ./backend
+        run: docker build --build-arg INSTALL_LOCAL_EMBEDDINGS=true -t aegis-local-embedding ./ags_backend
       - name: Run real local inference inside the default image
         run: |
-          docker run --rm --entrypoint python -e HF_HOME=/data/model-cache aegis-local-embedding -c "from app.providers import embed; vectors=embed(['Aegis keeps original documents in storage.', 'A separate sample sentence.']); assert len(vectors)==2 and all(len(v)==384 for v in vectors); assert all(abs(sum(x*x for x in v)-1)<0.01 for v in vectors); print('PASS: real normalized local embeddings in default Docker image')"
+          docker run --rm --entrypoint python -e HF_HOME=/data/model-cache aegis-local-embedding -c "from ags_app.providers import embed; vectors=embed(['Aegis keeps original documents in storage.', 'A separate sample sentence.']); assert len(vectors)==2 and all(len(v)==384 for v in vectors); assert all(abs(sum(x*x for x in v)-1)<0.01 for v in vectors); print('PASS: real normalized local embeddings in default Docker image')"
   compose-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -54,7 +54,7 @@ jobs:
           python-version: '3.12'
       - name: Create isolated test configuration
         run: |
-          ./scripts/setup.sh
+          ./ags_scripts/setup.sh
           cat >> .env <<'CONFIG'
           MODEL_PROVIDER=mock
           EMBEDDING_PROVIDER=mock
@@ -65,21 +65,21 @@ jobs:
       - run: docker compose up --build -d --wait --wait-timeout 180
       - name: Exercise durable document workflows
         id: smoke
-        run: python scripts/smoke.py
+        run: python ags_scripts/smoke.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: ags_frontend/package-lock.json
       - name: Install browser interaction test tools
-        working-directory: frontend
+        working-directory: ags_frontend
         run: npm ci && npx playwright install --with-deps chromium
       - name: Exercise browser workflows
-        working-directory: frontend
+        working-directory: ags_frontend
         run: npm run test:e2e
       - name: Capture actual app screens with synthetic demo data
         if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
-        working-directory: frontend
+        working-directory: ags_frontend
         env:
           AEGIS_CAPTURE_SCREENSHOTS: 'true'
         run: npm run test:screenshots
@@ -88,7 +88,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aegis-ui-screens
-          path: frontend/screenshots/
+          path: ags_runtime/ags_screenshots/
           if-no-files-found: warn
           retention-days: 14
       - name: Show diagnostics on failure

@@ -6,7 +6,7 @@ services:
       MODEL_PROVIDER: mock
       EMBEDDING_PROVIDER: mock
     volumes:
-      - ./backend/tests/browser_app.py:/app/browser_app.py:ro
+      - ./ags_backend/ags_tests/browser_app.py:/app/browser_app.py:ro
     command: ['uvicorn', 'browser_app:app', '--host', '0.0.0.0', '--port', '8000']
   worker:
     environment:
@@ -14,5 +14,5 @@ services:
       MODEL_PROVIDER: mock
       EMBEDDING_PROVIDER: mock
     volumes:
-      - ./backend/tests/browser_app.py:/app/browser_app.py:ro
+      - ./ags_backend/ags_tests/browser_app.py:/app/browser_app.py:ro
     command: ['python', 'browser_app.py', '--worker']

@@ -1,16 +1,16 @@
 name: aegis
 x-backend: &backend
   build:
-    context: ./backend
+    context: ./ags_backend
     args:
       INSTALL_LOCAL_EMBEDDINGS: ${INSTALL_LOCAL_EMBEDDINGS:-true}
       INSTALL_CLOUD_MODELS: ${INSTALL_CLOUD_MODELS:-true}
   restart: unless-stopped
   environment: &backend-env
-    DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD:?Run scripts/setup.sh first}@db:5432/aegis
+    DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD:?Run ags_scripts/setup.sh first}@db:5432/aegis
     AEGIS_STORAGE_ROOT: /data
-    AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Run scripts/setup.sh first}
-    AEGIS_BOOTSTRAP_TOKEN: ${AEGIS_BOOTSTRAP_TOKEN:?Run scripts/setup.sh first}
+    AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Run ags_scripts/setup.sh first}
+    AEGIS_BOOTSTRAP_TOKEN: ${AEGIS_BOOTSTRAP_TOKEN:?Run ags_scripts/setup.sh first}
     QDRANT_URL: http://qdrant:6333
     MODEL_PROVIDER: ${MODEL_PROVIDER:-openai}
     EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-sentence_transformers}
@@ -38,7 +38,7 @@ x-backend: &backend
   networks: [private, outbound]
 services:
   web:
-    build: ./frontend
+    build: ./ags_frontend
     restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:8000
@@ -58,7 +58,7 @@ services:
     networks: [private, edge]
   api:
     <<: *backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn ags_app.main:app --host 0.0.0.0 --port 8000
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready',timeout=5)"]
       interval: 10s
@@ -67,7 +67,7 @@ services:
       start_period: 20s
   worker:
     <<: *backend
-    command: python -m app.worker
+    command: python -m ags_app.worker
     depends_on:
       api:
         condition: service_healthy
@@ -77,7 +77,7 @@ services:
     environment:
       POSTGRES_DB: aegis
       POSTGRES_USER: aegis
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup.sh first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ags_scripts/setup.sh first}
     volumes: [postgres:/var/lib/postgresql/data]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U aegis -d aegis']

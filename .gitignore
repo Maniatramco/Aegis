@@ -23,6 +23,8 @@ test-results/
 *.tsbuildinfo
 
 frontend/screenshots/
+ags_frontend/screenshots/
+/ags_runtime/
 
 # Local verification artifacts can contain workspace data and large binaries.
 /output/

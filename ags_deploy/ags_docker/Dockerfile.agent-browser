@@ -1,0 +1,7 @@
+FROM node:22-alpine
+WORKDIR /app
+COPY ags_frontend/package.json ags_frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund && apk add --no-cache chromium
+ENV NODE_PATH=/app/node_modules
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+CMD ["node", "/tests/agent-live-e2e.js"]

@@ -2,7 +2,7 @@ name: aegis-oracle
 
 x-backend: &backend
   build:
-    context: ./backend
+    context: ./ags_backend
     args:
       INSTALL_ORACLE: 'true'
       INSTALL_LOCAL_EMBEDDINGS: 'false'
@@ -58,7 +58,7 @@ x-backend: &backend
 
 services:
   web:
-    build: ./frontend
+    build: ./ags_frontend
     restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:8000
@@ -75,7 +75,7 @@ services:
     networks: [private, edge]
   api:
     <<: *backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn ags_app.main:app --host 0.0.0.0 --port 8000
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready',timeout=5)"]
       interval: 10s
@@ -84,7 +84,7 @@ services:
       start_period: 30s
   worker:
     <<: *backend
-    command: python -m app.worker
+    command: python -m ags_app.worker
     depends_on:
       api:
         condition: service_healthy
@@ -97,8 +97,8 @@ services:
     secrets: [oracle_pwd, aegis_oracle_password, aegis_oracle_test_password]
     volumes:
       - oracle:/opt/oracle/oradata
-      - ./docker/oracle/startup:/opt/oracle/scripts/startup:ro
-      - ./docker/oracle/healthcheck.sh:/opt/oracle/checkAegisDB.sh:ro
+      - ./ags_deploy/ags_docker/ags_oracle/ags_startup:/opt/oracle/scripts/startup:ro
+      - ./ags_deploy/ags_docker/ags_oracle/healthcheck.sh:/opt/oracle/checkAegisDB.sh:ro
     healthcheck:
       test: ['CMD', 'bash', '/opt/oracle/checkAegisDB.sh']
       interval: 10s
@@ -130,7 +130,7 @@ services:
     profiles: [test]
     build:
       context: .
-      dockerfile: docker/oracle/Dockerfile.tests
+      dockerfile: ags_deploy/ags_docker/ags_oracle/Dockerfile.tests
     environment:
       DATABASE_PROVIDER: oracle
       ORACLE_HOST: oracle
@@ -142,7 +142,7 @@ services:
     depends_on:
       oracle:
         condition: service_healthy
-    command: python scripts/oracle_check.py
+    command: python ags_scripts/oracle_check.py
     networks: [private]
 
 volumes:
