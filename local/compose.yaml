@@ -7,10 +7,10 @@ x-backend: &backend
       INSTALL_CLOUD_MODELS: ${INSTALL_CLOUD_MODELS:-true}
   restart: unless-stopped
   environment: &backend-env
-    DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD:?Run ags_scripts/setup.sh first}@db:5432/aegis
+    DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD:?Run local/ags_scripts/setup.sh first}@db:5432/aegis
     AEGIS_STORAGE_ROOT: /data
-    AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Run ags_scripts/setup.sh first}
-    AEGIS_BOOTSTRAP_TOKEN: ${AEGIS_BOOTSTRAP_TOKEN:?Run ags_scripts/setup.sh first}
+    AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Run local/ags_scripts/setup.sh first}
+    AEGIS_BOOTSTRAP_TOKEN: ${AEGIS_BOOTSTRAP_TOKEN:?Run local/ags_scripts/setup.sh first}
     QDRANT_URL: http://qdrant:6333
     MODEL_PROVIDER: ${MODEL_PROVIDER:-openai}
     EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-sentence_transformers}
@@ -77,7 +77,7 @@ services:
     environment:
       POSTGRES_DB: aegis
       POSTGRES_USER: aegis
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ags_scripts/setup.sh first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run local/ags_scripts/setup.sh first}
     volumes: [postgres:/var/lib/postgresql/data]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U aegis -d aegis']

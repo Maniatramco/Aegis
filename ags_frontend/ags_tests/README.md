@@ -8,8 +8,11 @@ They require a disposable mock deployment seeded by `ags_scripts/smoke.py`, Chro
 installed through Playwright, and `AEGIS_SMOKE_PASSWORD` for that test account.
 `AEGIS_TEST_BASE_URL` and `AEGIS_TEST_API_URL` select non-default local test ports.
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can select an existing Chromium installation.
+`AEGIS_SMOKE_ENV_FILE` selects a disposable configuration file for the smoke seed;
+it defaults to `.env`. Match its values, Compose project name and file selection
+to the isolated deployment so worker restart checks target that test project.
 
-CI uses `compose.yaml` plus `compose.test.yaml` in a clean runner. The test overlay
+CI uses `local/compose.yaml` plus `local/compose.test.yaml` in a clean runner. The test overlay
 installs a guarded scripted model fixture into both API and worker; it cannot call
 real model providers. Use a separate checkout/configuration and a unique Compose
 project when reproducing locally. Never attach this overlay to a real workspace.

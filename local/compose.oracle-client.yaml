@@ -1,5 +1,5 @@
 # Optional laptop database access for Oracle SQL Developer / VS Code.
-# Use alongside compose.oracle.yaml; keep this out of a public deployment.
+# Use alongside local/compose.oracle.yaml; keep this out of a public deployment.
 services:
   oracle:
     ports:

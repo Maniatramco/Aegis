@@ -1,5 +1,5 @@
 {
-  "folders": [{ "path": "." }],
+  "folders": [{ "path": ".." }],
   "tasks": {
     "version": "2.0.0",
     "tasks": [
@@ -7,7 +7,7 @@
         "label": "Aegis: Run updated local app",
         "type": "process",
         "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-        "args": ["-B", "${workspaceFolder}/ags_scripts/windows-dev.py", "start", "--web-port", "3002", "--api-port", "8002", "--reuse-ollama", "--runtime-dir", "${workspaceFolder}/data/local-desktop"],
+        "args": ["-B", "${workspaceFolder}/local/ags_scripts/windows-dev.py", "start", "--web-port", "3002", "--api-port", "8002", "--reuse-ollama", "--runtime-dir", "${workspaceFolder}/data/local-desktop"],
         "options": { "cwd": "${workspaceFolder}" },
         "problemMatcher": [],
         "group": { "kind": "build", "isDefault": true },
@@ -17,7 +17,7 @@
         "label": "Aegis: Stop updated local app",
         "type": "process",
         "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-        "args": ["-B", "${workspaceFolder}/ags_scripts/windows-dev.py", "stop", "--runtime-dir", "${workspaceFolder}/data/local-desktop"],
+        "args": ["-B", "${workspaceFolder}/local/ags_scripts/windows-dev.py", "stop", "--runtime-dir", "${workspaceFolder}/data/local-desktop"],
         "options": { "cwd": "${workspaceFolder}" },
         "problemMatcher": []
       }

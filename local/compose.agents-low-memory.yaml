@@ -1,4 +1,4 @@
-# Add after compose.gpu.yaml on a constrained local GPU host.
+# Add after local/compose.gpu.yaml on a constrained local GPU host.
 services:
   api:
     environment:

@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 BASE = os.getenv('AEGIS_SMOKE_URL', 'http://127.0.0.1:3000')
+os.environ.setdefault('COMPOSE_FILE', 'local/compose.yaml')
 cookies = http.cookiejar.CookieJar()
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
 csrf = ''
@@ -71,7 +72,8 @@ while True:
         time.sleep(1)
 assert status['setup_required']
 request('/documents', expected=401)
-values = dict(line.split('=', 1) for line in Path('.env').read_text().splitlines() if '=' in line and not line.startswith('#'))
+env_file = Path(os.getenv('AEGIS_SMOKE_ENV_FILE', '.env'))
+values = dict(line.split('=', 1) for line in env_file.read_text().splitlines() if '=' in line and not line.startswith('#'))
 password = os.getenv('AEGIS_SMOKE_PASSWORD') or 'Smoke-test-only-' + uuid.uuid4().hex
 request('/auth/setup', {'username': 'smoke', 'password': password, 'bootstrap_token': 'wrong'}, expected=403)
 request('/auth/setup', {'username': 'smoke', 'password': password, 'bootstrap_token': values['AEGIS_BOOTSTRAP_TOKEN']})
@@ -106,11 +108,11 @@ assert {m['model_id'] for m in mapped['mappings']} == {fast['id'], careful['id']
 # The queued job must survive a stopped worker, proving it is not an in-process background task.
 use_docker = os.getenv('AEGIS_SMOKE_NO_DOCKER') != 'true'
 if use_docker:
-    subprocess.run(['docker', 'compose', 'stop', 'worker'], check=True)
+    subprocess.run(['docker', 'compose', '--project-directory', '.', 'stop', 'worker'], check=True)
 first = upload(kb['id'], 'evidence.txt', 'Aegis launch code is COBALT. The invoice total is 420 USD. This document is public test data.')
 second = upload(other['id'], 'other.txt', 'A separate project secret phrase is MAGENTA. It must not leak into a scoped answer.')
 if use_docker:
-    subprocess.run(['docker', 'compose', 'start', 'worker'], check=True)
+    subprocess.run(['docker', 'compose', '--project-directory', '.', 'start', 'worker'], check=True)
 for result in (first, second):
     await_job(result['jobs'][0]['id'])
 doc = first['documents'][0]

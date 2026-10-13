@@ -44,7 +44,7 @@ and is not required for Oracle Kubernetes deployment.
 From the configured live project directory (`Aegis` on this laptop), run:
 
 ```powershell
-docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.oracle-client.yaml up -d --no-deps --wait --wait-timeout 300 oracle
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml -f local/compose.oracle-client.yaml up -d --no-deps --wait --wait-timeout 300 oracle
 ```
 
 This only targets the database and preserves the running Ollama hardware mode
@@ -55,10 +55,10 @@ For a full GPU stack startup with laptop database access, include both optional
 overrides:
 
 ```powershell
-docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.gpu.yaml -f compose.oracle-client.yaml up -d --wait
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml -f local/compose.gpu.yaml -f local/compose.oracle-client.yaml up -d --wait
 ```
 
-On a CPU-only machine omit `compose.gpu.yaml`. Starting/recreating the database
+On a CPU-only machine omit `local/compose.gpu.yaml`. Starting/recreating the database
 with only the base Compose configuration removes laptop port access; reapply the
 client override to enable it. No host port publishing is added to the Kubernetes
 manifests.
@@ -66,7 +66,7 @@ manifests.
 To disable laptop database access while preserving data:
 
 ```powershell
-docker compose --env-file .env.oracle -f compose.oracle.yaml up -d --no-deps --wait --wait-timeout 300 oracle
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml up -d --no-deps --wait --wait-timeout 300 oracle
 ```
 
 Verified locally on 2026-10-10 using the SQLcl bundled with Oracle's VS Code

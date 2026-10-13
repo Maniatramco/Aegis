@@ -89,6 +89,6 @@ For OCI-to-local, plan with `--to local` and confirm `local-content-volume`. Exi
 
 ## Optional config-file deployment
 
-The repository's `compose.oci-profile.yaml` adds a read-only `${AEGIS_OCI_PROFILE_DIR}:/run/oci` mount for API and worker. Use it alongside the normal Compose file. Set `OCI_CONFIG_FILE=/run/oci/config`; the profile's `key_file` should point to `/run/oci/private_key.pem`. Both files must be readable by the backend's UID 10001 using appropriate ownership and restrictive permissions. Do not make private keys world-readable or bake them into images.
+The repository's `local/compose.oci-profile.yaml` adds a read-only `${AEGIS_OCI_PROFILE_DIR}:/run/oci` mount for API and worker. Use it alongside the normal Compose file. Set `OCI_CONFIG_FILE=/run/oci/config`; the profile's `key_file` should point to `/run/oci/private_key.pem`. Both files must be readable by the backend's UID 10001 using appropriate ownership and restrictive permissions. Do not make private keys world-readable or bake them into images.
 
 Alternatively set server-side `OCI_AUTH_MODE=instance_principal` or `resource_principal` in a supported OCI runtime with appropriately scoped identity. This adapter does not claim that arbitrary OKE workload identity is automatically covered by those modes. OCI model authentication has separate `oci_auth_mode` settings and its own supported signers. See [provider readiness](OCI_READINESS.md).

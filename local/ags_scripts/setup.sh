@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 set -eu
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 if [ -e .env ]; then
   printf '%s\n' '.env already exists; leaving your configuration untouched.'
   exit 0
@@ -9,7 +9,7 @@ umask 077
 python3 - <<'PY'
 import base64, secrets
 from pathlib import Path
-text = Path('.env.example').read_text()
+text = Path('local/.env.example').read_text()
 for name, value in {
     'CHANGE_ME_MASTER_KEY': base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
     'CHANGE_ME_SESSION_SECRET': secrets.token_urlsafe(48),

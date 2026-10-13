@@ -29,7 +29,7 @@ Local paths refer to the API/worker's mounted server root. On this Docker instal
 
 OCI configuration includes namespace, bucket, region, prefix, authentication mode, profile, config path and private-key path. The current destination is `bmyljaecivrj / mk-aegis`, region `ap-mumbai-1`, prefix `aegis`.
 
-The deployment overlay `compose.oci-storage.yaml` installs the OCI SDK and mounts existing credential files read-only:
+The deployment overlay `local/compose.oci-storage.yaml` installs the OCI SDK and mounts existing credential files read-only:
 
 | Host file | Server path |
 | --- | --- |
@@ -41,7 +41,7 @@ The deployment overlay `compose.oci-storage.yaml` installs the OCI SDK and mount
 Run the deployment with its OCI overlay:
 
 ```powershell
-docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.gpu.yaml -f compose.oracle-client.yaml -f compose.agents-low-memory.yaml -f compose.oci-storage.yaml up -d --build --wait
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml -f local/compose.gpu.yaml -f local/compose.oracle-client.yaml -f local/compose.agents-low-memory.yaml -f local/compose.oci-storage.yaml up -d --build --wait
 ```
 
 ## Existing files and revisions

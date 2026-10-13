@@ -6,7 +6,7 @@ Install the extra runtime and explicitly download the fixed model once:
 
 ```powershell
 .venv/Scripts/python.exe -m pip install -r ags_backend/requirements-reranker.lock
-.venv/Scripts/python.exe ags_scripts/setup-reranker.py --directory local-models/ms-marco-MiniLM-L6-v2
+.venv/Scripts/python.exe local/ags_scripts/setup-reranker.py --directory local-models/ms-marco-MiniLM-L6-v2
 $env:AEGIS_RERANKER='local'
 $env:AEGIS_RERANK_CANDIDATES='25'
 $env:AEGIS_RERANK_MODEL_DIR=(Resolve-Path local-models/ms-marco-MiniLM-L6-v2).Path

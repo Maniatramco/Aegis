@@ -118,10 +118,11 @@ def test_container_ollama_requires_explicit_host_approval(monkeypatch):
 
 
 def test_private_setup_preserves_existing_credentials(tmp_path):
-    location = Path(__file__).resolve().parents[2] / 'ags_scripts/setup_oracle.py'
+    location = Path(__file__).resolve().parents[2] / 'local/ags_scripts/setup_oracle.py'
     spec = importlib.util.spec_from_file_location('oracle_setup', location)
     setup = importlib.util.module_from_spec(spec); spec.loader.exec_module(setup)
-    (tmp_path / '.env.oracle.example').write_text((location.parents[1] / '.env.oracle.example').read_text())
+    (tmp_path / 'local').mkdir()
+    (tmp_path / 'local/.env.oracle.example').write_text((location.parents[2] / 'local/.env.oracle.example').read_text())
     assert setup.prepare(tmp_path)
     files = [tmp_path / '.env.oracle', *(tmp_path / 'secrets/oracle' / name for name in ('admin-password', 'app-password', 'test-password'))]
     original = [path.read_bytes() for path in files]

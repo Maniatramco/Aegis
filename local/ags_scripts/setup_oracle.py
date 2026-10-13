@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import secrets
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def prepare(root, env_file='.env.oracle', secret_dir='secrets/oracle', port=3003):
@@ -47,7 +47,7 @@ def prepare(root, env_file='.env.oracle', secret_dir='secrets/oracle', port=3003
             # files let the non-root API/Oracle users read their mounted secret.
             os.chmod(path, 0o600 if os.name == 'nt' else 0o444)
             handle.write('Ag1_' + secrets.token_hex(24) + '\n')
-    source = (root / '.env.oracle.example').read_text(encoding='utf-8')
+    source = (root / 'local/.env.oracle.example').read_text(encoding='utf-8')
     source = source.replace('CHANGE_ME_MASTER_KEY', base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
     source = source.replace('CHANGE_ME_BOOTSTRAP_TOKEN', secrets.token_urlsafe(32))
     source = source.replace('AEGIS_PORT=3003', f'AEGIS_PORT={port}')

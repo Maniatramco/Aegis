@@ -1,5 +1,5 @@
 # Optional private OCI signing profile mounted read-only; never put it in this repository.
-# Use: docker compose -f compose.yaml -f compose.oci-profile.yaml up --build -d
+# Use: docker compose --project-directory . -f local/compose.yaml -f local/compose.oci-profile.yaml up --build -d
 # OCI config's key_file path must be /run/oci/private_key.pem.
 services:
   api:

@@ -14,23 +14,26 @@ local or OCI file storage, database and vector knowledge destinations.
 | `ags_frontend/ags_tests/` | Unit tests and Playwright browser scenarios |
 | `ags_database/` | Oracle schema, generated DDL, migrations and SQL queries |
 | `ags_deploy/` | Kubernetes manifests and deployment preparation |
-| `ags_scripts/` | Setup, development, backup, restore and operational utilities |
+| `ags_scripts/` | Backup, restore, migration and shared verification utilities |
 | `ags_scripts/ags_qa/` | Manual benchmarks and recorded verification helpers |
 | `ags_docs/` | Architecture, configuration, runbooks and historical verification |
+| `local/` | Laptop Compose configurations, templates, VS Code workspace and launch helpers |
 
-Compose files stay at the root. Runtime data, credentials, model weights and
-generated verification output are ignored by Git.
+Laptop Compose files, environment templates, the VS Code workspace and launch
+helpers live in [local](local/README.md). Runtime data, credentials, model weights
+and generated verification output are ignored by Git.
 
 Frontend `public` contains only the three production images. The editable Agent
 logo master is kept with design documentation. Retired artwork, session-specific
-probes and historical generated proof have local copies under ignored
-`ags_runtime/ags_archive/`; previous source versions remain in Git history.
+probes and previous source versions remain in Git history. Obsolete local files
+are collected under ignored `ags_runtime/delete/` for manual deletion.
 
 Custom source folders use `ags_` prefixes. Next.js `app`, `public` and URL route
 folders, `.github/workflows` and dependency/cache directories retain their required
-names. New screenshots go under ignored `ags_runtime/ags_screenshots`; existing
-local data, credentials, caches and historical evidence stay in their original
-locations. This reorganization does not change saved storage references.
+names. The requested `local/` folder groups laptop tools. New screenshots go
+under ignored `ags_runtime/ags_screenshots`; existing data, credentials and model
+destinations keep their original paths. This reorganization does not change saved
+storage references.
 
 ## Component branches and integration
 
@@ -73,8 +76,8 @@ secret generation. Windows users can run shell setup in WSL or follow
 ```sh
 git clone https://github.com/Maniatramco/Aegis.git
 cd Aegis
-./ags_scripts/setup.sh
-docker compose up --build -d
+./local/ags_scripts/setup.sh
+docker compose --project-directory . --env-file .env -f local/compose.yaml up --build -d
 ```
 
 Open **http://localhost:3000**. Read `AEGIS_BOOTSTRAP_TOKEN` from your private `.env`
@@ -131,7 +134,7 @@ python3 -m venv .venv
 pip install -r ags_backend/requirements-dev.txt
 (cd ags_backend && pytest -q)
 (cd ags_frontend && npm ci && npm run test:unit && npm run typecheck && npm run build)
-./ags_scripts/local-smoke.sh
+./local/ags_scripts/local-smoke.sh
 ```
 
 CI runs backend tests, all frontend unit tests, type checking/build, a real CPU
@@ -142,7 +145,7 @@ revision passes; consult current CI results.
 
 ## Operations and deployment
 
-Use `docker compose stop` and `docker compose start` with the same configuration
+Use `docker compose --project-directory . stop` and `docker compose --project-directory . start` with the same configuration
 arguments to preserve data. The [backup runbook](ags_docs/BACKUP_RESTORE.md) covers
 consistent backups and explicit destructive restore. Keep volumes when stopping
 an installation you intend to retain.

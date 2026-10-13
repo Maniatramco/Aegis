@@ -1,7 +1,7 @@
 // Local development server without an extra CLI worker process.
 const path = require('node:path');
 const http = require('node:http');
-const frontend = path.resolve(__dirname, '../ags_frontend');
+const frontend = path.resolve(__dirname, '../../ags_frontend');
 process.env.AEGIS_IN_PROCESS_WEB = 'true';
 const next = require(path.join(frontend, 'node_modules/next'));
 const port = Number(process.argv[2] || 3000);

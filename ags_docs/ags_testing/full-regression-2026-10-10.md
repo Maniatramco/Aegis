@@ -112,7 +112,7 @@ reranker is disabled in the running app and was not enabled for this test.
 To repeat the Linux backend suite from the prepared project (Docker running):
 
 ```powershell
-docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.oracle-client.yaml --profile test run --build --rm --no-deps -e DATABASE_PROVIDER=sqlite oracle-test python -m pytest ags_backend/ags_tests -q --tb=short -rs
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml -f local/compose.oracle-client.yaml --profile test run --build --rm --no-deps -e DATABASE_PROVIDER=sqlite oracle-test python -m pytest ags_backend/ags_tests -q --tb=short -rs
 ```
 
 This uses isolated fixture databases. The separate Oracle integration command is

@@ -11,7 +11,7 @@ remain in their dedicated specs; detailed streaming, attachment and selection
 contracts remain in frontend unit tests and backend integration tests.
 
 Browser tests use the real API, worker, storage and authorization with an explicitly
-scripted mock model in `ags_backend/ags_tests/browser_app.py`. `compose.test.yaml` enables
+scripted mock model in `ags_backend/ags_tests/browser_app.py`. `local/compose.test.yaml` enables
 that fixture only for an isolated mock deployment. It refuses real model providers.
 These tests measure application behavior, not AI answer accuracy or live OCI access.
 Earlier sections below describe historical checks and may reference retired specs.
@@ -54,7 +54,7 @@ python3 -m venv .venv
 pip install -r ags_backend/requirements-dev.txt
 (cd ags_backend && pytest -q)
 (cd ags_frontend && npm ci && npm run typecheck && npm run build && npm audit)
-./ags_scripts/local-smoke.sh
+./local/ags_scripts/local-smoke.sh
 ```
 
 The CI workflow adds real container services, default-image CPU inference and Playwright UI tests. See the linked completed run for evidence; local mock tests alone do not substitute for these checks.

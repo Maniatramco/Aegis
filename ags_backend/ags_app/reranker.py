@@ -39,7 +39,7 @@ def verify_assets(directory):
             for block in iter(lambda:source.read(1024*1024),b''):digest.update(block)
         data=(directory/'tokenizer.json').read_bytes()
     except OSError as exc:
-        raise RerankerError('Local reranker files are missing. Run ags_scripts/setup-reranker.py before enabling reranking.') from exc
+        raise RerankerError('Local reranker files are missing. Run local/ags_scripts/setup-reranker.py before enabling reranking.') from exc
     blob=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
     if digest.hexdigest()!=MODEL_SHA256 or blob!=TOKENIZER_BLOB:
         raise RerankerError('Local reranker files failed integrity validation. Download the pinned model again.')

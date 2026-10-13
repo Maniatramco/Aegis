@@ -46,7 +46,7 @@ jobs:
     timeout-minutes: 25
     env:
       AEGIS_SMOKE_PASSWORD: Aegis-CI-only-disposable-password
-      COMPOSE_FILE: compose.yaml:compose.test.yaml
+      COMPOSE_FILE: local/compose.yaml:local/compose.test.yaml
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,15 +54,15 @@ jobs:
           python-version: '3.12'
       - name: Create isolated test configuration
         run: |
-          ./ags_scripts/setup.sh
+          ./local/ags_scripts/setup.sh
           cat >> .env <<'CONFIG'
           MODEL_PROVIDER=mock
           EMBEDDING_PROVIDER=mock
           AEGIS_ALLOW_MOCK=true
           INSTALL_LOCAL_EMBEDDINGS=false
           CONFIG
-      - run: docker compose config --quiet
-      - run: docker compose up --build -d --wait --wait-timeout 180
+      - run: docker compose --project-directory . config --quiet
+      - run: docker compose --project-directory . up --build -d --wait --wait-timeout 180
       - name: Exercise durable document workflows
         id: smoke
         run: python ags_scripts/smoke.py
@@ -93,7 +93,7 @@ jobs:
           retention-days: 14
       - name: Show diagnostics on failure
         if: failure()
-        run: docker compose logs --no-color --tail=150
+        run: docker compose --project-directory . logs --no-color --tail=150
       - name: Shut down ephemeral deployment
         if: always()
-        run: docker compose down -v
+        run: docker compose --project-directory . down -v

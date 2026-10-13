@@ -2,8 +2,8 @@
 # Development integration check, uses isolated SQLite/file search and explicit mock providers.
 # Docker/PostgreSQL/Qdrant and browser interactions are verified separately in CI.
 set -eu
-cd "$(dirname "$0")/.."
-./ags_scripts/setup.sh
+cd "$(dirname "$0")/../.."
+./local/ags_scripts/setup.sh
 set -a
 . ./.env
 set +a

@@ -1,8 +1,8 @@
-"""Local Windows adapter for Aegis ags_scripts/local-smoke.sh. No external model calls."""
+"""Local Windows adapter for Aegis local/ags_scripts/local-smoke.sh. No external model calls."""
 import argparse, base64, json, os, secrets, shutil, socket, subprocess, time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument('action', choices=['start', 'stop'])
 parser.add_argument('--mock', action='store_true')
@@ -39,7 +39,7 @@ for port in (args.web_port, args.api_port):
             raise SystemExit(f'Port {port} already in use; existing service preserved.')
 envpath = REPO / '.env'
 if not envpath.exists():
-    text = (REPO / '.env.example').read_text()
+    text = (REPO / 'local/.env.example').read_text()
     for key, value in {
         'CHANGE_ME_MASTER_KEY': base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
         'CHANGE_ME_SESSION_SECRET': secrets.token_urlsafe(48),
@@ -111,7 +111,7 @@ if not args.mock:
 commands = [
     ('api', [py, '-m', 'uvicorn', 'ags_app.main:app', '--host', '127.0.0.1', '--port', str(args.api_port)], REPO),
     ('worker', [py, '-m', 'ags_app.worker'], REPO),
-    ('web', [node, str(REPO / 'ags_scripts/local-web.cjs'), str(args.web_port)], REPO / 'ags_frontend'),
+    ('web', [node, str(REPO / 'local/ags_scripts/local-web.cjs'), str(args.web_port)], REPO / 'ags_frontend'),
 ]
 for name, command, cwd in commands:
     launch(name,command,cwd,env)

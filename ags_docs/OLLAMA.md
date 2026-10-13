@@ -61,7 +61,7 @@ python -m venv .venv
 cd ags_frontend
 npm ci
 cd ..
-.\.venv\Scripts\python.exe ags_scripts/windows-dev.py start
+.\.venv\Scripts\python.exe local/ags_scripts/windows-dev.py start
 ```
 
 The launcher generates private `.env` secrets only if that file does not exist.
@@ -92,7 +92,7 @@ Do not sign in to Ollama Cloud or enable cloud features for this workflow.
 Stop the app (data is preserved):
 
 ```powershell
-.\.venv\Scripts\python.exe ags_scripts/windows-dev.py stop
+.\.venv\Scripts\python.exe local/ags_scripts/windows-dev.py stop
 ```
 
 Stop the dedicated Ollama terminal with Ctrl+C. Default app data/logs and PID
@@ -129,6 +129,6 @@ Temporary chat keeps message history only in the current browser tab and passes 
 
 ### Native Windows daemon isolation
 
-`ags_scripts/windows-dev.py start` owns a separate portable Ollama daemon on `127.0.0.1:11435`, using the existing sibling `.local-tools/ollama-models` store. The installed Ollama desktop app and its default port/store remain untouched. Override executable/model paths with `--ollama-executable` and `--ollama-models` when needed. The launcher verifies required models, disables cloud use, runs one model at a time and records exact child command lines for guarded shutdown. `stop` preserves all model files and app data. Restart through the same wrapper to retain the original runtime directory.
+`local/ags_scripts/windows-dev.py start` owns a separate portable Ollama daemon on `127.0.0.1:11435`, using the existing sibling `.local-tools/ollama-models` store. The installed Ollama desktop app and its default port/store remain untouched. Override executable/model paths with `--ollama-executable` and `--ollama-models` when needed. The launcher verifies required models, disables cloud use, runs one model at a time and records exact child command lines for guarded shutdown. `stop` preserves all model files and app data. Restart through the same wrapper to retain the original runtime directory.
 
 Standalone/default deployments still use loopback11434. The backend-only `AEGIS_OLLAMA_PORT` permits only11434 or11435; arbitrary hosts/URLs are not accepted. For opt-in real tests against the native launcher, set `AEGIS_OLLAMA_PORT=11435`.

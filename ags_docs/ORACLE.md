@@ -40,7 +40,7 @@ These synthetic checks do not establish accuracy for every document or workload.
 Install Docker Desktop and enable Linux containers. From the repository root:
 
 ```powershell
-./ags_scripts/start-oracle.ps1
+./local/ags_scripts/start-oracle.ps1
 ```
 
 The script generates `.env.oracle` and three private password files under
@@ -53,7 +53,7 @@ The Oracle database, Qdrant, and Ollama ports are not published.
 On Linux/macOS:
 
 ```sh
-sh ags_scripts/start-oracle.sh
+sh local/ags_scripts/start-oracle.sh
 ```
 
 Oracle Free limits database processing to two CPU cores, database memory to 2 GB,
@@ -67,7 +67,7 @@ documents. Startup selects an accessible NVIDIA GPU automatically, or uses CPU.
 After the containers are healthy:
 
 ```powershell
-./ags_scripts/create-colleague.ps1 -Username colleague-name
+./local/ags_scripts/create-colleague.ps1 -Username colleague-name
 ```
 
 Enter the password privately when prompted (12–200 characters). Give the username
@@ -80,7 +80,7 @@ The app always opens the username/password sign-in screen, including on a new
 installation. Alternatively, choose **Set up your first account** to open the
 separate setup form, using the bootstrap token from your private `.env.oracle`.
 The setup link is available only while the database has no accounts. Linux/macOS operators
-can use `bash ags_scripts/create-colleague.sh`; it reads credentials privately and pipes
+can use `bash local/ags_scripts/create-colleague.sh`; it reads credentials privately and pipes
 them directly into the API container, without storing them in a shared file.
 There is no per-role permission system: these accounts use Aegis's existing
 workspace behavior. Documents, conversations and templates are owned per account;
@@ -114,7 +114,7 @@ not a speed guarantee. A 4,096-token extraction limit can reject
 the schema plus a single resume before inference. The output budget also covers
 field evidence, not only the extracted data.
 
-`./ags_scripts/start-oracle.ps1` defaults to `-Hardware Auto`: it probes GPU access
+`./local/ags_scripts/start-oracle.ps1` defaults to `-Hardware Auto`: it probes GPU access
 inside the pinned Ollama container image, chooses the NVIDIA override only when
 that succeeds, and otherwise starts CPU without requiring GPU tooling. If GPU
 startup subsequently fails in Auto, it retries the CPU configuration with the
@@ -135,8 +135,8 @@ For an already configured stack, without rerunning setup or replacing volumes:
 For an already configured stack, without rerunning setup or replacing volumes:
 
 ```powershell
-docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.gpu.yaml up -d --no-deps ollama
-docker compose --env-file .env.oracle -f compose.oracle.yaml -f compose.gpu.yaml exec ollama ollama ps
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml -f local/compose.gpu.yaml up -d --no-deps ollama
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml -f local/compose.gpu.yaml exec ollama ollama ps
 ```
 
 Use the same two Compose files for later startup commands so Ollama keeps its
@@ -145,7 +145,7 @@ The base configuration still supports CPU machines. This follows the official
 [Docker Compose GPU guide](https://docs.docker.com/compose/how-tos/gpu-support/)
 and [Ollama Docker guide](https://docs.ollama.com/docker).
 
-Run `./ags_scripts/test-model-hardware.ps1` for selection/fallback regression checks.
+Run `./local/ags_scripts/test-model-hardware.ps1` for selection/fallback regression checks.
 Kubernetes uses the same containers with deployment-specific environment and
 storage configuration; see [Oracle Kubernetes preparation](KUBERNETES.md).
 
@@ -191,10 +191,10 @@ for broader/shared deployment; do not publish the Oracle listener.
 ## Operate without deleting data
 
 ```sh
-docker compose --env-file .env.oracle -f compose.oracle.yaml ps
-docker compose --env-file .env.oracle -f compose.oracle.yaml logs --tail=100 api worker
-docker compose --env-file .env.oracle -f compose.oracle.yaml stop
-docker compose --env-file .env.oracle -f compose.oracle.yaml start
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml ps
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml logs --tail=100 api worker
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml stop
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml start
 ```
 
 Rerunning setup preserves existing credentials. Keep Oracle data and application
@@ -214,7 +214,7 @@ PYTHONPATH=ags_backend pytest ags_backend/ags_tests/test_oracle_database.py -q
 Run the container check using the dedicated `AEGIS_TEST` database schema:
 
 ```sh
-docker compose --env-file .env.oracle -f compose.oracle.yaml --profile test run --rm --build oracle-test
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml --profile test run --rm --build oracle-test
 ```
 
 This starts a short-lived test container in addition to the six application
@@ -223,7 +223,7 @@ services. It has its own password and schema; application records are untouched.
 After the startup script has downloaded the models, verify actual local inference:
 
 ```sh
-docker compose --env-file .env.oracle -f compose.oracle.yaml --profile test run --rm --build oracle-test python ags_scripts/oracle_check.py --real-models
+docker compose --project-directory . --env-file .env.oracle -f local/compose.oracle.yaml --profile test run --rm --build oracle-test python ags_scripts/oracle_check.py --real-models
 ```
 
 This uses the dedicated test schema with real Qwen3, Nomic embeddings, and Qdrant.

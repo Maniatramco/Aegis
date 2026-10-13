@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'ags_backend'))
+sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'ags_backend'))
 from ags_app.reranker import MODEL_ID, REVISION, verify_assets
 
 def main():

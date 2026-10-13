@@ -1,4 +1,4 @@
-# Optional NVIDIA acceleration; combine with compose.oracle.yaml or compose.yaml.
+# Optional NVIDIA acceleration; combine with local/compose.oracle.yaml or local/compose.yaml.
 # The base Compose files remain usable on machines without a supported GPU.
 services:
   ollama:

@@ -46,7 +46,7 @@ The initial full browser flow ran in the CPU-only Ollama container. The host has
 an RTX 3050 6 GB GPU. A disposable probe using the same pinned Ollama image passed
 with Docker's NVIDIA device allocation; host inventory alone was not used as proof.
 
-Executed `ags_scripts/start-oracle.ps1 -Hardware Auto`: existing private credentials
+Executed `local/ags_scripts/start-oracle.ps1 -Hardware Auto`: existing private credentials
 were preserved, GPU was selected by the container probe, the stack became healthy,
 models were present/pulled, and real JSON-generation/embedding smoke checks passed.
 Ollama reported **2,874,062,929 bytes** of model GPU offload. Startup smoke timings:
