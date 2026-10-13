@@ -42,9 +42,9 @@ mounts with your private deployment backups.
 
 ## Onboard and use a dataset
 
-1. Register Embedding, Chat and Extraction models in **Model → Model Registration**.
+1. Register Embedding, Chat and Extraction models in **Manage workspace → Model Registration**.
 2. Create a dataset in **Onboard → Dataset**, then assign its three roles in
-   **Model → Model Mapping**.
+   **Manage workspace → Model Mapping**.
 3. Upload a JSON-schema prompt in **Onboard → Prompt** and documents into the
    dataset. Indexing must finish before retrieval or extraction.
 4. Ask questions in **Aegis Agent**, or use `@Onboard`, `@Upload`, `@Extract` and

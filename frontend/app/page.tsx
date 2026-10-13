@@ -479,7 +479,7 @@ export default function App() {
     if(destination==="Review")setReviewRouteId(reviewId);
     window.location.hash = encodeURIComponent(destination==="Review"&&reviewId?`Review/${reviewId}`:destination==="Extract"&&reviewSection==="Create"?"Review/create":viewRoute(destination));
     setView(destination);
-    if (!["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extract Data", "Review", "Extraction Review", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(name)) setAdminNavigation(true);
+    if (!["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extract Data", "Review", "Extraction Review", "Re-extract", "Prompt templates"].includes(name)) setAdminNavigation(true);
     setDatasetModelsFocus(false);
     setError("");
     setMobile(false);
@@ -552,7 +552,7 @@ export default function App() {
       if(next === "Review")setReviewRouteId("");
       setView(next);
       if(next==="Aegis agent V2")window.history.replaceState(null,"","#"+encodeURIComponent(viewLabel(next)));
-      if (!["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extract Data", "Review", "Extraction Review", "Re-extract", "Prompt templates", "Model Registration", "Model Mapping"].includes(next)) setAdminNavigation(true);
+      if (!["Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extract Data", "Review", "Extraction Review", "Re-extract", "Prompt templates"].includes(next)) setAdminNavigation(true);
     }
     setMobile(false);
     setError("");

@@ -6,8 +6,8 @@ import {AgentLogo} from './agent-logo';
 type Item={name:string;icon:typeof Database};
 export function WorkspaceNavigation({view,isAdmin,onNavigate,adminItems,adminOpen,onAdminToggle}:{view:string;isAdmin:boolean;onNavigate:(name:any)=>void;adminItems:Item[];adminOpen:boolean;onAdminToggle:()=>void}){
  const onboardViews=['Datasets','Prompt templates','Extract','Extract Data','Review'],modelViews=['Model Registration','Model Mapping'];
- const [onboardOpen,setOnboardOpen]=useState(onboardViews.includes(view)),[modelOpen,setModelOpen]=useState(modelViews.includes(view));
- useEffect(()=>{if(onboardViews.includes(view))setOnboardOpen(true);if(modelViews.includes(view))setModelOpen(true);},[view]);
+ const [onboardOpen,setOnboardOpen]=useState(onboardViews.includes(view));
+ useEffect(()=>{if(onboardViews.includes(view))setOnboardOpen(true);},[view]);
  const link=(name:string,label:string,Icon:typeof Database)=>{
   const selected=view===name||(name==='Extract'&&view==='Review');
   return <button key={name} className={`nav-item${selected?' selected':''}`} aria-label={label} title={label} aria-current={selected?'page':undefined} onClick={()=>onNavigate(name)}>{name==='Aegis agent V2'?<AgentLogo size={24}/>:<Icon size={18}/>}<span className="nav-item-label">{label}</span></button>;
@@ -19,9 +19,7 @@ export function WorkspaceNavigation({view,isAdmin,onNavigate,adminItems,adminOpe
   <div id="onboard-navigation" className="nav-submenu" hidden={!onboardOpen}>
    {link('Datasets','Dataset',BookOpen)}{link('Prompt templates','Prompt',FileText)}{link('Extract Data','Extract',Table2)}{link('Extract','Review',FileSearch)}
   </div>
-  {isAdmin&&<><button className={`nav-item nav-group-toggle${modelViews.includes(view)?' group-active':''}`} aria-label="Model" aria-expanded={modelOpen} aria-controls="model-navigation" onClick={()=>setModelOpen(!modelOpen)}><Layers size={18}/><span className="nav-item-label">Model</span><ChevronRight size={14} className={modelOpen?'rotated':''}/></button>
-  <div id="model-navigation" className="nav-submenu" hidden={!modelOpen}>{link('Model Registration','Model Reg',Layers)}{link('Model Mapping','Model Mapping',BookOpen)}</div></>}
-  <button className="nav-item nav-more" aria-label="Manage workspace" aria-expanded={adminOpen} aria-controls="admin-navigation" onClick={onAdminToggle}><Settings2 size={18}/><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminOpen?'rotated':''}/></button>
-  {adminOpen&&<div id="admin-navigation" className="admin-navigation">{adminItems.map(item=>link(item.name,item.name,item.icon))}</div>}
+  <button className={`nav-item nav-more${modelViews.includes(view)?' group-active':''}`} aria-label="Manage workspace" aria-expanded={adminOpen} aria-controls="admin-navigation" onClick={onAdminToggle}><Settings2 size={18}/><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminOpen?'rotated':''}/></button>
+  {adminOpen&&<div id="admin-navigation" className="admin-navigation">{isAdmin&&<>{link('Model Registration','Model Registration',Layers)}{link('Model Mapping','Model Mapping',BookOpen)}</>}{adminItems.map(item=>link(item.name,item.name,item.icon))}</div>}
  </nav>;
 }

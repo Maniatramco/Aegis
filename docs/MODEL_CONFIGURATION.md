@@ -1,6 +1,6 @@
 # Model registration and dataset mapping
 
-Use **Model Registration** to save each model's category, connection protocol,
+Open **Manage workspace → Model Registration** to save each model's category, connection protocol,
 endpoint, model or deployment ID, authentication, and timeout. Use **Model
 Mapping** to select the dataset's required **Embedding**, **Chat**, and
 **Extraction** models, then choose **Save & Apply**. Different datasets can reuse

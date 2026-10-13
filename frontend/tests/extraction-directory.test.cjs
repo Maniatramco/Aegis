@@ -52,12 +52,13 @@ test('extract actions keep review available while preventing a second run on a q
  assert.match(html,/aria-label="Review extraction queued-run"/);
  const review=html.match(/<button[^>]*aria-label="Review extraction queued-run"[^>]*>/)[0];assert.ok(!review.includes('disabled'));
 });
-test('grouped model navigation preserves existing admin-only visibility',()=>{
+test('Manage workspace model links preserve admin-only visibility',()=>{
  const {WorkspaceNavigation}=compile('workspace-navigation.tsx',{'./agent-logo':compile('agent-logo.tsx',{'./agent-logo.css':{}})});
- const props={view:'Extract',onNavigate(){},adminItems:[],adminOpen:false,onAdminToggle(){}};
+ const props={view:'Extract',onNavigate(){},adminItems:[],adminOpen:true,onAdminToggle(){}};
  const member=renderToStaticMarkup(React.createElement(WorkspaceNavigation,{...props,isAdmin:false})),admin=renderToStaticMarkup(React.createElement(WorkspaceNavigation,{...props,isAdmin:true}));
  for(const label of ['Home','Aegis Agent','Onboard','Dataset','Prompt','Extract'])assert.ok(member.includes('aria-label="'+label+'"'));
- assert.ok(!member.includes('aria-label="Model Reg"'));assert.ok(!member.includes('aria-label="Model Mapping"'));
- assert.ok(admin.includes('aria-label="Model Reg"'));assert.ok(admin.includes('aria-label="Model Mapping"'));
+ assert.ok(!member.includes('aria-label="Model Registration"'));assert.ok(!member.includes('aria-label="Model Mapping"'));
+ assert.ok(admin.includes('aria-label="Model Registration"'));assert.ok(admin.includes('aria-label="Model Mapping"'));
+ assert.ok(!admin.includes('aria-label="Model"'));assert.ok(!admin.includes('id="model-navigation"'));
  assert.ok(!admin.includes('aria-label="Re-extract"'));
 });
