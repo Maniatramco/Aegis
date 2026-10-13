@@ -25,3 +25,9 @@ Git history and the local `ags_runtime/ags_archive/ags_cleanup_2026_10_14/` arch
 Current regression checks are the automated backend/frontend suites described
 above. Current real-model checks include `python -m ags_app.agent_benchmark` and
 `python -m ags_app.ocr_smoke` in an explicitly selected test environment.
+
+The optional browser QA image supplies `NODE_PATH=/app/node_modules`. For native
+Node execution from this folder, set `NODE_PATH` to the absolute
+`ags_frontend/node_modules` path so retained runners resolve Playwright from the
+frontend's installed dependencies. Parsing and dependency resolution do not run
+live provider calls or submit workflows.
