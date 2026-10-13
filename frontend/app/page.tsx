@@ -492,8 +492,8 @@ export default function App() {
   const datasetEmbedding = selectedDataset?.active === false ? undefined : (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
   const datasetDocs = docs.filter(d => (d.dataset_id || d.kb_id) === kb);
   const changeDataset = (id: string) => {
-    if (id === kb) return;
     if(user)rememberAssistantDataset(sessionStorage,user.username,id);
+    if (id === kb) return;
     setKb(id);
     setTemplateId('');
     setDatasetModelsFocus(false);

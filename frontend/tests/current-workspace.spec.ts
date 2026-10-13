@@ -56,7 +56,11 @@ test('grouped navigation, route aliases and agent drawer work on desktop and mob
 
 test('dataset chat actions open Aegis Agent with the selected dataset',async({page})=>{
  const w=await setup(page);await uploadReady(page.request,w.headers,w.dataset,'agent-redirect.txt',source);await page.reload();
+ // A prior General chat choice must not override an explicit dataset handoff,
+ // including a dataset deep link resolved before the login request finishes.
+ await agent(page,'');
  await page.goto('/#'+encodeURIComponent('dataset/'+w.dataset.id));
+ await page.evaluate(key=>sessionStorage.setItem(key,''),`aegis-agent-v2:${process.env.AEGIS_SMOKE_USERNAME||'smoke'}-dataset`);await page.reload();
  await page.getByRole('button',{name:'Ask this dataset',exact:true}).click();
  await expect(page).toHaveURL(/#Aegis%20Agent$/);await expect(page.getByLabel('Agent dataset')).toHaveValue(w.dataset.id);
  await expect(page.getByLabel('Message Aegis Agent')).toBeVisible();await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
