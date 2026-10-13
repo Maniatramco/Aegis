@@ -17,7 +17,7 @@ Successful changes revoke all affected account sessions; other accounts keep the
 - **User1 and User2 passed real HTTPS browser login → password screen → cancelled form → logout**, through the active shared link. User administration remained inaccessible to them. Their passwords were not changed.
 - Desktop 1280×900 and mobile 390×844 screenshots were visually inspected. No browser JavaScript errors or mobile page overflow were observed.
 
-Final evidence is in `results/user-management-2026-10-10/`. Browser test scripts: `ags_frontend/ags_tests/user-management-live.js` and `ags_frontend/ags_tests/user-management-shared-live.js`. Credentials enter the runners through stdin and are excluded from reports/screenshots.
+Final evidence is in `results/user-management-2026-10-10/`. Browser test scripts: `ags_scripts/ags_qa/user-management-live.js` and `ags_scripts/ags_qa/user-management-shared-live.js`. Credentials enter the runners through stdin and are excluded from reports/screenshots.
 
 ## Runtime and limits
 

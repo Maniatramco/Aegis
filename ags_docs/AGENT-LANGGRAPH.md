@@ -159,7 +159,7 @@ are recorded separately in the implementation validation report.
 See [the observed results and limitations](ags_testing/AGENT-LANGGRAPH-VALIDATION.md).
 
 `ags_deploy/ags_docker/Dockerfile.agent-browser` is an opt-in QA image, not a required application
-service. `ags_frontend/ags_tests/agent-live-e2e.js` accepts credentials on stdin, uses the
+service. `ags_scripts/ags_qa/agent-live-e2e.js` accepts credentials on stdin, uses the
 fictional resume fixtures, and writes screenshots and a JSON report to `/results`.
 `python -m ags_app.agent_test_setup` explicitly provisions an isolated QA account and
 dataset; it is never run at startup. Its credential artifact is encrypted using

@@ -34,7 +34,7 @@ If a later forwarding session produces a different URL, update `AEGIS_PUBLIC_ORI
 
 ## Evidence
 
-`results/vscode-sharing-2026-10-10/forwarded-access.json` contains the actual 5-check report. The other files show the public port entry and review reached through HTTPS. No application responses were mocked. No customer results were edited. `ags_frontend/ags_tests/forwarded-access-live.js` is the repeatable browser runner; its private QA credentials arrive on stdin and are not saved in the report.
+`results/vscode-sharing-2026-10-10/forwarded-access.json` contains the actual 5-check report. The other files show the public port entry and review reached through HTTPS. No application responses were mocked. No customer results were edited. `ags_scripts/ags_qa/forwarded-access-live.js` is the repeatable browser runner; its private QA credentials arrive on stdin and are not saved in the report.
 
 ## Colleague accounts
 

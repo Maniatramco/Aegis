@@ -38,7 +38,7 @@ fictional PDFs, sent `upload`, then confirmed the upload.
   UI successfully saved 1,200 seconds and displayed its success notification.
 
 CPU result ID: `61f29a27-37eb-4fa8-a878-c778b0818c0e`.
-Screenshot: [CPU result review](cpu-resume-review.jpg).
+Screenshot: [CPU result review](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/cpu-resume-review.jpg).
 
 ## Hardware/startup verification
 

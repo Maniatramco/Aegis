@@ -68,9 +68,9 @@ reuse or overwrite the failed job's snapshot.
   smoke test 52.428 seconds. This is not a full-document benchmark.
 - After the final rebuild, restored the merged workflow, verified zero composer
   attachments and zero uploaded-document filters, reopened Review and switched sources.
-- [Completed Assistant workflow with an empty composer](assistant-workflow-complete.jpg)
-- [Merged result and source review](merged-resume-review.jpg)
-- [Context failure and recovery options](context-failure-options.jpg)
+- [Completed Assistant workflow with an empty composer](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/assistant-workflow-complete.jpg)
+- [Merged result and source review](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/merged-resume-review.jpg)
+- [Context failure and recovery options](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/context-failure-options.jpg)
 - [Reproducible merged test inputs](ags_fixtures/merged-resume-prompt.json)
 
 The existing single-candidate resume template was used in independent mode.

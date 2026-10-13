@@ -21,3 +21,7 @@ consent/error/recovery scenarios intercept named browser requests.
 `ags_runtime/ags_screenshots/`. Historical browser specs for the retired combined
 chat/extraction UI were replaced; their previous versions remain in Git history.
 Shared streaming/attachment/selection contracts remain covered by unit tests.
+
+Retained manual live browser tools are in `ags_scripts/ags_qa/`; this folder
+contains the automated suites and their fixtures. Runners that require removed
+Document Chat/temporary-chat or old Review controls were retired into Git history.

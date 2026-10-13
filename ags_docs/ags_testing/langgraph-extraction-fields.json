@@ -1,1 +1,0 @@
-{"extraction_id": "9dd182c7-999b-417b-ba0e-e1b07b9b50e7", "status": "ready", "profile_count": 3, "checks": [{"document": "01-arjun-rao-backend.pdf", "all_fields_equal": true}, {"document": "02-meera-iyer-devops.pdf", "all_fields_equal": true}, {"document": "03-nikhil-shah-data.pdf", "all_fields_equal": true}], "passed": true}

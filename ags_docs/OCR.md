@@ -92,7 +92,7 @@ vision model. Blank white pages need no model inference; wholly blank files fail
 
 `ags_backend/ags_tests/test_ocr.py` checks page selection, blank pages, strict response
 validation, disabled/nonvision models, merged scan handling, page caches,
-source retention, mixed PDFs and DOCX raster images. `ags_frontend/ags_tests/ocr-live.js`
+source retention, mixed PDFs and DOCX raster images. `ags_scripts/ags_qa/ocr-live.js`
 exercises actual Oracle/Qdrant/Ollama upload, extraction and review in a dedicated
 test schema. Its report includes timings and resume field differences; a passing
 fixture does not establish universal OCR accuracy.

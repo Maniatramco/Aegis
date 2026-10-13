@@ -26,8 +26,8 @@ normal graph. Uploading documents and running extraction still need confirmation
 - Composer cleared; submitted filename appeared in the chat; the template was
   found in the separate Prompt templates screen.
 
-[Browser report](prompt-only-langgraph-browser.json) ·
-[Browser screenshot](prompt-only-langgraph-confirmed.png)
+[Browser report](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/prompt-only-langgraph-browser.json) ·
+[Browser screenshot](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/prompt-only-langgraph-confirmed.png)
 
 This used a fictional QA template. Existing saved user templates/results were
 retained. The user's attached export was not accessible through the file surface;

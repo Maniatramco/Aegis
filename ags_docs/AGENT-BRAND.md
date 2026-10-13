@@ -4,13 +4,13 @@ The unified conversational workspace is named **Aegis Agent**. Its icon derives 
 
 Use `ags_frontend/app/agent-logo.tsx` for the agent navigation icon (24px), page title (28px), reply identity (24px) and welcome screen (64px). Decorative instances have empty alt text; standalone instances have an accessible label. The approved blue and white workflow standard remains in `WORKFLOW-DESIGN.md`.
 
-The canonical route is `#Aegis%20Agent`. Existing `#Aegis%20Assistant` bookmarks redirect to this route. The retained Document Chat route is separate.
+The canonical route is `#Aegis%20Agent`. Existing `#Aegis%20Assistant` and Document Chat bookmarks redirect to this route.
 
 The floating workspace shortcut uses the shared agent logo inside a blue and white circular button with a small chat badge. It is hidden on the Aegis Agent page itself. On other workspace pages it stays at the lower right, moves above Review save controls, and opens the canonical agent route through normal navigation so unsaved-edit protection remains active. Hover or keyboard focus reveals its Aegis Agent label. The shortcut does not imply a running workflow.
 
 ## Asset provenance
 
-Generated with the built-in image generation tool, transparent background, using `ags_frontend/public/aegis-logo.png` as the brand reference. Original output preserved at `ags_frontend/public/aegis-agent-logo-source-v2.png`; production asset is `ags_frontend/public/aegis-agent-logo-v2.webp` (256px, lossless with alpha). Version 1 source and asset are retained as earlier explorations.
+Generated with the built-in image generation tool, transparent background, using `ags_frontend/public/aegis-logo.png` as the brand reference. Original output preserved at `ags_docs/ags_design/ags_brand_assets/aegis-agent-logo-source-v2.png`; production asset is `ags_frontend/public/aegis-agent-logo-v2.webp` (256px, lossless with alpha). Earlier variants are retained in Git history and the local cleanup archive rather than shipped as public assets.
 
 Final prompt:
 

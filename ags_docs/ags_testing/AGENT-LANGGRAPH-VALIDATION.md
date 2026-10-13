@@ -85,16 +85,16 @@ Evidence files alongside this report retain the initial full browser outcome,
 final document/summary retests, CPU smoke and exact-field comparison. Screenshots
 show the completed Assistant, merged review, saved summary and document search.
 
-[Initial browser report](langgraph-browser-initial.json) ·
-[Document retest](langgraph-document-retest.json) ·
-[Saved-summary retest](langgraph-summary-retest.json) ·
-[CPU smoke](langgraph-cpu-smoke.json) ·
-[Exact-field comparison](langgraph-extraction-fields.json) ·
-[General answer](langgraph-general-answer.json)
+[Initial browser report](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-browser-initial.json) ·
+[Document retest](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-document-retest.json) ·
+[Saved-summary retest](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-summary-retest.json) ·
+[CPU smoke](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-cpu-smoke.json) ·
+[Exact-field comparison](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-extraction-fields.json) ·
+[General answer](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-general-answer.json)
 
-[Merged review screenshot](langgraph-merged-review.png) ·
-[Saved-summary screenshot](langgraph-saved-summary.png) ·
-[Document-search screenshot](langgraph-document-search.png)
+[Merged review screenshot](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-merged-review.png) ·
+[Saved-summary screenshot](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-saved-summary.png) ·
+[Document-search screenshot](../../ags_runtime/ags_archive/ags_cleanup_2026_10_14/ags_docs/ags_testing/langgraph-document-search.png)
 
 Verified extraction: `9dd182c7-999b-417b-ba0e-e1b07b9b50e7`, ready, version 1,
 three profiles. Merged file:

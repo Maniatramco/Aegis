@@ -49,6 +49,6 @@ There is no pre-change result for the twelve new questions, so their score canno
 - [Extended raw run](../../docs/testing/results/agent-accuracy-2026-10-12/current-extended-raw.json)
 - [Extended reviewed scoring](../../docs/testing/results/agent-accuracy-2026-10-12/current-extended-reviewed.json)
 - [Calculated comparison](../../docs/testing/results/agent-accuracy-2026-10-12/comparison.json)
-- [Extended runner](run_agent_accuracy.py) and [comparison/review script](summarize_agent_accuracy.py)
+- [Extended runner](../../ags_scripts/ags_qa/run_agent_accuracy.py) and [comparison/review script](../../ags_scripts/ags_qa/summarize_agent_accuracy.py)
 
 Current core dataset: `1a63bf15-92a8-4152-bc4f-6b29df798cea`. Its reviewed synthetic extraction is `3fc027a2-351d-4e68-a1b7-fed29d955209`. Decoy invoice dataset: `ca44a02a-7765-431e-a634-5d34811eee2c`. All fixtures and earlier revisions were retained.

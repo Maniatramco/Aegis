@@ -21,6 +21,11 @@ local or OCI file storage, database and vector knowledge destinations.
 Compose files stay at the root. Runtime data, credentials, model weights and
 generated verification output are ignored by Git.
 
+Frontend `public` contains only the three production images. The editable Agent
+logo master is kept with design documentation. Retired artwork, session-specific
+probes and historical generated proof have local copies under ignored
+`ags_runtime/ags_archive/`; previous source versions remain in Git history.
+
 Custom source folders use `ags_` prefixes. Next.js `app`, `public` and URL route
 folders, `.github/workflows` and dependency/cache directories retain their required
 names. New screenshots go under ignored `ags_runtime/ags_screenshots`; existing

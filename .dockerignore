@@ -11,3 +11,12 @@ data
 **/.venv
 **/__pycache__
 **/.pytest_cache
+ags_runtime
+output
+work
+local-models
+**/test-results
+**/playwright-report
+**/screenshots
+**/coverage
+*.log
