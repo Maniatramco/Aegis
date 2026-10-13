@@ -8,7 +8,7 @@ const {chromium,expect}=require('@playwright/test');const fs=require('node:fs');
  try{
   await page.goto('http://web:3000/');await page.locator('#login-username').fill(auth.username);await page.locator('#login-password').fill(auth.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await expect(page.locator('main h1').first()).toBeVisible();
-  for(const name of ['Home','Aegis Agent','Datasets','Document Chat','Extraction Review','Re-extract','Prompt templates','Model Registration','Model Mapping','Dashboard','Index inspector','Jobs & activity','Connections','Services & migration','API Documentation','Setup','Users & passwords']){
+  for(const name of ['Home','Aegis Agent','Datasets','Document Chat','Extraction Review','Re-extract','Prompt templates','Model Registration','Model Mapping','Dashboard','Jobs & activity','Connections','Services & migration','Users & passwords']){
    const nav=page.getByRole('navigation');const button=nav.getByRole('button',{name,exact:true});
    if(!await button.isVisible())await nav.getByRole('button',{name:'Manage workspace',exact:true}).click();
    await button.click();await expect(page.locator('main h1').first()).toBeVisible();

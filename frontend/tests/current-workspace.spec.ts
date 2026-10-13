@@ -31,6 +31,8 @@ async function extractionReady(page:Page,id:string){
 test('grouped navigation, route aliases and agent drawer work on desktop and mobile',async({page})=>{
  if(await page.getByLabel('Open navigation').isVisible())await page.getByLabel('Open navigation').click();
  const nav=page.getByRole('navigation',{name:'Workspace pages'});
+ await nav.getByRole('button',{name:'Manage workspace',exact:true}).click();
+ for(const name of ['Setup','API Documentation','ADP Documentation','Index inspector'])await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(0);
  await nav.getByRole('button',{name:'Onboard',exact:true}).click();
  expect(await page.locator('#onboard-navigation .nav-item').allTextContents()).toEqual(['Dataset','Prompt','Extract','Review']);
  await nav.getByRole('button',{name:'Aegis Agent',exact:true}).click();
@@ -38,6 +40,9 @@ test('grouped navigation, route aliases and agent drawer work on desktop and mob
  await expect(page.locator('.agent-shortcut')).toHaveCount(0);
  for(const [hash,title] of [['Datasets','Datasets'],['Prompt templates','Prompt templates'],['Extract Data','Extract'],['Review','Review'],['Model Registration','Model Registration'],['Model Mapping','Model Mapping'],['Home','Home']]){
   await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toHaveText(title);
+ }
+ for(const hash of ['Setup','API Documentation','ADP Documentation','Index inspector']){
+  await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toHaveText('Home');await expect(page).toHaveURL(/#Home$/);
  }
  await page.setViewportSize({width:390,height:844});await agent(page,'');await page.getByLabel('Open navigation').click();
  await expect(nav).toBeVisible();await nav.getByRole('button',{name:'Home',exact:true}).click();await expect(page.locator('.sidebar')).not.toHaveClass(/open/);

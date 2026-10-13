@@ -25,7 +25,6 @@ import "./agent-shortcut.css";
 import { rememberAssistantDataset } from "./agent-prompt-selection";
 import {prepareFreshLoginChat} from './chat-login-session';
 import { fetchWithSessionCsrf } from "./session-request";
-import { ApiDocumentation } from "./api-documentation";
 import { TemporaryDocumentChat } from "./temporary-document-chat";
 import { readPromptUpload, type PromptUpload } from "./prompt-upload";
 import {
@@ -39,10 +38,8 @@ import {
   ChevronRight,
   Cloud,
   HardDrive,
-  Cog,
   Copy,
   Database,
-  FileJson,
   FileSearch,
   FileText,
   FolderPlus,
@@ -85,16 +82,13 @@ type View =
   | "Review"
   | "Re-extract"
   | "Prompt templates"
-  | "Index inspector"
   | "Jobs & activity"
   | "Connections"
   | "Storage"
   | "Model Registration"
   | "Model Mapping"
   | "Services & migration"
-  | "API Documentation"
-  | "Users & passwords"
-  | "Setup";
+  | "Users & passwords";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Home", icon: Database, group: "WORKSPACE" },
   { name: "Aegis agent V2", icon: Bot, group: "WORKSPACE" },
@@ -108,15 +102,12 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Extraction Review", icon: FileSearch },
   { name: "Re-extract", icon: RefreshCw },
   { name: "Prompt templates", icon: FileText },
-  { name: "Index inspector", icon: Layers, group: "OPERATIONS" },
   { name: "Jobs & activity", icon: Activity },
   { name: "Connections", icon: Settings2 },
   { name: "Storage", icon: HardDrive },
   { name: "Model Registration", icon: Layers },
   { name: "Model Mapping", icon: BookOpen },
   { name: "Services & migration", icon: Cloud },
-  { name: "API Documentation", icon: FileJson },
-  { name: "Setup", icon: Cog },
 ];
 // Keep saved route identifiers compatible while presenting the product names.
 const viewLabel = (name: View) => name === "Aegis agent V2" ? "Aegis Agent" : name === "Aegis Agent" ? "Document Chat" : name === "Extract" ? "Review" : name === "Extract Data" ? "Extract" : name;
@@ -136,8 +127,6 @@ const descriptions: Record<View, string> = {
   "Extraction Review": "Open saved extraction results to review values and source evidence.",
   "Prompt templates": "Describe what to find and choose the fields you need.",
   "Re-extract": "Find a document and choose how to extract it again.",
-  "Index inspector":
-    "Inspect document chunks and the retrieval layer behind your answers.",
   "Jobs & activity": "Follow processing work and resolve what needs attention.",
   Connections: "Manage shared model connections and deployment infrastructure.",
   Storage: "Configure files, database and knowledge storage in one place.",
@@ -145,8 +134,6 @@ const descriptions: Record<View, string> = {
   "Model Mapping": "Choose the three required models for each dataset.",
   "Services & migration":
     "A clear path from local deployment to your cloud environment.",
-  Setup: "Get your workspace ready, one deliberate step at a time.",
-  "API Documentation": "Learn the FastAPI endpoints behind Aegis, with requests, schemas, and workflow guides.",
   "Users & passwords": "Manage users, passwords, and dataset assignments.",
 };
 const byteSize = (n: number) =>
@@ -383,11 +370,6 @@ export default function App() {
   const onTemplateDirty = useCallback((dirty: boolean) => { templateDirty.current = dirty; }, []);
   const onReviewDirty = useCallback((dirty: boolean) => { reviewDirty.current = dirty; }, []);
   const [externalExtract, setExternalExtract] = useState(false);
-  const [indexDoc, setIndexDoc] = useState("");
-  const [indexData, setIndexData] = useState<Entity>({});
-  const [retrievalQuery, setRetrievalQuery] = useState("");
-  const [retrievalConsent, setRetrievalConsent] = useState(false);
-  const [retrievalResult, setRetrievalResult] = useState<Entity | null>(null);
   const [settingsForm, setSettingsForm] = useState<Entity>({});
   const [apiKey, setApiKey] = useState("");
   const [ociApiKey, setOciApiKey] = useState("");
@@ -518,7 +500,7 @@ export default function App() {
     };
   }, [user, refresh, api]);
   useEffect(()=>{
-    if(!user||!['Connections','Model Registration','Services & migration','Setup','Dashboard'].includes(view))return;
+    if(!user||!['Connections','Model Registration','Services & migration','Dashboard'].includes(view))return;
     let active=true;
     api('/capabilities').then(value=>{if(active)setCaps(value);}).catch(error=>{if(active)setError(error.message);});
     api('/settings/profiles').then(value=>{if(active)setProfiles(Array.isArray(value)?value:value.profiles||[]);}).catch(error=>{if(active)setError(error.message);});
@@ -645,6 +627,10 @@ export default function App() {
     reviewDirty.current = false; templateDirty.current = false;
     let route: string;
     try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Home"; }
+    if (["setup","api documentation","adp documentation","index inspector"].includes(route.toLowerCase())) {
+      route = "Home";
+      window.history.replaceState(null, "", "#Home");
+    }
     if (["review","review/list","review/create","extract","extract/create","extraction review","re-extract","aegis agent/extract","document chat/extract"].includes(route.toLowerCase())) {
       const create=route.toLowerCase().endsWith('/create')||route.toLowerCase().endsWith('/extract');
       setExtractionTab(create?"Create":"History");setView("Extract");
@@ -936,25 +922,6 @@ export default function App() {
       );
       reload();
     });
-  const inspect = () =>
-    run(async () => {
-      const data = await api(
-        `/index${indexDoc ? "?document_id=" + encodeURIComponent(indexDoc) : ""}`,
-      );
-      setIndexData({
-        ...data,
-        ...data.settings,
-        dimensions: data.documents?.[0]?.dimensions,
-        chunks: (data.documents || []).flatMap((d: Entity) =>
-          (d.chunks || []).map((c: Entity) => ({
-            ...c,
-            document_name: d.name,
-            document_id: d.id,
-            requires_reindex: d.requires_reindex,
-          })),
-        ),
-      });
-    });
   const readyCount = docs.filter((d) => d.status === "ready").length;
   const docSelection = (
     <div className="selection">
@@ -1076,7 +1043,7 @@ export default function App() {
           <span className="brand-name">Aegis</span>
         </div>
         <div className="brand-sub">AI Data Platform</div>
-        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["Home","Datasets","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity","Index inspector","Dashboard"].includes(s.name)))}/>
+        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["Home","Datasets","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity","Dashboard"].includes(s.name)))}/>
 
         <div className="nav-footer">
           <div className="row" style={{ marginBottom: 9 }}>
@@ -1140,7 +1107,7 @@ export default function App() {
             </div>
             <div className="row">
               {view==='Home'&&<DatasetSearch value={homeSearch} onChange={setHomeSearch}/>}
-              {view !== "API Documentation" && <button
+              <button
                 className={view === "Extract Data" ? "btn icon" : "btn"}
                 onClick={reload}
                 disabled={loading}
@@ -1152,7 +1119,7 @@ export default function App() {
                   className={loading ? "animate-spin" : ""}
                 />
                 {view !== "Extract Data" && <span>Refresh</span>}
-              </button>}
+              </button>
               {view === "Extract" && extractionTab !== "Create" && <button className="btn primary" onClick={()=>navigate('Extract','Create')}><Plus size={16}/>New extraction</button>}
               {view === "Dashboard" && (
                 <button
@@ -1378,10 +1345,10 @@ export default function App() {
                       icon: FileSearch,
                     },
                     {
-                      name: "Inspect the evidence",
-                      text: "See the chunks and configuration behind retrieval.",
-                      view: "Index inspector" as View,
-                      icon: Layers,
+                      name: "Review saved results",
+                      text: "Compare extracted fields against the original document.",
+                      view: "Extract" as View,
+                      icon: FileSearch,
                     },
                   ].map((a) => (
                     <button
@@ -1413,7 +1380,6 @@ export default function App() {
           )}
           {view === "Home" && <DatasetHome search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis agent V2"); }} />}
           {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
-          {view === "API Documentation" && <ApiDocumentation api={api} />}
           {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}
           {view === "Datasets" && (
             <>
@@ -1614,213 +1580,6 @@ export default function App() {
           {view === "Prompt templates" && <PromptTemplates templates={templates} datasets={kbs} selectedDataset={kb} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={d => { setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)]); chooseTemplate(d.id); notify("Prompt template saved."); }} onUse={id => { const saved=templates.find(t=>t.id===id); if(saved?.dataset_id&&saved.dataset_id!==kb)changeDataset(saved.dataset_id); chooseTemplate(id); navigate("Extract", "Create"); }} />}
           {view === "Extract" && reextractSource && <ReExtractionDialog key={reextractSource.id} source={reextractSource} documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id=>{changeDataset(id);navigate('Datasets');setDatasetModelsFocus(true);}} onReview={d=>openReview(d.id)} onClose={()=>setReextractSource(null)}/>}
 
-          {view === "Index inspector" && (
-            <>
-              <section className="panel">
-                <div className="row">
-                  <select
-                    aria-label="Document to inspect"
-                    value={indexDoc}
-                    onChange={(e) => setIndexDoc(e.target.value)}
-                  >
-                    <option value="">All documents</option>
-                    {docs.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="btn primary"
-                    disabled={busy}
-                    onClick={inspect}
-                  >
-                    <Search size={14} />
-                    Inspect index
-                  </button>
-                </div>
-              </section>
-              <div className="stats">
-                {[
-                  {
-                    label: "Embedding provider",
-                    value:
-                      indexData.embedding_provider ||
-                      settings.embedding_provider ||
-                      settings.embedding ||
-                      "Not set",
-                  },
-                  {
-                    label: "Vector dimensions",
-                    value:
-                      indexData.dimensions ||
-                      indexData.embedding_dimensions ||
-                      "—",
-                  },
-                  {
-                    label: "Chunk size",
-                    value: indexData.chunk_size || settings.chunk_size || "—",
-                  },
-                  {
-                    label: "Chunk overlap",
-                    value:
-                      indexData.chunk_overlap ?? settings.chunk_overlap ?? "—",
-                  },
-                ].map((s) => (
-                  <div className="stat-card" key={s.label}>
-                    <div className="stat-label">{s.label}</div>
-                    <div
-                      style={{ fontSize: "var(--text-section)", fontWeight: 600, marginTop: 9 }}
-                    >
-                      {s.value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <section className="panel">
-                <div className="panel-head">
-                  <div>
-                    <h2>Retrieval diagnostics</h2>
-                    <p className="muted small">
-                      Test source retrieval without generating an answer. Uses
-                      the document selection above.
-                    </p>
-                  </div>
-                  <Search size={18} color="#718bc6" />
-                </div>
-                <Field label="Diagnostic query">
-                  <input
-                    aria-label="Diagnostic query"
-                    value={retrievalQuery}
-                    onChange={(e) => setRetrievalQuery(e.target.value)}
-                    placeholder="Which passages discuss the payment terms?"
-                  />
-                </Field>
-                <label className="check" style={{ marginBottom: 15 }}>
-                  <input
-                    type="checkbox"
-                    checked={retrievalConsent}
-                    onChange={(e) => setRetrievalConsent(e.target.checked)}
-                  />
-                  <span className="small muted">
-                    I approve sending this query to the configured embedding and
-                    search providers when external retrieval is enabled (OpenAI
-                    embeddings or OCI search). Provider usage may be billed.
-                  </span>
-                </label>
-                <button
-                  className="btn primary"
-                  disabled={busy || !retrievalQuery.trim() || !retrievalConsent}
-                  onClick={() =>
-                    run(async () =>
-                      setRetrievalResult(
-                        await api("/index/search", "POST", {
-                          text: retrievalQuery,
-                          document_ids: indexDoc ? [indexDoc] : [],
-                          allow_external: true,
-                        }),
-                      ),
-                    )
-                  }
-                >
-                  <Search size={14} />
-                  Test retrieval
-                </button>
-                {retrievalResult && (
-                  <div style={{ marginTop: 20 }}>
-                    <div className="row wrap" style={{ marginBottom: 15 }}>
-                      <span className="pill">
-                        {retrievalResult.count} matches
-                      </span>
-                      <span className="pill">
-                        {retrievalResult.duration_ms} ms
-                      </span>
-                      <span className="pill">{retrievalResult.provider}</span>
-                      {retrievalResult.reranking?.enabled && <span className="pill">Local reranking · {retrievalResult.reranking.candidate_count} → {retrievalResult.count} chunks · {retrievalResult.reranking.rerank_ms} ms</span>}
-                      <span className="muted small">
-                        {retrievalResult.ready_documents} ready /{" "}
-                        {retrievalResult.scoped_documents} scoped documents
-                      </span>
-                    </div>
-                    {retrievalResult.matches?.map((m: Entity, i: number) => (
-                      <button
-                        key={m.chunk_id || i}
-                        className="citation"
-                        onClick={() =>
-                          setModal({
-                            title: m.document_name || "Retrieved source",
-                            data: m,
-                          })
-                        }
-                      >
-                        <div className="row between">
-                          <strong>
-                            {m.document_name} {m.page ? `· page ${m.page}` : ""}
-                          </strong>
-                          <span>
-                            {typeof m.rerank_score === "number" ? "Rerank" : "Similarity"}{" "}
-                            {typeof (m.rerank_score ?? m.score) === "number"
-                              ? (m.rerank_score ?? m.score).toFixed(4)
-                              : "—"}
-                          </span>
-                        </div>
-                        <p style={{ margin: "8px 0 0" }}>
-                          {m.excerpt || m.text}
-                        </p>
-                      </button>
-                    ))}
-                    {!retrievalResult.count && (
-                      <Empty
-                        icon={Search}
-                        title="No matching evidence"
-                        detail="Check document readiness, scope, and your query."
-                      />
-                    )}
-                    <p className="muted small">{retrievalResult.note}</p>
-                  </div>
-                )}
-              </section>
-              <section className="panel">
-                <div className="panel-head">
-                  <h2>Indexed chunks</h2>
-                  <span className="pill">
-                    {indexData.chunks?.length || 0} shown
-                  </span>
-                </div>
-                {indexData.chunks?.length ? (
-                  indexData.chunks.map((c: Entity, i: number) => (
-                    <div className="item" key={c.id || i}>
-                      <div className="row between">
-                        <h3>Chunk {c.chunk_index ?? c.index ?? i + 1}</h3>
-                        <span className="small muted">
-                          {c.document_name || c.document_id}{" "}
-                          {c.page ? `· page ${c.page}` : ""}
-                        </span>
-                      </div>
-                      <>
-                        {c.requires_reindex && (
-                          <span className="pill amber">Reindex required</span>
-                        )}
-                        <pre className="code mono">{c.text || c.content}</pre>
-                      </>
-                    </div>
-                  ))
-                ) : (
-                  <Empty
-                    icon={Layers}
-                    title="Look beneath the answer"
-                    detail="Choose a document and inspect its chunks, embedding configuration, and diagnostics."
-                  />
-                )}
-                {Object.keys(indexData).length > 0 && (
-                  <details style={{ marginTop: 20 }}>
-                    <summary>Full index and retrieval diagnostics</summary>
-                    <pre className="code mono">{json(indexData)}</pre>
-                  </details>
-                )}
-              </section>
-            </>
-          )}
           {view === "Jobs & activity" && (
             <section className="panel flush">
               <div className="panel-head" style={{ padding: "22px 22px 0" }}>
@@ -2040,7 +1799,6 @@ export default function App() {
                                 setExternalChat(false);
                                 setExternalExtract(false);
                                 setExternalUpload(false);
-                                setRetrievalConsent(false);
                                 notify(
                                   "Connection profile activated. Check connection readiness and reindex if needed.",
                                 );
@@ -2535,78 +2293,6 @@ export default function App() {
                   </div>
                 </section>
               </div>
-            </>
-          )}
-          {view === "Setup" && (
-            <>
-              <section className="panel">
-                <div className="panel-head">
-                  <div>
-                    <h2>A considered start</h2>
-                    <p className="muted small">
-                      Your workspace is ready for storage. Configure
-                      intelligence when you need it.
-                    </p>
-                  </div>
-                  <span className="pill green">
-                    <Check size={12} />
-                    Administrator signed in
-                  </span>
-                </div>
-                {[
-                  {
-                    title: "Administrator account",
-                    text: `Signed in as ${user.username}. Authentication uses an HttpOnly session cookie.`,
-                    action: "Account configured",
-                    to: "Setup" as View,
-                  },
-                  {
-                    title: settings.local_only ? "Configure local models" : "Connect your providers",
-                    text: settings.local_only ? "Use installed Qwen3 or SmolLM2 through Ollama and compatible Nomic embeddings. No paid API or cloud fallback is enabled." : "Choose local embeddings or add your own OpenAI key. Keys stay encrypted on the server.",
-                    action: "Configure connections",
-                    to: "Connections" as View,
-                  },
-                  {
-                    title: "Create a dataset",
-                    text: "Name your dataset, map its chat, extraction, and embedding models, then upload PDF, DOCX, or TXT files.",
-                    action: "Add documents",
-                    to: "Datasets" as View,
-                  },
-                  {
-                    title: "Verify your first answer",
-                    text: settings.local_only ? "Ask a focused question locally and inspect its clickable source evidence." : "Approve external processing, ask a focused question, and inspect the cited excerpts.",
-                    action: "Document Chat",
-                    to: "Aegis Agent" as View,
-                  },
-                  {
-                    title: "Protect your workspace",
-                    text: "Review the deployment and backup guide before making this service accessible to other users.",
-                    action: "Review operations",
-                    to: "Services & migration" as View,
-                  },
-                ].map((s, i) => (
-                  <div className="item row between" key={s.title}>
-                    <div className="row" style={{ alignItems: "flex-start" }}>
-                      <span className="stepnum">{i + 1}</span>
-                      <div>
-                        <h3>{s.title}</h3>
-                        <p className="muted small">{s.text}</p>
-                      </div>
-                    </div>
-                    <button
-                      className="btn"
-                      disabled={i === 0}
-                      onClick={() => navigate(s.to)}
-                    >
-                      {s.action}
-                      <ArrowRight size={13} />
-                    </button>
-                  </div>
-                ))}
-              </section>
-              <Notice tone="warn">
-                {settings.local_only ? "This workspace runs inference locally through Ollama. No paid API or cloud fallback is enabled. Review generated answers against their original sources." : "Before using an external provider, review what content is sent and who is billed. Aegis asks for approval for document processing, chat, and extraction. Always review generated answers against their original sources."}
-              </Notice>
             </>
           )}
         </main>

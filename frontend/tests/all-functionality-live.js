@@ -160,9 +160,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
    await step('Model edit validation and cancel preserve the registered model',async()=>{
     await nav('Model Registration');await page.getByLabel('Search registered models').fill(state.models.chat.name);await page.getByRole('button',{name:'Edit '+state.models.chat.name,exact:true}).click();await page.locator('.registration-extra summary').click();await page.locator('#registration-extra-parameters').fill('{"unsupported_option":true}');await expect(page.locator('#registration-parameter-error')).toContainText(/supported keys/i);await expect(page.getByRole('button',{name:'Save Model',exact:true})).toBeDisabled();await page.getByLabel('Cancel model registration').click();const models=await get('/models');if(models.find(m=>m.id===state.models.chat.id).version!==state.models.chat.version)throw Error('Cancelled edits changed saved registration.');
    });
-   await step('Index inspector and real Qdrant retrieval diagnostics',async()=>{
-    await nav('Index inspector');const doc=state.documents.find(d=>d.name==='all-qa-invoice-a.txt');await page.getByLabel('Document to inspect').selectOption(doc.id);await page.getByRole('button',{name:'Inspect index',exact:true}).click();await expect(page.locator('main')).toContainText('INV-A-42');await page.getByLabel('Diagnostic query').fill('INV-A-42 total');await page.locator('main').getByRole('checkbox').check();const found=await responseTo('POST','/api/index/search',()=>page.getByRole('button',{name:'Test retrieval',exact:true}).click());if(!found.matches?.length)throw Error('No real retrieval matches.');
-   });
+
    await step('Dataset inactive guard and reactivation',async()=>{
     await nav('Home');await page.getByRole('button',{name:'Search datasets',exact:true}).click();await page.getByLabel('Search datasets').fill(state.suffix);await page.getByRole('link',{name:'Open dataset '+state.dataset.name,exact:true}).click();
     await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Deactivate dataset',exact:true}).click();await expect(page.getByRole('button',{name:'Activate dataset',exact:true})).toBeVisible();const invalid=await page.request.post(url('/extractions'),{headers:{'X-CSRF-Token':(await get('/auth/me')).csrf_token},data:{dataset_id:state.dataset.id,document_ids:[state.documents[0].id],template_id:state.template.id}});if(invalid.status()!==409)throw Error('Inactive dataset permitted extraction.');await page.getByRole('button',{name:'Activate dataset',exact:true}).click();await expect(page.getByRole('button',{name:'Deactivate dataset',exact:true})).toBeVisible();
@@ -177,13 +175,10 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
    await step('Jobs and activity retry preserves a truthful failed status for a corrupt original',async()=>{
     if(!state.failed_job_id)throw Error('Run failure fixtures first.');await nav('Jobs & activity');const row=page.getByRole('row').filter({hasText:'cancel-invalid.pdf'}).first();const retried=await responseTo('POST','/api/jobs/'+state.failed_job_id+'/retry',()=>row.getByRole('button',{name:'Retry',exact:true}).click());await expect.poll(async()=>{const jobs=await get('/jobs');const j=jobs.find(j=>j.id===state.failed_job_id);return j.status==='failed'&&j.attempts>=1;},{timeout:180000,intervals:[1000,2000]}).toBe(true);await refresh();await expect(row).toContainText('failed');
    });
-   await step('API Documentation schema/catalog and Setup navigation',async()=>{
-    await nav('API Documentation');await expect(page.locator('main')).toContainText('/api/extractions');await get('/documentation');
-    await nav('Setup');await page.getByRole('button',{name:'Configure connections',exact:true}).click();await expect(page.locator('main h1')).toHaveText('Connections');await nav('Setup');await page.getByRole('button',{name:'Add documents',exact:true}).click();await expect(page.locator('main h1')).toHaveText('Datasets');await nav('Services & migration');await expect(page.locator('main')).toContainText('Live tenancy validation');
-   });
+
    await step('Every screen at mobile size; no horizontal page overflow',async()=>{
     await page.setViewportSize({width:390,height:844});
-    for(const name of ['Home','Aegis Agent','Datasets','Document Chat','Extraction Review','Re-extract','Prompt templates','Model Registration','Model Mapping','Dashboard','Index inspector','Jobs & activity','Connections','Services & migration','API Documentation','Setup','Users & passwords']){
+    for(const name of ['Home','Aegis Agent','Datasets','Document Chat','Extraction Review','Re-extract','Prompt templates','Model Registration','Model Mapping','Dashboard','Jobs & activity','Connections','Services & migration','Users & passwords']){
      const open=page.getByRole('button',{name:'Open navigation',exact:true});if(await open.isVisible())await open.click();await nav(name);if(!await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))throw Error('Horizontal overflow on '+name);state.screens.push(name);persist();
     }
     await page.screenshot({path:out+'/all-screens-mobile.png',fullPage:true});
