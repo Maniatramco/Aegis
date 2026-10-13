@@ -10,11 +10,6 @@ type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
 export const eligibleModels = (dataset: Entity | undefined, capability: string): Entity[] =>
   (dataset?.active === false ? [] : dataset?.models || []).filter((m: Entity) => m.enabled !== false && m.mapping_enabled !== false && m.capabilities?.includes(capability));
 export const modelLabel = (model: Entity | undefined) => model?.name || model?.provider_model || "Model not selected";
-export const recordedModel = (record: Entity | null | undefined) => {
-  const snapshot = record?.model_selection || record?.model_snapshot || record?.model_config;
-  return snapshot?.name || snapshot?.model_name || snapshot?.provider_model || record?.model_name || record?.provider_model || "";
-};
-
 export function ModelPicker({ dataset, capability, value, onChange, onConfigure, disabled = false }: {
   dataset?: Entity; capability: "chat" | "extraction"; value: string; onChange: (id: string) => void; onConfigure: () => void; disabled?: boolean;
 }) {
@@ -38,7 +33,7 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
 }
 
 export function DatasetWorkspace({ datasets, models, documents, selectedId, onSelect, onCreated, api, run, busy, reload, notify, onConnections, onUse, uploadPanel, documentsPanel, modelsFocus, onUploadWorkflowVisible, canManage = true }: {
-  datasets: Entity[]; models: Entity[]; documents: Entity[]; selectedId: string; onSelect: (id: string) => void; onCreated: (dataset: Entity) => void; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void; onUse: (view: "Aegis Agent" | "Extract") => void; uploadPanel: React.ReactNode; documentsPanel: React.ReactNode; modelsFocus: boolean; onUploadWorkflowVisible?: (visible:boolean)=>void; canManage?: boolean;
+  datasets: Entity[]; models: Entity[]; documents: Entity[]; selectedId: string; onSelect: (id: string) => void; onCreated: (dataset: Entity) => void; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void; onUse: (view: "Aegis agent V2" | "Extract") => void; uploadPanel: React.ReactNode; documentsPanel: React.ReactNode; modelsFocus: boolean; onUploadWorkflowVisible?: (visible:boolean)=>void; canManage?: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [showList, setShowList] = useState(!selectedId);
@@ -78,7 +73,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
         <div className="row dataset-create-actions"><button type="button" className="btn" onClick={() => setCreating(false)}>Cancel</button><button className="btn primary" disabled={busy || !name.trim()}>Create dataset <ArrowRight size={14} /></button></div>
       </form>
     </section> : showList || !dataset ? <>
-      {datasets.length > 0 && <DirectoryRows datasets={datasets} documents={documents} onOpen={openDataset} onChat={id=>{onSelect(id);onUse("Aegis Agent");}}/>}
+      {datasets.length > 0 && <DirectoryRows datasets={datasets} documents={documents} onOpen={openDataset} onChat={id=>{onSelect(id);onUse("Aegis agent V2");}}/>}
       <div className="dataset-grid" hidden={datasets.length>0}>
         {visibleDatasets.map(d => {
           const all = documents.filter(doc => (doc.dataset_id || doc.kb_id) === d.id);
@@ -98,7 +93,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
       </div>
     </> : <>
       <section className="panel dataset-detail">
-        <div className="panel-head dataset-detail-heading"><div><div className="row wrap"><h2>{dataset.name}</h2><span className={`pill ${dataset.active === false ? "inactive" : "green"}`}>{dataset.active === false ? "Inactive" : "Active"}</span></div>{dataset.description && <p className="muted small">{dataset.description}</p>}<p className="dataset-document-summary">{datasetDocs.length} document{datasetDocs.length === 1 ? "" : "s"} · {ready} ready</p></div><div className="row wrap dataset-use-actions"><button className="btn" onClick={() => onUse("Aegis Agent")} disabled={!chat.length || !ready}><MessageSquare size={14} />Ask this dataset</button><button className="btn" onClick={() => onUse("Extract")} disabled={!extraction.length || !ready}><FileSearch size={14} />Extract from dataset</button></div></div>
+        <div className="panel-head dataset-detail-heading"><div><div className="row wrap"><h2>{dataset.name}</h2><span className={`pill ${dataset.active === false ? "inactive" : "green"}`}>{dataset.active === false ? "Inactive" : "Active"}</span></div>{dataset.description && <p className="muted small">{dataset.description}</p>}<p className="dataset-document-summary">{datasetDocs.length} document{datasetDocs.length === 1 ? "" : "s"} · {ready} ready</p></div><div className="row wrap dataset-use-actions"><button className="btn" onClick={() => onUse("Aegis agent V2")} disabled={!chat.length || !ready}><MessageSquare size={14} />Ask this dataset</button><button className="btn" onClick={() => onUse("Extract")} disabled={!extraction.length || !ready}><FileSearch size={14} />Extract from dataset</button></div></div>
         <div className="tabs dataset-tabs" aria-label="Dataset sections">
           <button className={`btn ${tab === "documents" ? "primary" : ""}`} aria-pressed={tab === "documents"} onClick={() => setTab("documents")}><FileText size={14} />Documents</button>
           {canManage&&<button className={`btn ${tab === "models" ? "primary" : ""}`} aria-pressed={tab === "models"} onClick={() => setTab("models")}><Layers size={14} />Model Mapping</button>}

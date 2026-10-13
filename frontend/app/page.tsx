@@ -2,21 +2,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { DocumentUploadPanel, useDocumentUpload } from "./document-upload";
-import { FocusedChat } from "./focused-chat";
-import { readChatStream } from "./chat-stream";
 import { DatasetHome, DatasetSearch } from "./dataset-directory";
-import { ExtractionReview } from "./extraction-review";
 import {ReviewDetail} from './review-detail';
-import { ExtractionDirectory, extractionDataset } from "./extraction-directory";
+import { ExtractionDirectory } from "./extraction-directory";
 import { ExtractData } from "./extract-data";
 import { PromptTemplates } from "./prompt-templates";
 import { ReExtractionDialog } from "./re-extract";
 import { WorkspaceNavigation } from "./workspace-navigation";
 import { StorageConfiguration } from "./storage-configuration";
+import { ConnectionSettings } from "./connection-settings";
 import { ConnectionStatus } from "./connection-status";
 import { OperationProgress, extractionProgressJob } from "./operation-progress";
 import "./workspace-flow.css";
-import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel, recordedModel } from "./dataset-workspace";
+import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
 import { UserManagement } from "./user-management";
 import { AgentV2 } from "./agent-v2";
@@ -25,26 +23,19 @@ import "./agent-shortcut.css";
 import { rememberAssistantDataset } from "./agent-prompt-selection";
 import {prepareFreshLoginChat} from './chat-login-session';
 import { fetchWithSessionCsrf } from "./session-request";
-import { TemporaryDocumentChat } from "./temporary-document-chat";
-import { readPromptUpload, type PromptUpload } from "./prompt-upload";
 import {
   Activity,
   Bot,
   ArrowDownToLine,
   ArrowLeft,
-  ArrowRight,
   BookOpen,
   Check,
   ChevronRight,
-  Cloud,
   HardDrive,
-  Copy,
   Database,
   FileSearch,
   FileText,
-  FolderPlus,
   Layers,
-  LayoutDashboard,
   Loader2,
   LogOut,
   Menu,
@@ -53,17 +44,11 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Send,
-  Settings2,
   Shield,
   Square,
-  ThumbsDown,
-  ThumbsUp,
   Trash2,
-  UploadCloud,
   X,
   AlertCircle,
-  ExternalLink,
   CheckCircle2,
   KeyRound,
   Server,
@@ -72,9 +57,7 @@ import {
 type Entity = Record<string, any>;
 type View =
   | "Home"
-  | "Dashboard"
   | "Datasets"
-  | "Aegis Agent"
   | "Aegis agent V2"
   | "Extract"
   | "Extract Data"
@@ -83,19 +66,15 @@ type View =
   | "Re-extract"
   | "Prompt templates"
   | "Jobs & activity"
-  | "Connections"
   | "Storage"
   | "Model Registration"
   | "Model Mapping"
-  | "Services & migration"
   | "Users & passwords";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Home", icon: Database, group: "WORKSPACE" },
   { name: "Aegis agent V2", icon: Bot, group: "WORKSPACE" },
   { name: "Users & passwords", icon: KeyRound },
-  { name: "Dashboard", icon: LayoutDashboard },
   { name: "Datasets", icon: BookOpen },
-  { name: "Aegis Agent", icon: MessageSquare },
   { name: "Extract", icon: FileSearch },
   { name: "Extract Data", icon: Database },
   { name: "Review", icon: FileSearch },
@@ -103,23 +82,18 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Re-extract", icon: RefreshCw },
   { name: "Prompt templates", icon: FileText },
   { name: "Jobs & activity", icon: Activity },
-  { name: "Connections", icon: Settings2 },
   { name: "Storage", icon: HardDrive },
   { name: "Model Registration", icon: Layers },
   { name: "Model Mapping", icon: BookOpen },
-  { name: "Services & migration", icon: Cloud },
 ];
 // Keep saved route identifiers compatible while presenting the product names.
-const viewLabel = (name: View) => name === "Aegis agent V2" ? "Aegis Agent" : name === "Aegis Agent" ? "Document Chat" : name === "Extract" ? "Review" : name === "Extract Data" ? "Extract" : name;
+const viewLabel = (name: View) => name === "Aegis agent V2" ? "Aegis Agent" : name === "Extract" ? "Review" : name === "Extract Data" ? "Extract" : name;
 const viewRoute = (name: View) => name === "Extract Data" ? "Extract Data" : viewLabel(name);
 type ReviewReturn = {view: View; datasetId: string; agentTab: string; extractionTab: string};
 const descriptions: Record<View, string> = {
   Home: "",
-  Dashboard:
-    "Your documents, processing activity, and connected services at a glance.",
   "Datasets":
     "Onboard your data, map its models, and put a trusted source to work.",
-  "Aegis Agent": "Ask across your knowledge, with evidence you can inspect.",
   "Aegis agent V2": "Ask questions, chat with your documents, and run upload or extraction workflows.",
   Extract: "Browse extraction results and open a document to review its fields.",
   "Extract Data": "View saved extraction records as rows and columns, and export results by dataset and prompt template.",
@@ -128,12 +102,9 @@ const descriptions: Record<View, string> = {
   "Prompt templates": "Describe what to find and choose the fields you need.",
   "Re-extract": "Find a document and choose how to extract it again.",
   "Jobs & activity": "Follow processing work and resolve what needs attention.",
-  Connections: "Manage shared model connections and deployment infrastructure.",
   Storage: "Configure files, database and knowledge storage in one place.",
   "Model Registration": "Register model connections for Embedding, Chat, and Extraction.",
   "Model Mapping": "Choose the three required models for each dataset.",
-  "Services & migration":
-    "A clear path from local deployment to your cloud environment.",
   "Users & passwords": "Manage users, passwords, and dataset assignments.",
 };
 const byteSize = (n: number) =>
@@ -147,7 +118,6 @@ const date = (v: string | number) =>
       ).toLocaleString()
     : "—";
 const json = (v: unknown) => JSON.stringify(v, null, 2);
-const getText = (v: unknown): string => (typeof v === "string" ? v : json(v));
 function Status({ value }: { value: string }) {
   const green = [
     "ready",
@@ -299,10 +269,8 @@ export default function App() {
     };
   }, [drawerOpen, user, navigationIsDrawer]);
   const [adminNavigation, setAdminNavigation] = useState(false);
-  const [connectionTab, setConnectionTab] = useState("Profiles");
   const [extractionTab, setExtractionTab] = useState("History");
   const [refresh, setRefresh] = useState(0);
-  const [overview, setOverview] = useState<Entity>({});
   const [docs, setDocs] = useState<Entity[]>([]);
   // A list response started before an upload must not erase its accepted result.
   const uploadRevision = useRef(0);
@@ -312,7 +280,6 @@ export default function App() {
   const [jobs, setJobs] = useState<Entity[]>([]);
   const [agentVisibleJobIds, setAgentVisibleJobIds] = useState<string[]>([]);
   const onAgentJobs = useCallback((updates: Entity[]) => setJobs(previous => [...updates, ...previous.filter(job => !updates.some(update => update.id === job.id))]), []);
-  const [caps, setCaps] = useState<Entity>({});
   const [settings, setSettings] = useState<Entity>({});
   const [modal, setModal] = useState<{
     title: string;
@@ -325,30 +292,12 @@ export default function App() {
   } | null>(null);
   const [models, setModels] = useState<Entity[]>([]);
   const [datasetModelsFocus, setDatasetModelsFocus] = useState(false);
-  const [chatModelId, setChatModelId] = useState("");
   const [extractModelId, setExtractModelId] = useState("");
   const [documentPollError, setDocumentPollError] = useState(false);
   const [externalUpload, setExternalUpload] = useState(false);
-  const [conversations, setConversations] = useState<Entity[]>([]);
-  const [conversation, setConversation] = useState<Entity | null>(null);
-  const [temporary, setTemporary] = useState(false);
-  useEffect(() => { setTemporary(false); }, [user?.id]);
-  const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<string[]>([]);
-  const [externalChat, setExternalChat] = useState(false);
-  const [answering, setAnswering] = useState(false);
-  const [lastPrompt, setLastPrompt] = useState("");
-  const abort = useRef<AbortController | null>(null);
-  const sending = useRef(false);
-  const conversationRequest = useRef(0);
-  const openingConversation = useRef(false);
   const [templates, setTemplates] = useState<Entity[]>([]);
   const [templateId, setTemplateId] = useState("");
-  const [templateAttachment,setTemplateAttachment]=useState<(PromptUpload & {datasetId:string})|null>(null);
-  const [promptPreview,setPromptPreview]=useState<(PromptUpload & {datasetId:string})|null>(null);
-  const [promptLoading,setPromptLoading]=useState(false);
-  const promptReadRequest=useRef(0);
-  const [templateFeedback,setTemplateFeedback]=useState('');
   const [extractions, setExtractions] = useState<Entity[]>([]);
   const [extraction, setExtraction] = useState<Entity | null>(null);
   const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
@@ -364,18 +313,11 @@ export default function App() {
     } catch { sessionStorage.removeItem(reviewReturnKey); }
   }, [reviewReturnKey, user?.username]);
   const reviewProgressJob = view === "Review" && extraction?.status !== "ready" ? extractionProgressJob(extraction, jobs) : undefined;
-  const [resultText, setResultText] = useState("");
   const reviewDirty = useRef(false);
   const templateDirty = useRef(false);
   const onTemplateDirty = useCallback((dirty: boolean) => { templateDirty.current = dirty; }, []);
   const onReviewDirty = useCallback((dirty: boolean) => { reviewDirty.current = dirty; }, []);
   const [externalExtract, setExternalExtract] = useState(false);
-  const [settingsForm, setSettingsForm] = useState<Entity>({});
-  const [apiKey, setApiKey] = useState("");
-  const [ociApiKey, setOciApiKey] = useState("");
-  const [testResult, setTestResult] = useState<Entity | null>(null);
-  const [profiles, setProfiles] = useState<Entity[]>([]);
-  const [profileName, setProfileName] = useState("");
   const api = useCallback(
     async (
       path: string,
@@ -484,10 +426,10 @@ export default function App() {
     const revision=uploadRevision.current;
     const list=(value:Entity|Entity[],key:string)=>Array.isArray(value)?value:value[key]||[];
     const tasks:[string,(value:any)=>void][]=[
-      ['/overview',setOverview],['/documents',value=>{if(revision===uploadRevision.current)setDocs(list(value,'documents'));setDocumentPollError(false);}],
+      ['/documents',value=>{if(revision===uploadRevision.current)setDocs(list(value,'documents'));setDocumentPollError(false);}],
       ['/datasets',value=>setKbs(list(value,'datasets'))],['/jobs',value=>{if(revision===uploadRevision.current)setJobs(list(value,'jobs'));}],
-      ['/settings',value=>{setSettings(value);setSettingsForm(value);}],['/templates',value=>setTemplates(list(value,'templates'))],
-      ['/conversations',value=>setConversations(list(value,'conversations'))],['/extractions',value=>setExtractions(list(value,'extractions'))],
+      ['/settings',setSettings],['/templates',value=>setTemplates(list(value,'templates'))],
+      ['/extractions',value=>setExtractions(list(value,'extractions'))],
       ['/models',value=>setModels(list(value,'models'))],
     ];
     Promise.allSettled(tasks.map(async([path,update])=>{
@@ -499,13 +441,6 @@ export default function App() {
       controller.abort();
     };
   }, [user, refresh, api]);
-  useEffect(()=>{
-    if(!user||!['Connections','Model Registration','Services & migration','Dashboard'].includes(view))return;
-    let active=true;
-    api('/capabilities').then(value=>{if(active)setCaps(value);}).catch(error=>{if(active)setError(error.message);});
-    api('/settings/profiles').then(value=>{if(active)setProfiles(Array.isArray(value)?value:value.profiles||[]);}).catch(error=>{if(active)setError(error.message);});
-    return()=>{active=false;};
-  },[user,view,refresh,api]);
   useEffect(() => {
     if (!user) return;
     let active=true, inFlight=false;
@@ -541,7 +476,6 @@ export default function App() {
       setReviewReturn(null); sessionStorage.removeItem(reviewReturnKey);
     }
     if(destination==="Extract")setExtractionTab(reviewSection);
-    else if(name==="Aegis Agent")setAgentTab("Chat");
     if(destination==="Review")setReviewRouteId(reviewId);
     window.location.hash = encodeURIComponent(destination==="Review"&&reviewId?`Review/${reviewId}`:destination==="Extract"&&reviewSection==="Create"?"Review/create":viewRoute(destination));
     setView(destination);
@@ -552,57 +486,26 @@ export default function App() {
     return true;
   };
   const selectedDataset = kbs.find(d => d.id === kb);
-  const chatModels = eligibleModels(selectedDataset, "chat");
   const extractionModels = eligibleModels(selectedDataset, "extraction");
-  const selectedChatModel = chatModels.find(m => m.id === chatModelId);
   const selectedExtractModel = extractionModels.find(m => m.id === extractModelId);
   const extractionNeedsConsent=!!selectedExtractModel&&!['ollama','mock'].includes(selectedExtractModel.provider);
-  const cancelPromptPreview = () => { promptReadRequest.current += 1; setPromptPreview(null); setPromptLoading(false); };
-  useEffect(() => { promptReadRequest.current += 1; setPromptPreview(null); setPromptLoading(false); setTemplateAttachment(null); }, [user?.id]);
-  const uploadPrompt = async (files: File[]) => {
-    if(busy || answering){setError('Wait for the current operation before uploading a prompt.');return;}
-    if(files.length!==1){setError('Upload one prompt JSON file at a time.');return;}
-    if(!kb){setError('Choose a dataset before uploading a prompt.');return;}
-    const request=++promptReadRequest.current;
-    setPromptPreview(null);setPromptLoading(true);setTemplateFeedback('');setError('');
-    try {
-      const parsed=await readPromptUpload(files[0]);
-      if(request!==promptReadRequest.current)return;
-      await api('/templates/validate','POST',{name:parsed.name,schema:parsed.schema,dataset_id:kb});
-      if(request===promptReadRequest.current)setPromptPreview({...parsed,datasetId:kb});
-    } catch(error){if(request===promptReadRequest.current)setError(error instanceof Error?error.message:'The prompt could not be validated.');}
-    finally {if(request===promptReadRequest.current)setPromptLoading(false);}
-  };
-  const confirmPrompt = () => {
-    if(!promptPreview || promptPreview.datasetId!==kb || busy || answering)return;
-    setTemplateAttachment(promptPreview);setPromptPreview(null);setTemplateFeedback('Prompt confirmed. Use Send to save it for this dataset.');setError('');
-  };
   const datasetEmbedding = selectedDataset?.active === false ? undefined : (selectedDataset?.models || []).find((m: Entity) => m.id === selectedDataset?.embedding_model_id && m.enabled !== false && m.mapping_enabled !== false);
   const datasetDocs = docs.filter(d => (d.dataset_id || d.kb_id) === kb);
-  const readyDatasetDocs = datasetDocs.filter(d => d.status === "ready" && !d.requires_reindex);
   const changeDataset = (id: string) => {
     if (id === kb) return;
-    if (answering) { setError("Stop the current answer before changing datasets."); return; }
     if(user)rememberAssistantDataset(sessionStorage,user.username,id);
-    conversationRequest.current += 1;
-    openingConversation.current = false;
     setKb(id);
-    cancelPromptPreview();setTemplateAttachment(null);setTemplateFeedback('');setTemplateId('');
+    setTemplateId('');
     setDatasetModelsFocus(false);
     setScope([]);
-    setChatModelId("");
     setExtractModelId("");
-    setExternalChat(false);
     setExternalExtract(false);
     setExternalUpload(false);
-    setConversation(null);
-    setPrompt("");
-    setLastPrompt("");
     setQuery("");
   };
   const returnFromReview = () => {
     const origin = reviewReturn || {view: 'Extract' as View, datasetId: kb, agentTab: 'Chat', extractionTab: 'History'};
-    if (!navigate(origin.view === 'Aegis Agent' && origin.agentTab === 'Extract' ? 'Extract' : origin.view, origin.extractionTab)) return;
+    if (!navigate(origin.view, origin.extractionTab)) return;
     changeDataset(origin.datasetId);
     setAgentTab(origin.agentTab); setExtractionTab(origin.extractionTab);
   };
@@ -627,6 +530,8 @@ export default function App() {
     reviewDirty.current = false; templateDirty.current = false;
     let route: string;
     try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Home"; }
+    if (["connections","services & migration"].includes(route.toLowerCase())) {route="Storage";window.history.replaceState(null,"","#Storage");}
+    if (route.toLowerCase()==="dashboard") {route="Home";window.history.replaceState(null,"","#Home");}
     if (["setup","api documentation","adp documentation","index inspector"].includes(route.toLowerCase())) {
       route = "Home";
       window.history.replaceState(null, "", "#Home");
@@ -642,8 +547,7 @@ export default function App() {
       setView("Datasets");
     } else {
       if(["ask aegis","aegis assistant","aegis agent"].includes(route.toLowerCase()))route="Aegis agent V2";
-      if(route.toLowerCase()==="document chat")route="Aegis Agent";
-      if(route==="Aegis Agent")setAgentTab("Chat");
+      if(route.toLowerCase()==="document chat")route="Aegis agent V2";
       const next = sections.find(s => s.name.toLowerCase() === (route.toLowerCase() === "templates" ? "prompt templates" : route.toLowerCase()))?.name || "Home";
       if(next === "Review")setReviewRouteId("");
       setView(next);
@@ -667,13 +571,11 @@ export default function App() {
       if (available.some(m => m.id === dataset?.[defaultKey])) return dataset![defaultKey];
       return available.length === 1 ? available[0].id : "";
     };
-    setChatModelId(current => pick(current, "chat", "default_chat_model_id"));
     setExtractModelId(current => pick(current, "extraction", "default_extraction_model_id"));
   }, [kb, kbs]);
   useEffect(() => {
     setScope(current => current.filter(id => docs.some(d => d.id === id && (d.dataset_id || d.kb_id) === kb && d.status === "ready" && !d.requires_reindex)));
   }, [kb, docs]);
-  useEffect(() => { setExternalChat(false); }, [kb, chatModelId, selectedChatModel?.version, selectedChatModel?.connection_profile_version]);
   useEffect(() => { setExternalExtract(false); }, [kb, extractModelId, selectedExtractModel?.version, selectedExtractModel?.connection_profile_version]);
   const uploadContextKey = JSON.stringify([kb, selectedDataset?.active, selectedDataset?.embedding_selection,
     ...["storage_provider", "search_provider", "oci_storage_namespace", "oci_storage_bucket", "oci_storage_prefix", "oci_storage_region", "oci_storage_auth_mode", "oci_storage_profile", "oci_region", "oci_project_id", "oci_vector_store_id"].map(key => settings[key]),
@@ -702,7 +604,6 @@ export default function App() {
       }
       const d = await api("/auth/login", "POST", { username, password });
       prepareFreshLoginChat(sessionStorage,d.user.username,d.chat_session_id||'');
-      conversationRequest.current+=1;setConversation(null);setPrompt('');setLastPrompt('');
       navigate("Home");
       setUser(d.user);
       setPasswordChangedNotice(false);
@@ -751,153 +652,6 @@ export default function App() {
       },
     });
   };
-  const openConversation = async (id: string, preserveDraft = false) => {
-    const request = ++conversationRequest.current;
-    openingConversation.current = true;
-    if (!preserveDraft) setPrompt("");
-    try {
-    const d = await api(`/conversations/${id}`);
-    if (request !== conversationRequest.current) return;
-    setKb(d.dataset_id || d.kb_id || "");
-    setScope(d.document_ids || []);
-    const historicalModel = [...(d.messages || [])].reverse().find((m: Entity) => m.model_selection)?.model_selection?.model_id;
-    const dataset = kbs.find(k => k.id === (d.dataset_id || d.kb_id));
-    const available = eligibleModels(dataset, "chat");
-    setChatModelId(available.some(m => m.id === historicalModel) ? historicalModel : available.some(m => m.id === dataset?.default_chat_model_id) ? dataset!.default_chat_model_id : available.length === 1 ? available[0].id : "");
-    setExternalChat(false);
-    setTemporary(false);
-    setConversation(d);
-    setLastPrompt([...(d.messages || [])].reverse().find((m: Entity) => m.role === "user")?.text || "");
-    } catch (error) { if (request === conversationRequest.current) throw error; }
-    finally { if (request === conversationRequest.current) openingConversation.current = false; }
-  };
-  const sendMessage = async (text = prompt) => {
-    if(promptLoading || promptPreview)return;
-    if(templateAttachment){
-      if(sending.current||busy||answering)return;
-      if(!kb){setError('Choose a dataset before sending this prompt template.');return;}
-      if(templateAttachment.datasetId&&templateAttachment.datasetId!==kb){setError('Attach the template again for the selected dataset.');return;}
-      sending.current=true;setBusy(true);setError('');setTemplateFeedback('');
-      try {
-        const imported:Entity=await api('/templates','POST',{name:templateAttachment.name,schema:templateAttachment.schema,dataset_id:kb});
-        setTemplates(previous=>[imported!,...previous.filter(t=>t.id!==imported!.id)]);setTemplateId(imported.id);setTemplateAttachment(null);setPrompt('');
-        setTemplateFeedback(`Saved “${imported.name}” for ${selectedDataset?.name}. This template is selected for extraction.`);
-        const wantsExtraction=/\b(?:run|start|perform)\s+(?:an?\s+)?(?:extraction|re-extraction)\b|\b(?:extract|re-extract|reextract)\b.*\b(?:documents?|files?|fields?|data)\b|\buse\b.*\btemplate\b.*\b(?:extract|extraction|re-extract|re-extraction)\b/i.test(text);
-        if(wantsExtraction){
-          const documents=scope.length?readyDatasetDocs.filter(d=>scope.includes(d.id)):readyDatasetDocs;
-          if(!documents.length)throw new Error('Template saved. Upload documents and wait for indexing before extracting.');
-          if(!selectedExtractModel)throw new Error('Template saved. Set the dataset default extraction model before extracting.');
-          const external=!['ollama','mock'].includes(selectedExtractModel.provider);
-          if(external&&!externalExtract)throw new Error('Template saved. Approve the external provider in Extract & review before running extraction.');
-          const result=await api('/extractions','POST',{dataset_id:kb,model_id:selectedExtractModel.id,document_ids:documents.map(d=>d.id),template_id:imported.id,allow_external:externalExtract});
-          setExtraction(result);setExtractions(previous=>[result,...previous]);setJobs(previous=>[result.job,...previous.filter(j=>j.id!==result.job.id)]);setExtractionTab('Review');setAgentTab('Extract');
-          setTemplateFeedback(`Saved “${imported.name}”. Extraction started with this template; results will appear when ready.`);
-        }
-      }catch(error){setError(error instanceof Error?error.message:'Template import failed.');}
-      finally{sending.current=false;setBusy(false);}
-      return;
-    }
-    if (!text.trim() || answering || sending.current || openingConversation.current) return;
-    if (!kb || !selectedChatModel || !readyDatasetDocs.length) {
-      setError("Choose a dataset with ready documents and an eligible chat model.");
-      return;
-    }
-    if (selectedChatModel?.provider !== "ollama" && !externalChat) {
-      setError("Approve the provider notice before sending a question.");
-      return;
-    }
-    setError("");
-    sending.current = true;
-    setAnswering(true);
-    setLastPrompt(text);
-    abort.current = new AbortController();
-    try {
-      let c: Entity | null = conversation ? { ...conversation, messages: (conversation.messages || []).filter((m: Entity) => !["pending-user", "streaming-answer"].includes(m.id)) } : null;
-      if (!c) {
-        c = await api("/conversations", "POST", {
-          title: text.slice(0, 70),
-          dataset_id: kb,
-          document_ids: scope,
-        });
-        setConversation(c);
-      }
-      setConversation({
-        ...c,
-        messages: [
-          ...(c!.messages || []),
-          { id: "pending-user", role: "user", text },
-        ],
-      });
-      setPrompt("");
-      const response = await fetch(
-        `/api/conversations/${c!.id}/messages/stream`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-          body: JSON.stringify({
-            text,
-            document_ids: scope,
-            dataset_id: kb,
-            model_id: chatModelId,
-            allow_external: true,
-          }),
-          signal: abort.current.signal,
-        },
-      );
-      if (!response.ok) {
-        const failure = await response.json();
-        throw new Error(failure.detail || "Answer request failed.");
-      }
-      if (!response.body)
-        throw new Error("The server did not return an answer stream.");
-      let answer = "";
-      const baseMessages = [...(c!.messages || []), { id: "pending-user", role: "user", text }];
-      await readChatStream(response.body, ({ type, payload }) => {
-        if (type === "delta") {
-          answer += payload.text;
-          setConversation({ ...c, messages: [...baseMessages, {
-            id: "streaming-answer", role: "assistant", text: answer, status: "streaming",
-            mock: selectedChatModel?.provider === "mock",
-            model_selection: { model_id: chatModelId, model_name: modelLabel(selectedChatModel), provider_model: selectedChatModel?.provider_model },
-          }] });
-        }
-        if (type === "done" || type === "error") {
-          if (payload.message) setConversation({ ...c, messages: [...baseMessages.slice(0,-1), payload.user_message || baseMessages.at(-1), payload.message] });
-          if (type === "error") throw new Error(payload.detail || "The model could not complete this answer.");
-        }
-      });
-      const cs = await api("/conversations");
-      setConversations(Array.isArray(cs) ? cs : cs.conversations || []);
-    } catch (e) {
-      const stopped = e instanceof Error && e.name === "AbortError";
-      const detail = stopped ? "Generation stopped. Any partial response is kept below. The model may take a moment to finish stopping." : e instanceof Error ? e.message : "The question could not be completed. Try again.";
-      setError(detail);
-      setPrompt(text);
-      setConversation(current => {
-        if (!current) return current;
-        const messages = [...(current.messages || [])];
-        const last = messages.at(-1);
-        if (last?.role === "assistant" && last.status === "failed") return current;
-        const failed = { id: crypto.randomUUID(), role: "assistant", text: last?.id === "streaming-answer" ? last.text : "", status: stopped ? "aborted" : "failed", error: { detail, retryable: true } };
-        if (last?.id === "streaming-answer") messages[messages.length-1] = failed;
-        else if (last?.role === "user") messages.push(failed);
-        else return current;
-        return { ...current, messages };
-      });
-    } finally {
-      sending.current = false;
-      setAnswering(false);
-    }
-  };
-  const copy = async (t: string) => {
-    try {
-      await navigator.clipboard.writeText(t);
-      notify("Copied to clipboard.");
-    } catch {
-      setError("Clipboard is unavailable. Select and copy the text manually.");
-    }
-  };
   const chooseTemplate = (id: string) => setTemplateId(id);
   const extract = () =>
     run(async () => {
@@ -916,13 +670,11 @@ export default function App() {
       setExtraction(d);
       navigate("Review", "History", d.id);
       setReviewOpenRequest(n=>n+1);
-      setResultText(json(d.result || {}));
       notify(
         "Extraction submitted. Review the job status before using the result.",
       );
       reload();
     });
-  const readyCount = docs.filter((d) => d.status === "ready").length;
   const docSelection = (
     <div className="selection">
       {datasetDocs.length ? (
@@ -931,7 +683,7 @@ export default function App() {
             <input
               type="checkbox"
               checked={scope.includes(d.id)}
-              disabled={answering || d.status !== "ready" || !!d.requires_reindex}
+              disabled={d.status !== "ready" || !!d.requires_reindex}
               onChange={() => selectDoc(d.id)}
             />
             <span>
@@ -946,8 +698,8 @@ export default function App() {
       )}
     </div>
   );
-  const externalNotice = (model: Entity | undefined) => model?.provider === "ollama" && !externalProvider ? `I approve running this question and selected document content with ${modelLabel(model)} locally through Ollama. No paid model API is used.` : `I approve sending this request and relevant document content to ${modelLabel(model)} (${model?.provider || "model provider"}), with the dataset’s pinned embedding model ${selectedDataset?.embedding_selection?.provider_model || datasetEmbedding?.provider_model || "not configured"} and configured retrieval connection. External API usage is billed separately by those providers; ChatGPT does not cover these charges.`;
-  const datasetSelect = (label: string) => <select aria-label={label} value={kb} onChange={e => changeDataset(e.target.value)} disabled={answering}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>;
+  const externalNotice = (model: Entity | undefined) => `I approve sending this extraction request and selected document content to ${modelLabel(model)} (${model?.provider || 'model provider'}), using the dataset’s configured embedding and retrieval providers. External API usage is billed separately.`;
+  const datasetSelect = (label: string) => <select aria-label={label} value={kb} onChange={e => changeDataset(e.target.value)}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>;
   const configureDataset = () => { navigate("Datasets"); setDatasetModelsFocus(true); };
 
   if (!authChecked)
@@ -1028,7 +780,7 @@ export default function App() {
   return (
     <>
       {drawerOpen && <div className="navigation-backdrop" aria-hidden="true" onClick={() => setMobile(false)} />}
-      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === "Aegis Agent" ? "chat-rail" : ""} ${view === 'Aegis agent V2' ? 'agent-navigation-drawer' : ''} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={navigationIsDrawer && !drawerOpen}>
+      <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === 'Aegis agent V2' ? 'agent-navigation-drawer' : ''} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={navigationIsDrawer && !drawerOpen}>
         <button
           className="btn icon mobile-close"
           onClick={() => setMobile(false)}
@@ -1043,7 +795,7 @@ export default function App() {
           <span className="brand-name">Aegis</span>
         </div>
         <div className="brand-sub">AI Data Platform</div>
-        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["Home","Datasets","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity","Dashboard"].includes(s.name)))}/>
+        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["Home","Datasets","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity"].includes(s.name)))}/>
 
         <div className="nav-footer">
           <div className="row" style={{ marginBottom: 9 }}>
@@ -1053,7 +805,7 @@ export default function App() {
           Originals protected. Insights grounded.
         </div>
       </aside>
-      <div className={`shell ${view === "Aegis Agent" ? "chat-shell" : view === "Aegis agent V2" ? "assistant-shell" : view === "Extract Data" ? "extract-data-shell" : ""}`} inert={drawerOpen}>
+      <div className={`shell ${view === "Aegis agent V2" ? "assistant-shell" : view === "Extract Data" ? "extract-data-shell" : ""}`} inert={drawerOpen}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -1095,14 +847,14 @@ export default function App() {
           </div>
         </header>
         <main className={`workspace${view==='Home'?' home-page-shell':''}${view === "Aegis agent V2" ? " agent-v2-workspace" : view === "Extract" ? " extract-page-shell" : view === "Extract Data" ? " extract-data-workspace" : ""}${view === 'Review' ? ` review-page-shell${extraction?' has-review':''}` : ''}`}>
-          {view !== "Aegis Agent" && <div className="page-head">
+          <div className="page-head">
             <div>
               <div className="eyebrow">
-                {view === "Connections" || view === "Services & migration"
+                {view === "Storage"
                   ? "CONFIGURE & CONNECT"
                   : "YOUR KNOWLEDGE, WORKING FOR YOU"}
               </div>
-              <h1 className={view==="Aegis agent V2"?"agent-page-title":undefined}>{view==="Aegis agent V2"&&<AgentLogo size={28}/>} {view === "Dashboard" ? "Workspace overview" : viewLabel(view)}</h1>
+              <h1 className={view==="Aegis agent V2"?"agent-page-title":undefined}>{view==="Aegis agent V2"&&<AgentLogo size={28}/>} {viewLabel(view)}</h1>
               {view !== "Aegis agent V2" && view !== 'Home' && <p className="muted small">{descriptions[view]}</p>}
             </div>
             <div className="row">
@@ -1121,18 +873,9 @@ export default function App() {
                 {view !== "Extract Data" && <span>Refresh</span>}
               </button>
               {view === "Extract" && extractionTab !== "Create" && <button className="btn primary" onClick={()=>navigate('Extract','Create')}><Plus size={16}/>New extraction</button>}
-              {view === "Dashboard" && (
-                <button
-                  className="btn primary"
-                  onClick={() => navigate("Datasets")}
-                >
-                  <Plus size={15} />
-                  Add documents
-                </button>
-              )}
             </div>
-          </div>}
-          {error && view !== "Home" && view !== "Aegis Agent" && (
+          </div>
+          {error && view !== "Home" && (
             <Notice tone="error">
               {error}
               <button
@@ -1145,239 +888,6 @@ export default function App() {
               </button>
             </Notice>
           )}
-          {loading && !docs.length && view === "Dashboard" ? (
-            <div className="stats">
-              {[1, 2, 3, 4].map((n) => (
-                <div className="skeleton" key={n} />
-              ))}
-            </div>
-          ) : null}
-          {view === "Dashboard" && (
-            <>
-              <div className="stats">
-                {[
-                  {
-                    label: "Stored documents",
-                    value: overview.documents ?? docs.length,
-                    icon: FileText,
-                    sub: "Originals in durable storage",
-                  },
-                  {
-                    label: "Ready to search",
-                    value: overview.ready ?? readyCount,
-                    icon: Search,
-                    sub: "Processed and indexed",
-                  },
-                  {
-                    label: "Datasets",
-                    value:
-                      typeof overview.knowledge_bases === "number"
-                        ? overview.knowledge_bases
-                        : kbs.length,
-                    icon: Database,
-                    sub: "Organized collections",
-                  },
-                  {
-                    label: "Active jobs",
-                    value: jobs.filter((j) =>
-                      ["running", "queued", "pending"].includes(j.status),
-                    ).length,
-                    icon: Activity,
-                    sub: "Background processing",
-                  },
-                ].map((s) => (
-                  <div className="stat-card" key={s.label}>
-                    <div className="stat-icon">
-                      <s.icon size={18} />
-                    </div>
-                    <div className="stat-label">{s.label}</div>
-                    <div className="stat-value">{s.value}</div>
-                    <div className="stat-label">{s.sub}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="grid2 dashboard-grid">
-                <section className="panel">
-                  <div className="panel-head">
-                    <div>
-                      <h2>Recent documents</h2>
-                      <p className="muted small">
-                        Your latest additions to the workspace
-                      </p>
-                    </div>
-                    <button
-                      className="btn"
-                      onClick={() => navigate("Datasets")}
-                    >
-                      View datasets
-                      <ArrowRight size={13} />
-                    </button>
-                  </div>
-                  {docs.length ? (
-                    <div className="table-scroll" role="region" aria-label="Scrollable data table" tabIndex={0}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Document</th>
-                            <th>Status</th>
-                            <th>Size</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {docs.slice(0, 6).map((d) => (
-                            <tr key={d.id}>
-                              <td>
-                                <button
-                                  className="filecell"
-                                  style={{
-                                    background: "none",
-                                    border: 0,
-                                    textAlign: "left",
-                                  }}
-                                  onClick={() => openPreview(d)}
-                                >
-                                  <span className="file-icon">
-                                    <FileText size={16} />
-                                  </span>
-                                  <span>
-                                    {d.name}
-                                    <br />
-                                    <span
-                                      className="muted"
-                                      style={{ fontSize: "var(--text-small)" }}
-                                    >
-                                      {date(d.created_at)}
-                                    </span>
-                                  </span>
-                                </button>
-                              </td>
-                              <td>
-                                <Status value={d.status} />
-                              </td>
-                              <td className="muted">{byteSize(d.size)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <Empty
-                      title="A fresh place for your knowledge"
-                      detail="Upload your first document to start building a searchable library."
-                    />
-                  )}
-                </section>
-                <section className="panel">
-                  <div className="panel-head">
-                    <h2>Workspace readiness</h2>
-                    <Shield size={18} color="#7d96ce" />
-                  </div>
-                  {[
-                    {
-                      title: "Original storage",
-                      detail:
-                        settings.storage_provider ||
-                        settings.storage ||
-                        "Local filesystem",
-                      ok: docs.length > 0,
-                    },
-                    {
-                      title: "Search index",
-                      detail:
-                        settings.search_provider ||
-                        settings.search ||
-                        "Configure in Connections",
-                      ok: readyCount > 0,
-                    },
-                    {
-                      title: "Model provider",
-                      detail:
-                        settings.model_provider ||
-                        settings.model ||
-                        "Not configured",
-                      ok: !!(
-                        settings.api_key_configured ||
-                        settings.openai_api_key_configured
-                      ),
-                    },
-                  ].map((s) => (
-                    <div className="item row" key={s.title}>
-                      <div className="file-icon">
-                        {s.ok ? (
-                          <CheckCircle2 size={16} />
-                        ) : (
-                          <Settings2 size={16} />
-                        )}
-                      </div>
-                      <div>
-                        <h3 style={{ margin: 0 }}>{s.title}</h3>
-                        <span className="muted small">{s.detail}</span>
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    className="btn"
-                    style={{ width: "100%", marginTop: 20 }}
-                    onClick={() => navigate("Connections")}
-                  >
-                    Manage connections
-                    <ArrowRight size={13} />
-                  </button>
-                </section>
-              </div>
-              <section className="panel">
-                <div className="panel-head">
-                  <h2>Make more of your documents</h2>
-                  <span className="pill">Evidence first</span>
-                </div>
-                <div className="grid3">
-                  {[
-                    {
-                      name: "Ask your knowledge",
-                      text: "Get answers grounded in your selected documents.",
-                      view: "Aegis agent V2" as View,
-                      icon: MessageSquare,
-                    },
-                    {
-                      name: "Extract with structure",
-                      text: "Use reusable schemas to bring order to document data.",
-                      view: "Extract" as View,
-                      icon: FileSearch,
-                    },
-                    {
-                      name: "Review saved results",
-                      text: "Compare extracted fields against the original document.",
-                      view: "Extract" as View,
-                      icon: FileSearch,
-                    },
-                  ].map((a) => (
-                    <button
-                      key={a.name}
-                      className="btn"
-                      style={{
-                        padding: 20,
-                        whiteSpace: "normal",
-                        textAlign: "left",
-                        justifyContent: "flex-start",
-                      }}
-                      onClick={() => navigate(a.view)}
-                    >
-                      <a.icon size={25} color="#5275d5" />
-                      <div>
-                        <h3>{a.name}</h3>
-                        <span
-                          className="muted small"
-                          style={{ fontWeight: 400 }}
-                        >
-                          {a.text}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            </>
-          )}
           {view === "Home" && <DatasetHome search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} datasets={kbs} loading={loading} documents={docs} onBrowse={() => navigate("Datasets")} onChat={id => { changeDataset(id); navigate("Aegis agent V2"); }} />}
           {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
           {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}
@@ -1385,7 +895,7 @@ export default function App() {
             <>
             <DatasetWorkspace canManage={Boolean(user.is_admin)} datasets={kbs} models={models} documents={docs} selectedId={kb} modelsFocus={datasetModelsFocus} onUploadWorkflowVisible={setUploadWorkflowVisible}
               onSelect={changeDataset} onCreated={d => { setKbs(current => [...current, d]); changeDataset(d.id); }}
-              api={api} run={run} busy={busy || answering} reload={reload} notify={notify}
+              api={api} run={run} busy={busy} reload={reload} notify={notify}
               onConnections={() => navigate("Model Registration")} onUse={navigate}
               uploadPanel={<DocumentUploadPanel upload={documentUpload} />}
               documentsPanel={
@@ -1500,24 +1010,6 @@ export default function App() {
               <div className="row between wrap" style={{marginTop:17}}><span className="small muted">{selectedDataset ? `Destination: ${selectedDataset.name}` : "Open or onboard a dataset above to choose the destination."}</span><button className="btn primary" disabled={busy || !selectedDataset} onClick={() => setConfirm({title:"Assign unassigned documents?", body:`Assign all ${docs.filter(d => !(d.dataset_id || d.kb_id)).length} unassigned documents to “${selectedDataset?.name}”? Originals are preserved. You must reindex them with this dataset’s embedding model before asking questions or extracting. Existing dataset documents will not move.`, action:async () => {const ids = docs.filter(d => !(d.dataset_id || d.kb_id)).map(d => d.id); for (let start = 0; start < ids.length; start += 100) await api(`/datasets/${kb}/assign-documents`, "POST", {document_ids:ids.slice(start, start + 100)}); notify("Documents assigned. Reindex them to use this dataset’s embedding model."); reload();}})}>Assign to selected dataset</button></div>
             </section>}
             </>
-          )}
-          {view === "Aegis Agent" && <section className="agent-header"><div><h1>Document Chat</h1></div><button className="btn" onClick={()=>navigate('Extract')}>Open Review</button></section>}
-          {view === "Aegis Agent" && agentTab === "Chat" && temporary && <TemporaryDocumentChat models={models} initialModelId={chatModelId} settings={settings} api={api} onExit={() => setTemporary(false)} />}
-          {view === "Aegis Agent" && agentTab === "Chat" && !temporary && (
-            <FocusedChat
-              onTemporary={() => { conversationRequest.current += 1; setTemporary(true); cancelPromptPreview(); setTemplateAttachment(null); setPrompt(""); setLastPrompt(""); setError(""); }}
-              upload={documentUpload} onUploadWorkflowVisible={setUploadWorkflowVisible} templateAttachment={templateAttachment?.fileName||''} templateFeedback={templateFeedback} promptPreview={promptPreview} promptLoading={promptLoading} onConfirmPrompt={confirmPrompt} onCancelPrompt={cancelPromptPreview} onTemplateRemove={()=>{setTemplateAttachment(null);setTemplateFeedback('');}} onTemplateAttach={files=>void uploadPrompt(files)} conversation={conversation} conversations={conversations} prompt={prompt} setPrompt={setPrompt}
-              error={error} onDismissError={() => setError("")} datasetName={selectedDataset?.name || "Choose a dataset"} localProcessing={settings.local_only || (selectedChatModel?.provider === "ollama" && !externalProvider)} reranker={settings.reranker || {}}
-              answering={answering} lastPrompt={lastPrompt} canSend={!busy && !promptLoading && !promptPreview && (!!templateAttachment || ((selectedChatModel?.provider === "ollama" || externalChat) && !!selectedChatModel && !!readyDatasetDocs.length))}
-              externalChat={externalChat} setExternalChat={setExternalChat} providerNotice={settings.local_only ? "Questions and document content are processed locally through Ollama with a compatible dataset embedding index. Choose an installed mapped model to continue." : externalNotice(selectedChatModel)} modelName={modelLabel(selectedChatModel)}
-              scopeCount={scope.length} readyCount={readyDatasetDocs.length} documentControl={docSelection}
-              datasetControl={datasetSelect("Chat dataset")} modelControl={<ModelPicker dataset={selectedDataset} capability="chat" value={chatModelId} onChange={setChatModelId} onConfigure={configureDataset} disabled={answering} />}
-              exportControl={!temporary && conversation?.id ? <Download path={`/conversations/${conversation.id}/export`}>Export</Download> : null}
-              onNew={() => { conversationRequest.current += 1; openingConversation.current = false; setConversation(null); setPrompt(""); setLastPrompt(""); setExternalChat(false); setError(""); }}
-              onOpen={id => run(() => openConversation(id))} onSend={sendMessage} onStop={() => abort.current?.abort()}
-              onReload={() => { if (!temporary) run(() => openConversation(conversation!.id)); }} onRefresh={reload} loading={loading} onCopy={copy}
-              onFeedback={(id, rating) => run(async () => { await api(`/messages/${id}/feedback`, "POST", { rating }); notify("Feedback saved."); })}
-            />
           )}
           {(view === "Extract" || (view === "Review" && reviewReturn?.view === "Extract")) && <div hidden={view !== "Extract" || extractionTab !== "History"}>
             <ExtractionDirectory datasets={kbs} extractions={extractions} documents={docs} templates={templates} selectedDataset={view === 'Review'?reviewReturn?.datasetId||'':kb} busy={busy} onDatasetChange={changeDataset} onOpen={openReview} onReExtract={id=>run(async()=>{setReextractSource(await api(`/extractions/${id}`));})}/>
@@ -1707,594 +1199,15 @@ export default function App() {
               )}
             </section>
           )}
-          {view === "Model Registration" && <ModelRegistration models={models} settings={settings} api={api} run={run} busy={busy || answering}
+          {view === "Model Registration" && <ModelRegistration models={models} settings={settings} api={api} run={run} busy={busy}
             onSaved={model => { setModels(current => current.some(m => m.id === model.id) ? current.map(m => m.id === model.id ? model : m) : [model, ...current]); notify("Model saved. New runs use the updated connection; apply embedding changes in Model Mapping."); reload(); }}
             onMapping={() => navigate("Model Mapping")} />}
           {view === "Model Mapping" && <section className="panel model-mapping-screen">
-            <div className="field mapping-dataset-select"><label htmlFor="mapping-dataset">Dataset</label><select id="mapping-dataset" value={selectedDataset?.id || ""} onChange={e => changeDataset(e.target.value)} disabled={busy || answering}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}{d.active === false ? " · Inactive" : ""}</option>)}</select></div>
-            {selectedDataset ? <DatasetMappings key={selectedDataset.id} dataset={selectedDataset} models={models} api={api} run={run} busy={busy || answering} reload={reload} notify={notify} onConnections={() => navigate("Model Registration")} /> : <p className="muted">Choose a dataset to configure its Embedding, Chat, and Extraction models.</p>}
+            <div className="field mapping-dataset-select"><label htmlFor="mapping-dataset">Dataset</label><select id="mapping-dataset" value={selectedDataset?.id || ""} onChange={e => changeDataset(e.target.value)} disabled={busy}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}{d.active === false ? " · Inactive" : ""}</option>)}</select></div>
+            {selectedDataset ? <DatasetMappings key={selectedDataset.id} dataset={selectedDataset} models={models} api={api} run={run} busy={busy} reload={reload} notify={notify} onConnections={() => navigate("Model Registration")} /> : <p className="muted">Choose a dataset to configure its Embedding, Chat, and Extraction models.</p>}
             {!kbs.length && <button className="btn" onClick={() => navigate("Datasets")}>Open Datasets to create one</button>}
           </section>}
-          {view === "Storage" && user.is_admin && <StorageConfiguration api={api} onChanged={reload} onFreshStart={()=>{changeDataset('');setExtraction(null);setReviewReturn(null);Object.keys(sessionStorage).filter(key=>key.startsWith('aegis-agent-v2:')||key.startsWith('aegis-review-return-')).forEach(key=>sessionStorage.removeItem(key));}}/>}
-          {view === "Connections" && (
-            <>
-              <div className="section-tabs" aria-label="Connection sections"><button className="btn" onClick={() => navigate("Model Registration")}>Model Registration</button><button className="btn" onClick={() => navigate("Model Mapping")}>Model Mapping</button>{["Profiles", "Providers", "Storage", "OCI", "Diagnostics"].map(tab => <button key={tab} className={`btn ${connectionTab === tab ? "primary" : ""}`} aria-pressed={connectionTab === tab} onClick={() => setConnectionTab(tab)}>{tab}</button>)}</div>
-              <div hidden={!["Providers", "Storage", "OCI"].includes(connectionTab)}><Notice tone="warn">
-                Provider keys are encrypted on the server and never saved in
-                browser storage. OpenAI usage is separate from a ChatGPT
-                subscription. Changing an embedding model requires reindexing
-                existing documents.
-              </Notice></div>
-              <section className="panel" hidden={connectionTab !== "Profiles"}>
-                <div className="panel-head">
-                  <div>
-                    <h2>Connection profiles</h2>
-                    <p className="muted small">
-                      Save the current server configuration and encrypted
-                      provider keys as a reusable, versioned profile. Save any
-                      form changes first.
-                    </p>
-                  </div>
-                  <Layers size={20} color="#718ac4" />
-                </div>
-                <div
-                  className="row"
-                  style={{ maxWidth: 600, marginBottom: 20 }}
-                >
-                  <input
-                    aria-label="Profile name"
-                    placeholder="e.g. Local development or OCI production"
-                    value={profileName}
-                    onChange={(e) => setProfileName(e.target.value)}
-                  />
-                  <button
-                    className="btn primary"
-                    disabled={busy || !profileName.trim()}
-                    onClick={() =>
-                      run(async () => {
-                        await api("/settings/profiles", "POST", {
-                          name: profileName,
-                        });
-                        setProfileName("");
-                        setProfiles(await api("/settings/profiles"));
-                        notify(
-                          "Current server configuration saved as an encrypted profile.",
-                        );
-                      })
-                    }
-                  >
-                    <Plus size={14} />
-                    Save current profile
-                  </button>
-                </div>
-                {profiles.length ? (
-                  profiles.map((p) => (
-                    <div className="item row between wrap" key={p.id}>
-                      <div>
-                        <h3>{p.name}</h3>
-                        <span className="muted small">
-                          Version {p.version} · {date(p.created_at)} ·{" "}
-                          {p.api_key_configured || p.oci_api_key_configured || p.connection_credentials_configured
-                            ? "Encrypted credentials saved"
-                            : "No provider key saved"}
-                        </span>
-                      </div>
-                      <div className="row wrap">
-                        {p.registration_model_id && <button className="btn" onClick={() => navigate("Model Registration")}>Edit in Model Registration</button>}
-                        <button
-                          className="btn"
-                          disabled={busy || !!p.registration_model_id}
-                          onClick={() =>
-                            setConfirm({
-                              title: `Activate ${p.name}?`,
-                              body: "This replaces the active model, embedding, search, storage, queue configuration and provider credentials with this saved profile. External processing requires approval again. Embedding changes require reindexing. The server blocks unsafe storage changes and active jobs.",
-                              action: async () => {
-                                const d = await api(
-                                  `/settings/profiles/${p.id}/activate`,
-                                  "POST",
-                                  {},
-                                );
-                                setSettings(d);
-                                setSettingsForm(d);
-                                setExternalChat(false);
-                                setExternalExtract(false);
-                                setExternalUpload(false);
-                                notify(
-                                  "Connection profile activated. Check connection readiness and reindex if needed.",
-                                );
-                                reload();
-                              },
-                            })
-                          }
-                        >
-                          Activate
-                        </button>
-                        <button
-                          className="btn"
-                          disabled={busy || !!p.registration_model_id}
-                          onClick={() =>
-                            setConfirm({
-                              title: `Save a new version of ${p.name}?`,
-                              body: "Save the current server configuration and encrypted provider credentials as a new version of this profile. Unsaved form edits are not included.",
-                              action: async () => {
-                                await api(`/settings/profiles/${p.id}`, "PUT", {
-                                  name: p.name,
-                                });
-                                setProfiles(await api("/settings/profiles"));
-                                notify("Profile version saved.");
-                              },
-                            })
-                          }
-                        >
-                          Save new version
-                        </button>
-                        <Download path={`/settings/profiles/${p.id}/export`}>
-                          Safe export
-                        </Download>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="muted small">No saved profiles yet.</p>
-                )}
-              </section>
-              <div className="settings-focus">
-                <section className="panel" hidden={connectionTab !== "Providers"}>
-                  <div className="panel-head">
-                    <h2>Connection configuration</h2>
-                    <span className="pill">Server-side configuration</span>
-                  </div>
-                  <Field label="Connection's generation provider">
-                    <select
-                      value={settingsForm.model_provider || "openai"}
-                      aria-label="Model provider"
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          model_provider: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="ollama">Ollama — local, no API key</option>
-                      <option value="openai" disabled={settings.local_only}>OpenAI</option>
-                      <option value="oci" disabled={settings.local_only}>
-                        OCI Generative AI · requires validation
-                      </option>
-                      <option value="mock">
-                        Mock · explicit development test mode
-                      </option>
-                    </select>
-                  </Field>
-                  {settingsForm.model_provider === "ollama" && (
-                    <p className="muted small">Runs on this computer through Ollama. No API key is needed. Download the selected models before use.</p>
-                  )}
-                  <Field label="Connection’s default generation model">
-                    <input
-                      aria-label="Answer model"
-                      value={settingsForm.model || ""}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          model: e.target.value,
-                        })
-                      }
-                      placeholder={settingsForm.model_provider === "ollama" ? "qwen3:4b" : "gpt-4.1-mini"}
-                    />
-                  </Field>
-                  <Field label="Embedding provider">
-                    <select
-                      aria-label="Embedding provider"
-                      value={
-                        settingsForm.embedding_provider ||
-                        "sentence_transformers"
-                      }
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          embedding_provider: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="sentence_transformers">
-                        Local · Sentence Transformers
-                      </option>
-                      <option value="ollama">Ollama — local embeddings</option>
-                      <option value="openai" disabled={settings.local_only}>OpenAI</option>
-                      <option value="mock">
-                        Mock · explicit development test mode
-                      </option>
-                    </select>
-                  </Field>
-                  <Field label="Embedding model">
-                    <input
-                      aria-label="Embedding model"
-                      value={settingsForm.embedding_model || ""}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          embedding_model: e.target.value,
-                        })
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="OpenAI API key"
-                    help={
-                      settings.local_only ? "Provider credentials are disabled in this local-only workspace." : settings.api_key_configured
-                        ? "A key is configured. Leave blank to keep it unchanged."
-                        : "No key configured. Enter your own provider key; it is encrypted by the server."
-                    }
-                  >
-                    <input
-                      aria-label="OpenAI API key"
-                      disabled={settings.local_only}
-                      type="password"
-                      autoComplete="off"
-                      value={apiKey}
-                      placeholder={
-                        settings.api_key_configured
-                          ? "•••••••• · configured"
-                          : "sk-…"
-                      }
-                      onChange={(e) => setApiKey(e.target.value)}
-                    />
-                  </Field>
-                  {settingsForm.model_provider === "mock" && (
-                    <Notice tone="warn">
-                      Mock mode generates synthetic test output. It is not model
-                      intelligence and must not be used as a production answer
-                      or extraction.
-                    </Notice>
-                  )}
-                </section>
-                <section className="panel" hidden={connectionTab !== "Storage"}>
-                  <h2>Storage & retrieval</h2>
-                  <p><button className="btn" onClick={() => navigate("Storage")}>Configure files, database &amp; knowledge</button></p>
-                  <p className="small muted">Database and semantic search destinations are managed together in Storage.</p>
-                  <Field
-                    label="Job queue"
-                    help="OCI Queue sends job identifiers only; originals and job state stay in their configured stores. Configure the queue endpoint and identity server-side before switching."
-                  >
-                    <select
-                      aria-label="Job queue"
-                      value={settingsForm.queue_provider || "database"}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          queue_provider: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="database">
-                        Database-backed durable queue
-                      </option>
-                      <option value="oci">
-                        OCI Queue · requires validation
-                      </option>
-                    </select>
-                  </Field>
-                  <div className="grid2">
-                    {[
-                      {
-                        key: "chunk_size",
-                        label: "Chunk size",
-                        fallback: 1000,
-                      },
-                      {
-                        key: "chunk_overlap",
-                        label: "Chunk overlap",
-                        fallback: 150,
-                      },
-                      { key: "top_k", label: "Retrieved chunks", fallback: 5 },
-                      {
-                        key: "timeout",
-                        label: "Request timeout (sec)",
-                        fallback: 60,
-                      },
-                      {
-                        key: "max_upload_mb",
-                        label: "Upload limit (MB)",
-                        fallback: 25,
-                      },
-                    ].map((f) => (
-                      <Field label={f.label} key={f.key}>
-                        <input
-                          type="number"
-                          min={f.key === "chunk_overlap" ? 0 : 1}
-                          aria-label={f.label}
-                          value={settingsForm[f.key] ?? f.fallback}
-                          onChange={(e) =>
-                            setSettingsForm({
-                              ...settingsForm,
-                              [f.key]: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </Field>
-                    ))}
-                  </div>
-
-                </section>
-              </div>
-              <section className="panel" hidden={connectionTab !== "OCI"}>
-                <h2>OCI migration profile</h2>
-                <p className="muted small">
-                  OCI adapters are implemented and tested with mocked SDK
-                  responses. Validate your tenancy, permissions, and a live
-                  round-trip before production use.
-                </p>
-                <div className="grid3">
-                  {[
-                    { key: "oci_region", label: "Region" },
-                    {
-                      key: "oci_project_id",
-                      label: "Project / compartment ID",
-                    },
-                    { key: "oci_auth_mode", label: "Authentication mode" },
-                    { key: "oci_model", label: "Model identifier" },
-                    {
-                      key: "oci_vector_store_id",
-                      label: "Vector store identifier",
-                    },
-                    { key: "oci_profile", label: "OCI SDK profile" },
-                  ].map((f) => (
-                    <Field label={f.label} key={f.key}>
-                      <input
-                        aria-label={f.label}
-                        value={settingsForm[f.key] || ""}
-                        onChange={(e) =>
-                          setSettingsForm({
-                            ...settingsForm,
-                            [f.key]: e.target.value,
-                          })
-                        }
-                      />
-                    </Field>
-                  ))}
-                </div>
-                <Field
-                  label="OCI Generative AI API key"
-                  help="Optional for API key auth. Leave blank to keep the existing server-encrypted key. Signing keys and SDK credentials must be mounted server-side."
-                >
-                  <input
-                    aria-label="OCI Generative AI API key"
-                    type="password"
-                    autoComplete="off"
-                    value={ociApiKey}
-                    onChange={(e) => setOciApiKey(e.target.value)}
-                  />
-                </Field>
-
-              </section>
-              <div className="settings-actions" hidden={!["Providers", "Storage", "OCI", "Diagnostics"].includes(connectionTab)}>                  <div className="row wrap">
-                    <button
-                      className="btn primary"
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          const allowed = [
-                            "storage_provider",
-                            "search_provider",
-                            "queue_provider",
-                            "model_provider",
-                            "embedding_provider",
-                            "model",
-                            "embedding_model",
-                            "chunk_size",
-                            "chunk_overlap",
-                            "top_k",
-                            "timeout",
-                            "max_upload_mb",
-                            "oci_region",
-                            "oci_project_id",
-                            "oci_auth_mode",
-                            "oci_model",
-                            "oci_vector_store_id",
-                            "oci_profile",
-                            "oci_storage_namespace",
-                            "oci_storage_bucket",
-                            "oci_storage_prefix",
-                            "oci_storage_region",
-                            "oci_storage_auth_mode",
-                            "oci_storage_profile",
-                          ];
-                          const payload: Entity = Object.fromEntries(
-                            allowed
-                              .filter((k) => k in settingsForm)
-                              .map((k) => [k, settingsForm[k]]),
-                          );
-                          if (apiKey) payload.api_key = apiKey;
-                          if (ociApiKey) payload.oci_api_key = ociApiKey;
-                          const s = await api("/settings", "PATCH", payload);
-                          setSettings(s);
-                          setSettingsForm(s);
-                          setApiKey("");
-                          setOciApiKey("");
-                          notify(
-                            "Settings saved securely. Reindex documents if embedding settings changed.",
-                          );
-                          reload();
-                        })
-                      }
-                    >
-                      <Check size={14} />
-                      Save settings
-                    </button>
-                    <button
-                      className="btn"
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          setTestResult(await api("/settings/test", "POST"));
-                          setConnectionTab("Diagnostics");
-                        })
-                      }
-                    >
-                      <Activity size={14} />
-                      Test saved connections
-                    </button>
-                    <Download path="/settings/export">
-                      Export safe config
-                    </Download>
-                  </div></div>
-              {testResult && (
-                <section className="panel" hidden={connectionTab !== "Diagnostics"}>
-                  <h2>Connection test result</h2>
-                  <pre className="code mono">{json(testResult)}</pre>
-                </section>
-              )}
-              <section className="panel" hidden={connectionTab !== "Diagnostics"}>
-                <h2>Provider capabilities</h2>
-                <p className="muted small">
-                  Readiness is reported by the server; an unavailable adapter
-                  cannot process your data.
-                </p>
-                <details className="disclosure"><summary>View technical capabilities</summary><pre className="code mono">{json(caps)}</pre></details>
-              </section>
-            </>
-          )}
-          {view === "Services & migration" && (
-            <>
-              <Notice>
-                Local storage and the search index are separate. Back up the
-                stored originals, database, and encryption key before moving
-                environments. A search index can be rebuilt; a lost original or
-                encryption key cannot.
-              </Notice>
-              <div className="grid3">
-                {[
-                  {
-                    name: "Local deployment",
-                    icon: Server,
-                    state: "available",
-                    text: "Next.js frontend, Python API, durable local volumes, and configurable vector search.",
-                  },
-                  {
-                    name: "OpenAI models",
-                    icon: MessageSquare,
-                    state: settings.api_key_configured
-                      ? "configured"
-                      : "setup required",
-                    text: "Bring your own API key. Content is sent only with explicit external processing approval.",
-                  },
-                  {
-                    name: "OCI migration",
-                    icon: Cloud,
-                    state: "unverified",
-                    text: "Storage, model, and managed vector adapters are implemented. Live tenancy validation is still required before production use.",
-                  },
-                ].map((s) => (
-                  <section className="panel" key={s.name}>
-                    <s.icon
-                      size={25}
-                      color="#5e7ed2"
-                      style={{ marginBottom: 20 }}
-                    />
-                    <div className="row between">
-                      <h2>{s.name}</h2>
-                      <Status value={s.state} />
-                    </div>
-                    <p
-                      className="muted small"
-                      style={{ lineHeight: 1.8, marginTop: 13 }}
-                    >
-                      {s.text}
-                    </p>
-                  </section>
-                ))}
-              </div>
-              <div className="grid2">
-                <section className="panel">
-                  <h2>Migration checklist</h2>
-                  <p className="muted small">
-                    Validate each layer before changing the active provider.
-                  </p>
-                  {[
-                    {
-                      title: "Create a verified backup",
-                      text: "Stop writes and back up the persistent data volume, originals, database, and encryption key. Test a restore in a separate environment.",
-                    },
-                    {
-                      title: "Provision the destination",
-                      text: "Confirm OCI region, compartment permissions, Object Storage, model availability, and the supported vector-search service.",
-                    },
-                    {
-                      title: "Validate the cloud adapters",
-                      text: "Verify authentication, storage reads and writes, retries, timeouts, vector dimensions, and model limits. Adapter tests do not substitute for a live tenancy round-trip.",
-                    },
-                    {
-                      title: "Copy originals and metadata",
-                      text: "Keep document identifiers stable and compare object checksums. Never delete local originals before validating the destination.",
-                    },
-                    {
-                      title: "Rebuild and compare indexes",
-                      text: "Reindex when the embedding provider, model, dimensions, or chunk strategy changes. Run known queries and inspect their evidence.",
-                    },
-                    {
-                      title: "Switch with a rollback plan",
-                      text: "Run a canary workload, compare answers and extraction results, then switch providers. Retain the tested backup and prior configuration.",
-                    },
-                  ].map((s, i) => (
-                    <div
-                      className="item row"
-                      style={{ alignItems: "flex-start" }}
-                      key={s.title}
-                    >
-                      <span className="stepnum">{i + 1}</span>
-                      <div>
-                        <h3>{s.title}</h3>
-                        <p className="muted small" style={{ lineHeight: 1.8 }}>
-                          {s.text}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </section>
-                <section className="panel">
-                  <h2>Operational boundaries</h2>
-                  <div className="item">
-                    <h3>Storage-first ingestion</h3>
-                    <p className="muted small">
-                      A failed embedding or indexing job leaves the original
-                      stored. Retry from Jobs & activity after fixing the
-                      provider.
-                    </p>
-                  </div>
-                  <div className="item">
-                    <h3>Independent cloud billing</h3>
-                    <p className="muted small">
-                      OpenAI API and OCI service charges are billed by those
-                      providers. A ChatGPT plan does not include this
-                      application’s API usage.
-                    </p>
-                  </div>
-                  <div className="item">
-                    <h3>No silent provider fallbacks</h3>
-                    <p className="muted small">
-                      Unavailable model and cloud adapters report a clear error.
-                      Mock mode must be selected explicitly for development
-                      tests.
-                    </p>
-                  </div>
-                  <div className="item">
-                    <h3>Backups and restore</h3>
-                    <p className="muted small">
-                      Use the repository deployment guide and backup scripts.
-                      Configuration export is sanitized and is not a complete
-                      data backup.
-                    </p>
-                    <Download path="/settings/export">
-                      Export sanitized settings
-                    </Download>
-                  </div>
-                  <div className="item">
-                    <h3>Live readiness report</h3>
-                    <pre className="code mono">{json(caps)}</pre>
-                  </div>
-                </section>
-              </div>
-            </>
-          )}
+          {view === "Storage" && user.is_admin && <StorageConfiguration api={api} connections={<ConnectionSettings api={api} onChanged={reload} onModels={()=>navigate("Model Registration")}/>} onChanged={reload} onFreshStart={()=>{changeDataset('');setExtraction(null);setReviewReturn(null);Object.keys(sessionStorage).filter(key=>key.startsWith('aegis-agent-v2:')||key.startsWith('aegis-review-return-')).forEach(key=>sessionStorage.removeItem(key));}}/>}
         </main>
         <ConnectionStatus api={api} revision={refresh}/>
       </div>
@@ -2396,12 +1309,12 @@ export default function App() {
           </section>
         </div>
       )}
-      {!['Aegis agent V2','Aegis Agent'].includes(view)&&<button type="button" className={`agent-shortcut${view === 'Review' ? ' in-review' : ''}`} aria-label="Open Aegis Agent" title="Aegis Agent" onClick={()=>navigate('Aegis agent V2')}>
+      {view !== 'Aegis agent V2'&&<button type="button" className={`agent-shortcut${view === 'Review' ? ' in-review' : ''}`} aria-label="Open Aegis Agent" title="Aegis Agent" onClick={()=>navigate('Aegis agent V2')}>
         <AgentLogo size={40}/>
         <span className="agent-shortcut-badge" aria-hidden="true"><MessageSquare size={11}/></span>
         <span className="agent-shortcut-label" aria-hidden="true">Aegis Agent</span>
       </button>}
-      {view !== "Storage" && <OperationProgress agentWorkspace={view === "Aegis agent V2"} compact={view === "Review" || view === "Extract" || view === "Aegis agent V2"} workspaceLoading={loading} requests={answering?[...requests,{id:'chat-answer',label:'Generating your answer…'}]:requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobIds={view === "Aegis agent V2" ? agentVisibleJobIds : []} visibleJobId={reviewProgressJob?.id || (view === "Extract" ? visibleExtractionJobId : null)}/>}
+      {view !== "Storage" && <OperationProgress agentWorkspace={view === "Aegis agent V2"} compact={view === "Review" || view === "Extract" || view === "Aegis agent V2"} workspaceLoading={loading} requests={requests} jobs={jobs} uploadItems={documentUpload.batchRows} documents={docs} uploadWorkflowVisible={uploadWorkflowVisible} visibleJobIds={view === "Aegis agent V2" ? agentVisibleJobIds : []} visibleJobId={reviewProgressJob?.id || (view === "Extract" ? visibleExtractionJobId : null)}/>}
     </>
   );
 }

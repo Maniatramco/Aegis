@@ -8,10 +8,8 @@ const {chromium,expect}=require('@playwright/test');const fs=require('node:fs');
  try{
   await page.goto('http://web:3000/');await page.locator('#login-username').fill(auth.username);await page.locator('#login-password').fill(auth.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await expect(page.locator('main h1').first()).toBeVisible();
-  for(const name of ['Home','Aegis Agent','Datasets','Document Chat','Extraction Review','Re-extract','Prompt templates','Model Registration','Model Mapping','Dashboard','Jobs & activity','Connections','Services & migration','Users & passwords']){
-   const nav=page.getByRole('navigation');const button=nav.getByRole('button',{name,exact:true});
-   if(!await button.isVisible())await nav.getByRole('button',{name:'Manage workspace',exact:true}).click();
-   await button.click();await expect(page.locator('main h1').first()).toBeVisible();
+  for(const name of ['Home','Aegis Agent','Datasets','Prompt templates','Extract Data','Review','Model Registration','Model Mapping','Storage','Users & passwords','Jobs & activity']){
+   await page.goto('http://web:3000/#'+encodeURIComponent(name));await expect(page.locator('main h1').first()).toBeVisible();
    report.screens.push({name,text:(await page.locator('main').innerText()).slice(0,3300),controls:await page.locator('main input,main select,main textarea,main button').evaluateAll(els=>els.map(el=>({tag:el.tagName,type:el.type,id:el.id,aria:el.getAttribute('aria-label'),text:el.tagName==='BUTTON'?el.textContent.trim():undefined,options:el.tagName==='SELECT'?[...el.options].map(o=>({value:o.value,label:o.label})):undefined}))) });
   }
  }catch(e){report.failure=e.message;process.exitCode=1;}

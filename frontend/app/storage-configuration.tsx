@@ -41,7 +41,7 @@ export function DatabaseConfiguration({api,onChanged}:{api:Api;onChanged:()=>voi
   {message&&<div className="notice" role="status">{message}</div>}{error&&<div className="notice warn" role="alert">{error}</div>}
  </section>;
 }
-export function StorageConfiguration({api,onChanged,onFreshStart}:{api:Api;onChanged:()=>void;onFreshStart?:()=>void}){
+export function StorageConfiguration({api,onChanged,onFreshStart,connections}:{api:Api;onChanged:()=>void;onFreshStart?:()=>void;connections?:React.ReactNode}){
  const [form,setForm]=useState<Entity|null>(null),[current,setCurrent]=useState<Entity>({}),[workspace,setWorkspace]=useState<Entity>({}),[busy,setBusy]=useState(''),[message,setMessage]=useState(''),[error,setError]=useState(''),[confirmation,setConfirmation]=useState(''),[restore,setRestore]=useState('');
  const load=async()=>{const [data,preview]=await Promise.all([api('/storage'),api('/workspace/reset-preview')]);setCurrent(data);setWorkspace(preview);setForm({storage_provider:'local',oci_storage_prefix:'aegis',oci_storage_auth_mode:'config_file',oci_storage_profile:'DEFAULT',oci_storage_config_file:'/run/oci/config',oci_storage_key_file:'/run/oci/aegis_api_key.pem',...data.destination,local_storage_path:data.destination.local_storage_path||data.local_root});};
  useEffect(()=>{void load().catch(e=>setError(e.message));},[]);
@@ -63,6 +63,7 @@ export function StorageConfiguration({api,onChanged,onFreshStart}:{api:Api;onCha
    <div className="storage-actions"><button className="btn" disabled={!!busy} onClick={()=>run('Testing storage connection',async()=>{const result=await api('/storage/test','POST',form);setMessage(result.message);})}><RefreshCw size={16}/>Test connection</button><button className="btn primary" disabled={!!busy} onClick={()=>run('Saving storage configuration',async()=>{const saved=await api('/storage','PUT',form);setMessage(saved.test.message+' New files will use this destination.');setCurrent({...current,destination:saved.destination});onChanged();})}><CheckCircle2 size={16}/>Save storage configuration</button></div>
   </section>
   <DatabaseConfiguration api={api} onChanged={onChanged}/>
+  {connections}
   <section className="panel">
    <div className="panel-head"><div><h2>Start fresh</h2><p className="muted">Archive the active datasets, originals, prompts, results, chats, job history and indexes locally, then clear the workspace.</p></div><Archive size={24}/></div>
    <div className="storage-counts">{[['Datasets','knowledge_base'],['Documents','document'],['Results','extraction'],['Prompts','template'],['Chats','conversation']].map(([label,key])=><div key={key}><strong>{workspace.counts?.[key]||0}</strong><span>{label}</span></div>)}<div><strong>{workspace.index_collections?.length||0}</strong><span>Index collections</span></div></div>

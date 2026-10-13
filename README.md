@@ -59,6 +59,14 @@ directly from Aegis Agent. See [onboarding](docs/AGENT-ONBOARDING.md) and
 
 ## Data and agents
 
+The workspace has eleven menu pages: Home, Aegis Agent, Dataset, Prompt, Extract,
+Review, Model Registration, Model Mapping, Storage, Users & passwords, and
+Jobs & activity. The separate results/PDF Review detail is the twelfth screen.
+Login and password recovery remain available outside the workspace. Old Document
+Chat links open Aegis Agent; Connections and Services & migration links open
+Storage, whose Advanced connections section retains required provider and
+processing controls. Dashboard links open Home.
+
 SQL holds control/access metadata and file references. Originals, parsed text,
 prompts and extraction JSON/Parquet artifacts use their pinned file destination.
 Published unified knowledge contains metadata, source chunks and extracted values,

@@ -1,6 +1,6 @@
 # File storage configuration
 
-Admins configure file destinations in **Manage workspace → Storage**. This replaces the duplicate original-document storage controls in Connections.
+Admins configure file destinations in **Manage workspace → Storage**.
 
 The same screen also contains **Database & knowledge**. Local uses the existing laptop Oracle database and Qdrant. OCI uses the configured Oracle 26ai database and native Oracle vector search. File destinations remain independently selectable.
 
@@ -19,7 +19,7 @@ The single native vector table stores logical document/unified-knowledge namespa
 
 Switching back to Local copies the current catalog and vectors to the laptop backend, retaining current data rather than reopening an outdated catalog. Existing destination rows must belong to the same workspace; activation refuses an unrelated workspace. Target catalog snapshots and superseded target vectors are retained locally for recovery. Original PDFs and result files keep their individually pinned destinations. Re-activating the same OCI connection is idempotent. Processing jobs and recorded active tool runs block switching.
 
-Connections links to this same screen for file/database/knowledge configuration; it no longer contains a competing vector-provider selector. The mounted wallet files and encryption master key must remain available to both services across restarts.
+Storage also contains a collapsed **Advanced connections** section for provider defaults, queue and retrieval processing settings, OCI generation, encrypted connection profiles, safe exports and connection diagnostics. Model registrations and dataset mappings remain in their respective Model screens. Processing settings do not submit file or vector destination fields; those are configured by the dedicated sections above. Old Connections and Services & migration links redirect here. The mounted wallet files and encryption master key must remain available to both services across restarts.
 
 ## Destinations
 

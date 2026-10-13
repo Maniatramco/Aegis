@@ -32,9 +32,11 @@ test('grouped navigation, route aliases and agent drawer work on desktop and mob
  if(await page.getByLabel('Open navigation').isVisible())await page.getByLabel('Open navigation').click();
  const nav=page.getByRole('navigation',{name:'Workspace pages'});
  await nav.getByRole('button',{name:'Manage workspace',exact:true}).click();
- for(const name of ['Setup','API Documentation','ADP Documentation','Index inspector'])await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(0);
+ for(const name of ['Setup','API Documentation','ADP Documentation','Index inspector','Dashboard','Connections','Services & migration','Document Chat'])await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(0);
+ await nav.getByRole('button',{name:'Model',exact:true}).click();
  await nav.getByRole('button',{name:'Onboard',exact:true}).click();
  expect(await page.locator('#onboard-navigation .nav-item').allTextContents()).toEqual(['Dataset','Prompt','Extract','Review']);
+ expect(await nav.locator('button:not(.nav-group-toggle):not(.nav-more)').allTextContents()).toEqual(['Home','Aegis Agent','Dataset','Prompt','Extract','Review','Model Reg','Model Mapping','Users & passwords','Jobs & activity','Storage']);
  await nav.getByRole('button',{name:'Aegis Agent',exact:true}).click();
  await expect(page.locator('.sidebar')).not.toHaveClass(/open/);await expect(page.getByLabel('Message Aegis Agent')).toBeVisible();
  await expect(page.locator('.agent-shortcut')).toHaveCount(0);
@@ -44,9 +46,48 @@ test('grouped navigation, route aliases and agent drawer work on desktop and mob
  for(const hash of ['Setup','API Documentation','ADP Documentation','Index inspector']){
   await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toHaveText('Home');await expect(page).toHaveURL(/#Home$/);
  }
+ for(const [hash,title,url] of [['Dashboard','Home',/#Home$/],['Connections','Storage',/#Storage$/],['Services & migration','Storage',/#Storage$/],['Document Chat','Aegis Agent',/#Aegis%20Agent$/],['Ask Aegis','Aegis Agent',/#Aegis%20Agent$/]] as [string,string,RegExp][]){
+  await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toHaveText(title);await expect(page).toHaveURL(url);
+ }
  await page.setViewportSize({width:390,height:844});await agent(page,'');await page.getByLabel('Open navigation').click();
  await expect(nav).toBeVisible();await nav.getByRole('button',{name:'Home',exact:true}).click();await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('dataset chat actions open Aegis Agent with the selected dataset',async({page})=>{
+ const w=await setup(page);await uploadReady(page.request,w.headers,w.dataset,'agent-redirect.txt',source);await page.reload();
+ await page.goto('/#'+encodeURIComponent('dataset/'+w.dataset.id));
+ await page.getByRole('button',{name:'Ask this dataset',exact:true}).click();
+ await expect(page).toHaveURL(/#Aegis%20Agent$/);await expect(page.getByLabel('Agent dataset')).toHaveValue(w.dataset.id);
+ await expect(page.getByLabel('Message Aegis Agent')).toBeVisible();await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
+});
+
+test('Storage preserves provider settings, encrypted profiles and connection diagnostics',async({page})=>{
+ const before=await checked(await page.request.get('/api/settings'));
+ await page.goto('/#Storage');const section=page.getByLabel('Advanced connections',{exact:true});
+ await expect(section).not.toHaveAttribute('open');await section.locator('summary').first().click();
+ await expect(section.getByLabel('Request timeout (sec)')).toBeVisible();
+ await section.getByLabel('Request timeout (sec)').fill(String(before.timeout===120?121:120));
+ await section.getByRole('button',{name:'OCI',exact:true}).click();
+ await expect(section.getByLabel('OCI Generative AI API key')).toHaveAttribute('type','password');
+ await section.getByRole('button',{name:'Providers',exact:true}).click();
+ await expect(section.getByLabel('OpenAI API key')).toHaveValue('');
+ let saved:any;
+ page.on('request',request=>{if(request.method()==='PATCH'&&request.url().endsWith('/api/settings'))saved=request.postDataJSON();});
+ await section.getByRole('button',{name:'Save settings',exact:true}).click();
+ await expect(section.getByRole('status')).toContainText('Settings saved securely');
+ expect(saved).not.toHaveProperty('storage_provider');expect(saved).not.toHaveProperty('search_provider');expect(saved).not.toHaveProperty('oci_storage_bucket');expect(saved).not.toHaveProperty('api_key');expect(saved).not.toHaveProperty('oci_api_key');
+ const after=await checked(await page.request.get('/api/settings'));expect(after.timeout).toBe(saved.timeout);expect(after.storage_provider).toBe(before.storage_provider);expect(after.search_provider).toBe(before.search_provider);
+ await section.getByRole('button',{name:'Test saved connections',exact:true}).click();await expect(section.getByRole('heading',{name:'Connection test result',exact:true})).toBeVisible();
+ await section.getByRole('button',{name:'Profiles',exact:true}).click();const name='Storage browser profile '+Date.now();
+ await section.getByLabel('Profile name').fill(name);await section.getByRole('button',{name:'Save current profile',exact:true}).click();
+ const profile=section.locator('.item').filter({has:page.getByRole('heading',{name,exact:true})});await expect(profile).toBeVisible();
+ await profile.getByRole('button',{name:'Save new version',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
+ await expect(profile).toContainText('Version 1');
+ await profile.getByRole('button',{name:'Save new version',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();await expect(profile).toContainText('Version 2');
+ const href=await profile.getByRole('link',{name:'Safe export',exact:true}).getAttribute('href');const exported=await checked(await page.request.get(href!));expect(JSON.stringify(exported)).not.toContain('********');
+ await profile.getByRole('button',{name:'Activate',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();await expect(section.getByRole('status')).toContainText('Connection profile activated');
+ await checked(await page.request.patch('/api/settings',{headers:await sessionHeaders(page.request),data:{timeout:before.timeout}}));
 });
 
 test('model registration and mapping use tables and persist selected roles',async({page})=>{
@@ -170,13 +211,14 @@ test('current screens fit phone, tablet and desktop and retain shared blue progr
  test.setTimeout(180000);const w=await setup(page);
  const doc=await uploadReady(page.request,w.headers,w.dataset,'Responsive-'+('LongName'.repeat(8))+'.txt',source);
  const run=await checked(await page.request.post('/api/extractions',{headers:w.headers,data:{dataset_id:w.dataset.id,document_ids:[doc.id],template_id:w.template.id}}));await extractionReady(page,run.id);
- for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});for(const hash of ['Home','Datasets','Model Registration','Model Mapping','Extract Data','Review','Aegis Agent']){
+ for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});for(const hash of ['Home','Datasets','Model Registration','Model Mapping','Extract Data','Review','Aegis Agent','Storage','Users & passwords','Jobs & activity']){
   await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toBeVisible();await expect(page.getByLabel('Refresh workspace')).toBeEnabled();
   if(hash==='Model Registration')await expect(page.getByRole('table',{name:'Registered models'})).toBeVisible();
   if(hash==='Model Mapping'){await page.getByRole('combobox',{name:'Dataset',exact:true}).selectOption(w.dataset.id);await expect(page.getByLabel('Chat model',{exact:true})).toBeEnabled();}
   if(hash==='Extract Data'){await page.getByLabel('Extract dataset').selectOption(w.dataset.id);await page.getByLabel('Extract prompt template').selectOption(w.template.id);await expect(page.getByRole('table')).toContainText('MOCK TEST VALUE');}
   if(hash==='Review'){await page.getByLabel('Extraction dataset filter').selectOption(w.dataset.id);await expect(page.getByRole('button',{name:'Review extraction '+run.id,exact:true})).toBeVisible();}
   if(hash==='Aegis Agent'){await page.getByLabel('Agent dataset').selectOption(w.dataset.id);await expect(page.getByLabel('Agent Model')).toBeEnabled();await expect(page.getByRole('heading',{name:'How can I help?',exact:true})).toBeVisible();}
+  if(hash==='Storage'){await page.getByLabel('Advanced connections',{exact:true}).locator('summary').first().click();await expect(page.getByLabel('Request timeout (sec)')).toBeVisible();}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width+1);
   if(process.env.AEGIS_CAPTURE_SCREENSHOTS==='true')await page.screenshot({path:`screenshots/current-${hash.replaceAll(' ','-')}-${width}.png`,fullPage:true});
  }}

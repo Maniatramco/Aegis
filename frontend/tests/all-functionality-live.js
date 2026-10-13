@@ -16,7 +16,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
  const checked=async response=>{if(!response.ok())throw Error('HTTP '+response.status()+' from '+new URL(response.url()).pathname+': '+(await response.text()).slice(0,500));return response.json();};
  const get=p=>page.request.get(url(p)).then(checked);
  const write=async(p,data,method='post')=>{const me=await get('/auth/me');return checked(await page.request[method](url(p),{headers:{'X-CSRF-Token':me.csrf_token},data}));};
- const nav=async(name)=>{const n=page.getByRole('navigation');const b=n.getByRole('button',{name,exact:true});if(!await b.isVisible())await n.getByRole('button',{name:'Manage workspace',exact:true}).click();await b.click();await expect(page.locator('main h1').first()).toBeVisible();};
+ const nav=async(name)=>{await page.goto('http://web:3000/#'+encodeURIComponent(name));await expect(page.locator('main h1').first()).toBeVisible();};
  const refresh=async()=>{await page.getByLabel('Refresh workspace',{exact:true}).click();await expect(page.getByLabel('Refresh workspace',{exact:true})).toBeEnabled();};
  const responseTo=async(method,end,action,timeout=120000)=>{const wait=page.waitForResponse(r=>new URL(r.url()).pathname===end&&r.request().method()===method,{timeout});await action();return checked(await wait);};
  const waitEx=async id=>{let current;await expect.poll(async()=>{current=await get('/extractions/'+id);if(['failed','cancelled'].includes(current.status))throw Error('Extraction '+current.status+': '+(current.error||'Inspect its job.'));return current.status;},{timeout:900000,intervals:[2000,4000]}).toBe('ready');return current;};
@@ -108,27 +108,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
     await page.getByRole('button',{name:'Review results',exact:true}).waitFor({timeout:60000});await page.getByRole('button',{name:'Review results',exact:true}).click();await expect(page.locator('.review-identity')).toContainText(started.id);
    });
   }
-  if(phase==='chat'||phase==='temporary'){
-   if(phase==='chat'){
-   await step('Document Chat retrieval, citation source, feedback, export and history',async()=>{
-    await nav('Document Chat');await page.getByLabel('Chat dataset',{exact:true}).selectOption(state.dataset.id);
-    const scope=page.locator('.chat-scope');if(!await scope.evaluate(el=>el.open))await scope.locator('summary').click();
-    const doc=state.documents.find(d=>d.name==='all-qa-invoice-a.txt');const box=page.locator('.selection label').filter({hasText:doc.name}).getByRole('checkbox');await box.check();await scope.locator('summary').click();
-    await page.getByLabel('Ask a question',{exact:true}).fill('What is the invoice reference and total? Cite the document.');
-    const wait=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/messages/stream')&&r.request().method()==='POST',{timeout:300000});await page.getByRole('button',{name:'Send',exact:true}).click();await wait;await expect(page.getByRole('button',{name:'Send',exact:true})).toBeVisible({timeout:300000});
-    const answer=page.getByRole('article',{name:'Aegis answer',exact:true}).last();await expect(answer).toContainText('INV-A-42');await expect(answer).toContainText('42');await answer.getByRole('button',{name:/Citation \d+:/}).first().click();await expect(page.getByRole('dialog')).toContainText('INV-A-42');await page.getByRole('dialog').getByRole('button',{name:/Close/}).click();
-    await answer.getByRole('button',{name:'Helpful answer',exact:true}).click();const conversations=await get('/conversations');const current=await get('/conversations/'+conversations[0].id);if(!current.messages.some(m=>m.feedback==='up'))throw Error('Feedback not persisted.');
-    const exported=await get('/conversations/'+current.id+'/export');if(!JSON.stringify(exported).includes('INV-A-42'))throw Error('Chat export omitted answer.');state.document_conversation_id=current.id;persist();await page.reload();await page.getByRole('button',{name:'Conversations',exact:true}).click();await page.locator('.chat-list button').filter({hasText:'What is the invoice reference and total? Cite the document.'}).first().click();await expect(page.locator('main')).toContainText('INV-A-42');
-   });
-   }else{await nav('Document Chat');}
-   await step('Temporary Document Chat parses one file, answers, clears without indexing',async()=>{
-    await page.getByRole('button',{name:'Temporary chat',exact:true}).click();await page.getByLabel('Temporary chat model').selectOption(state.models.chat.id);const before=(await get('/documents')).length;
-    await page.getByLabel('Temporary document file',{exact:true}).setInputFiles(fileA());await expect(page.getByLabel('Temporary document attachment')).toContainText('Ready for direct questions');
-    await page.getByLabel('Ask a temporary question').fill('What is the invoice reference and total?');await page.getByLabel('Send temporary question').click();await expect(page.getByRole('article',{name:'Temporary answer',exact:true}).last()).toContainText('INV-A-42',{timeout:300000});await expect(page.getByLabel('Send temporary question')).toBeVisible({timeout:300000});
-    if((await get('/documents')).length!==before)throw Error('Temporary chat created a durable indexed document.');await page.getByLabel('Clear temporary document').click();await expect(page.getByLabel('Temporary document attachment')).toHaveCount(0);await expect(page.getByLabel('Send temporary question')).toBeDisabled();
-   });
-  }
-
+  if(['chat','temporary'].includes(phase))throw Error('Retired chat screen: use the assistant phase.');
 
   if(phase==='assistant'){
    await step('Assistant general knowledge and saved-result numeric filter with citations',async()=>{
@@ -165,8 +145,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
     await nav('Home');await page.getByRole('button',{name:'Search datasets',exact:true}).click();await page.getByLabel('Search datasets').fill(state.suffix);await page.getByRole('link',{name:'Open dataset '+state.dataset.name,exact:true}).click();
     await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Deactivate dataset',exact:true}).click();await expect(page.getByRole('button',{name:'Activate dataset',exact:true})).toBeVisible();const invalid=await page.request.post(url('/extractions'),{headers:{'X-CSRF-Token':(await get('/auth/me')).csrf_token},data:{dataset_id:state.dataset.id,document_ids:[state.documents[0].id],template_id:state.template.id}});if(invalid.status()!==409)throw Error('Inactive dataset permitted extraction.');await page.getByRole('button',{name:'Activate dataset',exact:true}).click();await expect(page.getByRole('button',{name:'Deactivate dataset',exact:true})).toBeVisible();
    });
-   await step('Connections profile save/version and safe export, without activating settings',async()=>{
-    await nav('Connections');await page.getByRole('button',{name:'Profiles',exact:true}).click();await page.getByLabel('Profile name').fill('All screens QA profile '+state.suffix);state.profile=await responseTo('POST','/api/settings/profiles',()=>page.getByRole('button',{name:'Save current profile',exact:true}).click());persist();const profile=page.locator('.item.row.between.wrap').filter({has:page.getByRole('heading',{name:state.profile.name,exact:true})});await profile.getByRole('button',{name:'Save new version',exact:true}).click();await responseTo('PUT','/api/settings/profiles/'+state.profile.id,()=>page.getByRole('button',{name:'Confirm',exact:true}).click());await expect(profile).toContainText('Version 2');
+   await step('Storage connection profile save/version and safe export, without activating settings',async()=>{
+    await nav('Storage');await page.getByLabel('Advanced connections',{exact:true}).locator('summary').first().click();await page.getByRole('button',{name:'Profiles',exact:true}).click();await page.getByLabel('Profile name').fill('All screens QA profile '+state.suffix);state.profile=await responseTo('POST','/api/settings/profiles',()=>page.getByRole('button',{name:'Save current profile',exact:true}).click());persist();const profile=page.locator('.item.row.between.wrap').filter({has:page.getByRole('heading',{name:state.profile.name,exact:true})});await profile.getByRole('button',{name:'Save new version',exact:true}).click();await responseTo('PUT','/api/settings/profiles/'+state.profile.id,()=>page.getByRole('button',{name:'Confirm',exact:true}).click());await expect(profile).toContainText('Version 2');
     // Endpoint verification uses the browser's authenticated request; global configuration remains unchanged.
     const exported=await get('/settings/export');if(exported.api_key||exported.oci_api_key)throw Error('Settings export exposed credentials.');
     await page.getByRole('button',{name:'Providers',exact:true}).click();const diagnostics=await responseTo('POST','/api/settings/test',()=>page.getByRole('button',{name:'Test saved connections',exact:true}).click(),180000);if(!diagnostics.ok)throw Error('Configured service diagnostics failed: '+JSON.stringify(diagnostics.checks));state.service_checks=diagnostics.checks;persist();await expect(page.locator('main')).toContainText('Connection test result');
@@ -178,7 +158,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 
    await step('Every screen at mobile size; no horizontal page overflow',async()=>{
     await page.setViewportSize({width:390,height:844});
-    for(const name of ['Home','Aegis Agent','Datasets','Document Chat','Extraction Review','Re-extract','Prompt templates','Model Registration','Model Mapping','Dashboard','Jobs & activity','Connections','Services & migration','Users & passwords']){
+    for(const name of ['Home','Aegis Agent','Datasets','Prompt templates','Extract Data','Review','Model Registration','Model Mapping','Storage','Users & passwords','Jobs & activity']){
      const open=page.getByRole('button',{name:'Open navigation',exact:true});if(await open.isVisible())await open.click();await nav(name);if(!await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))throw Error('Horizontal overflow on '+name);state.screens.push(name);persist();
     }
     await page.screenshot({path:out+'/all-screens-mobile.png',fullPage:true});
