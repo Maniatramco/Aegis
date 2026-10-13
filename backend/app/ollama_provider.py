@@ -3,6 +3,8 @@ import json
 import math
 import os
 import re
+import time
+import logging
 import httpx
 from jsonschema import validate
 
@@ -27,20 +29,51 @@ def base_url():
 class OllamaError(RuntimeError):
     pass
 
+class OllamaRunnerError(OllamaError):
+    """Confirmed engine failure, before a usable inference response."""
+    pass
+
+
+def response_error(response):
+    """Classify daemon errors without exposing provider bodies or prompts."""
+    try:detail=response.json().get('error','')
+    except (ValueError,AttributeError):detail=''
+    detail=detail[:4096] if isinstance(detail,str) else ''
+    if response.status_code in (500,503) and re.search(r'cuda\b|ggml\b|(?:llama|model)?\s*runner.*(?:terminated|crashed|stopped|exited)|out of memory|failed to allocate',detail,re.I):
+        raise OllamaRunnerError('The local model engine stopped while processing this request. Saved files and extraction results are preserved. Retry the question; if this repeats, check GPU memory and the Ollama service.')
+    if response.status_code==404:
+        raise OllamaError('The selected local model is unavailable. Check its registered name and install that model in Ollama.')
+    if response.status_code>=500:
+        raise OllamaError('The local model service could not complete this request (HTTP '+str(response.status_code)+'). Saved results are preserved. Retry the question or check the Ollama service.')
+    raise OllamaError('Local Ollama rejected this request (HTTP '+str(response.status_code)+'). Check the model configuration.')
+
+
+def retry_runner(operation,timeout):
+    """One inference-only recovery, within the original request deadline."""
+    started=time.monotonic()
+    for attempt in range(2):
+        remaining=timeout-(time.monotonic()-started)
+        if remaining<=0:raise OllamaError(f'Local Ollama timed out after {timeout} seconds. Retry the question or check the model Timeout in Model Registration.')
+        try:return operation(remaining)
+        except OllamaRunnerError:
+            if attempt:raise
+            logging.getLogger(__name__).warning('Local Ollama runner stopped; retrying the same inference once within its original deadline.')
+
 def local_model_name(name):
     if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}',name) or 'cloud' in name.lower():
         raise OllamaError('Choose an installed local Ollama model name; cloud and remote model identifiers are disabled.')
     return name
 
 def request(path,payload,timeout):
-    try:
-        with httpx.Client(timeout=timeout,follow_redirects=False,trust_env=False) as client:
+    def attempt(remaining):
+        with httpx.Client(timeout=remaining,follow_redirects=False,trust_env=False) as client:
             response=client.post(base_url()+path,json=payload)
-        if response.status_code>=300:
-            raise OllamaError('Local Ollama request failed (HTTP '+str(response.status_code)+'). Start Ollama and pull the selected local model.')
+        if response.status_code>=300:response_error(response)
         data=response.json()
         if not isinstance(data,dict) or data.get('error'):raise OllamaError('Local Ollama returned an invalid response.')
         return data
+    try:
+        return retry_runner(attempt,timeout) if path in ('/api/chat','/api/embed') else attempt(timeout)
     except httpx.TimeoutException as exc:
         raise OllamaError(f'Local Ollama timed out after {timeout} seconds. CPU extraction can take longer for detailed templates. Increase Timeout in Model Registration or use a smaller document scope or template, then retry.') from exc
     except (httpx.HTTPError,ValueError) as exc:
@@ -64,7 +97,10 @@ def generation_options(messages,max_output):
     while context<needed:context=min(context*2,limit)
     try:extra=validate_parameters(cfg.get('extra_parameters',{}),'ollama','chat')
     except ValueError as exc:raise OllamaError(str(exc)) from exc
+    batch=os.getenv('AEGIS_OLLAMA_BATCH_SIZE','')
+    if batch and (not batch.isdecimal() or not 1<=int(batch)<=2048):raise OllamaError('Invalid local inference batch size. Use a value from 1 to 2048.')
     return {'temperature':0.7,'top_p':0.8,'top_k':20,'repeat_penalty':1.1,
+            **({'num_batch':int(batch)} if batch else {}),
             'num_ctx':context,'num_predict':max_output,'seed':42,**{k:v for k,v in extra.items() if k!='keep_alive'},**({'num_gpu':0} if os.getenv('AEGIS_INFERENCE_DEVICE')=='cpu' else {})}
 
 

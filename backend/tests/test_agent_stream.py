@@ -1,5 +1,6 @@
 """Streaming transport tests; model intelligence is checked in the live browser."""
 import json
+import httpx
 import pytest
 from app import core, main, providers, agent_graph, agent_model, agent_stream
 from test_dataset_models import system, dataset
@@ -50,7 +51,8 @@ def test_deferred_plan_does_no_inference_get_keeps_input_and_reply_streams(syste
     assert frames[-1]['plan']['calls']==[]
     progress=[f['workflow'] for f in frames if 'workflow' in f]
     assert progress and progress[-1]['status']=='completed'
-    assert [s['label'] for s in progress[-1]['steps']]==['Checking workspace','Reading current workspace state','Understanding request','Generating response','Saving response']
+    assert progress[0]['steps'][0]['label']=='Checking agent configuration' and progress[0]['steps'][0]['status']=='running'
+    assert [s['label'] for s in progress[-1]['steps']]==['Checking agent configuration','Checking workspace','Reading current workspace state','Understanding request','Generating response','Saving response']
     assert all(s['status']=='completed' and s['duration_ms']>=0 for s in progress[-1]['steps'])
     assert any(w['steps'][-1]['label']=='Generating response' and w['steps'][-1]['status']=='running' for w in progress)
     assert frames[-1]['message']['answer_workflow']==progress[-1]
@@ -74,6 +76,21 @@ def test_deferred_failure_saves_partial_and_does_not_emit_done(system,monkeypatc
     assert saved['answer_workflow']['steps'][-1]['label']=='Generating response'
     assert saved['answer_workflow']['steps'][-1]['status']=='failed'
     assert s.api.get('/api/jobs').json()==[]
+
+
+def test_deferred_reply_rechecks_disabled_model_before_any_inference(system,monkeypatch):
+    s=system;d=dataset(s);setup_graph(monkeypatch)
+    p=plan(s,d,text='Say hello',stream_answers=True)
+    model=next(m for m in d['models'] if m['id']==d['default_chat_model_id'])
+    body={k:model[k] for k in ('name','connection_profile_id','provider_model','capabilities')}|{'enabled':False}
+    assert s.api.put('/api/models/'+model['id'],json=body).status_code==200
+    monkeypatch.setattr(agent_model,'classify',lambda *args:pytest.fail('Disabled model must not receive a request'))
+    response=reply(s,p);frames=events(response)
+    assert response.status_code==200 and 'event: done' not in response.text
+    assert frames[0]['workflow']['steps'][0]['label']=='Checking agent configuration'
+    assert frames[-1]['message']['status']=='failed'
+    assert frames[-1]['message']['answer_workflow']['steps'][0]['status']=='failed'
+    assert s.api.get('/api/jobs').json()==[] and reply(s,p).status_code==409
 
 
 def test_deferred_workflow_remains_pending_until_confirmation(system,monkeypatch):
@@ -151,3 +168,29 @@ def test_stream_can_cancel_during_private_control_tokens(monkeypatch):
     transport(monkeypatch,[json.dumps({'message':{'content':'{"tool_calls":['}})])
     def cancelled(piece):raise providers.ProviderError('Stopped')
     with pytest.raises(providers.ProviderError,match='Stopped'):agent_stream.qwen_request({},10,cancelled)
+
+
+def test_stream_recovers_runner_failure_before_tokens_without_duplicate_answer(monkeypatch):
+    original=httpx.Client;seen=[];pieces=[]
+    def handle(request):
+        seen.append(json.loads(request.content))
+        if len(seen)==1:return httpx.Response(500,json={'error':'llama runner process has terminated: CUDA error'})
+        line=json.dumps({'message':{'content':'{"tool_calls":[],"answer":"Recovered answer"}'},'done':True,'done_reason':'stop'})
+        return httpx.Response(200,content=line+'\n')
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(handle),**kwargs))
+    payload={'model':'qwen3:4b','options':{'num_ctx':8192}}
+    result=agent_stream.qwen_request(payload,60,pieces.append)
+    assert seen==[dict(payload,stream=True)]*2
+    assert ''.join(pieces)=='Recovered answer' and json.loads(result['message']['content'])['answer']=='Recovered answer'
+
+
+def test_partial_stream_failure_never_replays_visible_text(monkeypatch):
+    original=httpx.Client;seen=[];pieces=[]
+    def handle(request):
+        seen.append(request)
+        lines=[{'message':{'content':'{"tool_calls":[],"answer":"Partial answer'}},
+               {'error':'llama runner process has terminated: CUDA error private details'}]
+        return httpx.Response(200,content='\n'.join(json.dumps(line) for line in lines)+'\n')
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(handle),**kwargs))
+    with pytest.raises(providers.ProviderError) as caught:agent_stream.qwen_request({'model':'qwen3:4b'},60,pieces.append)
+    assert len(seen)==1 and ''.join(pieces)=='Partial answer' and 'private' not in str(caught.value)

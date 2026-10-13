@@ -50,7 +50,7 @@ def test_saved_results_drive_conditional_summary_and_review_without_rerun(system
     assert list(ExternalCheckpointSaver(record.id).list({'configurable':{'thread_id':record.id}},limit=2))
 
 
-def test_upload_extract_proposal_uses_existing_confirmed_chain_and_followup_memory(system,monkeypatch):
+def test_upload_extract_proposal_uses_confirmed_chain_and_fresh_followup_reads(system,monkeypatch):
     s=system; d=dataset(s); t=template(s)
     sequence(monkeypatch,tool('prepare_workflow',operation='extract'))
     p=plan(s,d,text='Find the owner in the attached file and save the structured result.',attached_filenames=['general.txt'],template_id=t['id'])
@@ -64,7 +64,9 @@ def test_upload_extract_proposal_uses_existing_confirmed_chain_and_followup_memo
     seen=sequence(monkeypatch,tool('get_workflow_status'),tool('read_extraction_results',extraction_id=ex),{'text':'Alice was extracted.','calls':[]})
     follow=plan(s,d,text='What did that produce?',conversation_id=p['conversation_id'])
     assert follow['conversation_id']==p['conversation_id']
-    assert any('attached file' in m.get('content','') for m in seen[0])
+    assert not any('Find the owner in the attached file' in m.get('content','') for batch in seen for m in batch)
+    observed=json.loads(next(m['content'] for m in seen[-1] if m.get('tool_name')=='read_extraction_results'))
+    assert observed['records'][0]['fields']==s.api.get('/api/extractions/'+ex).json()['result']
     assert follow['calls']==[]
 
 
@@ -95,7 +97,7 @@ def test_short_summary_reads_completed_work_after_stale_proposal(system,monkeypa
     assert 'Other saved owner' not in follow['explanation']
     assert ex in follow['explanation'] and 'not run yet' not in follow['explanation']
     assert follow['calls']==[] and s.api.get('/api/jobs').json()==before
-    assert contexts[0]['previous_user_request'].startswith('Extract the attached file.')
+    assert 'previous_user_request' not in contexts[0] and contexts[0]['chat_history_supplied'] is False
     assert all(c['status']=='completed' for c in contexts[0]['latest_workflow']['calls'])
     answer=events(reply(s,follow))[-1]['message']
     assert answer['review_actions'][0]['extraction_id']==ex
@@ -233,9 +235,11 @@ def test_semantic_result_source_reads_saved_fields_before_answering(system,monke
     monkeypatch.setattr(agent_model,'classify',lambda messages:{'source':'results','fields':[]})
     p=plan(s,d,text='Tell me what was already obtained.')
     observations=[m for m in seen[0] if m.get('role')=='tool']
-    assert [o['tool_name'] for o in observations]==['find_extractions','read_extraction_results']
+    assert [o['tool_name'] for o in observations]==['read_extraction_results']
+    message=events(reply(s,p))[-1]['message']
+    assert [o['tool'] for o in message['tool_trace']][:2]==['find_extractions','read_extraction_results']
     assert json.loads(observations[-1]['content'])['records'][0]['fields']==s.api.get('/api/extractions/'+ex['id']).json()['result']
-    answer=events(reply(s,p))[-1]['message']
+    answer=message
     assert answer['review_actions'][0]['extraction_id']==ex['id']
     assert ex['id'] in answer['text'] and 'saved extraction values' in answer['text']
 
@@ -314,6 +318,26 @@ def test_classification_keeps_intent_separate_from_document_source(system,monkey
     assert frame['source']=='action' and frame['operation']=='extract'
 
 
+def test_compact_semantic_classification_restores_defaults_and_validates_reads(system,monkeypatch):
+    seen=[]
+    def decision(messages,contracts,cfg,**kwargs):
+        seen.append(contracts[0]['function']['parameters'])
+        return {'calls':[{'name':'select_source','arguments':{
+            'intent':'answer','source':'metadata','initial_reads':['list_documents']}}]}
+    monkeypatch.setattr(agent_model,'schema_decision',decision)
+    with core.execution_context({'settings':core.settings()|{'model_provider':'ollama','model':'qwen3:4b'}}):
+        frame=agent_model.classify([{'role':'user','content':'List filenames.'}])
+    assert frame['initial_reads']==['list_documents']
+    assert frame['operation']=='none' and frame['filters']==[]
+    assert frame['result_scope']=='selected_scope' and frame['document_names']==[]
+    assert seen[0]['oneOf'][0]['required']==['intent','source','initial_reads','metadata_answer']
+    assert seen[0]['oneOf'][1]['required']==['intent','source']
+    monkeypatch.setattr(agent_model,'schema_decision',lambda *a,**kw:{'calls':[
+        {'name':'select_source','arguments':{'intent':'answer','source':'metadata','initial_reads':['prepare_workflow']}}]})
+    with core.execution_context({'settings':core.settings()|{'model_provider':'ollama','model':'qwen3:4b'}}):
+        with pytest.raises(main.providers.ProviderError):agent_model.classify([{'role':'user','content':'List filenames.'}])
+
+
 def test_local_classifier_receives_workflow_context_with_current_request(system,monkeypatch):
     seen=[]
     def decision(messages,*args,**kwargs):
@@ -326,7 +350,8 @@ def test_local_classifier_receives_workflow_context_with_current_request(system,
             {'role':'user','content':'can you summarize'}])
     assert frame['source']=='results' and frame['result_scope']=='latest_workflow'
     assert len([m for m in seen if m['role']=='system'])==1
-    assert 'extract completed' in seen[0]['content']
+    assert 'extract completed' not in seen[0]['content']
+    assert sum('extract completed' in m['content'] for m in seen)==1
     assert 'extract completed' in seen[-1]['content'] and seen[-1]['content'].endswith('CURRENT request: can you summarize')
 
 
@@ -354,7 +379,8 @@ def test_named_result_scope_does_not_read_other_files(system,monkeypatch):
     seen=sequence(monkeypatch,{'text':'Saved owner Alice.','calls':[]})
     monkeypatch.setattr(agent_model,'classify',lambda messages:{'source':'results','fields':[],'document_names':['invoice.txt']})
     p=plan(s,d,text='Show saved extraction for invoice.txt.')
-    observations=[json.loads(m['content']) for m in seen[0] if m.get('tool_name')=='find_extractions']
+    message=events(reply(s,p))[-1]['message']
+    observations=[o['result'] for o in message['tool_trace'] if o['tool']=='find_extractions']
     assert observations[0]['requested_document_ids']==[doc['id']] and len(observations[0]['extractions'])==1
     assert not p['calls']
 
@@ -390,7 +416,7 @@ def test_skill_question_reads_relevant_fields_and_cites_saved_results(system,mon
     message=events(reply(s,p))[-1]['message'];citation=message['citations'][0]
     assert citation['kind']=='extraction' and citation['extraction_id']==ex.id and citation['dataset_id']==d['id']
     assert citation['version']==1 and 'Python' in citation['text']
-    assert seen[0][-1]['content'].endswith('Who has Python skills?')
+    assert sum(m['content'].count('Who has Python skills?') for m in seen[0])==1
 
 
 def test_merged_saved_result_citations_and_count_cover_all_pages(system,monkeypatch):
@@ -462,3 +488,29 @@ def test_followup_classification_does_not_replay_previous_user_filters(system,mo
     second=plan(s,d,text='Only three profiles?',conversation_id=first['conversation_id'])
     assert seen==['Only three profiles?']
     assert 'There are 0 saved profiles' in second['explanation']
+
+def test_document_consent_failure_stops_without_repeated_model_or_tool_calls(system,monkeypatch):
+    from fastapi import HTTPException
+    s=system;d=dataset(s);doc=upload(s,d)['documents'][0]
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:{'source':'documents','fields':[]})
+    monkeypatch.setattr(agent_model,'complete',lambda *args:pytest.fail('Consent cannot be repaired by model retries.'))
+    def guard(consent,embedding=False,cfg=None):
+        if embedding:raise HTTPException(409,'This action sends document text or your query to the configured external provider. Confirm external data transmission first.')
+    monkeypatch.setattr(main,'external_check',guard)
+    p=plan(s,d,text='Describe the original document.',document_ids=[doc['id']],allow_external=False)
+    assert p['phase']=='answered' and p['model_calls']==1
+    answer=events(reply(s,p))[-1]['message']
+    assert 'Privacy & cloud consent' in answer['text'] and 'tool-step limit' not in answer['text']
+    assert len(answer['tool_trace'])==1 and answer['tool_trace'][0]['result']['status_code']==409
+
+def test_dataset_name_is_not_accepted_as_an_unmentioned_filename(system,monkeypatch):
+    s=system;d=dataset(s,'Resume Extraction');doc=upload(s,d)['documents'][0]
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:{'source':'documents','fields':[],'document_names':['Resume Extraction']})
+    monkeypatch.setattr(agent_model,'complete',lambda *args:{'text':'The original says Invoice total 42. [1]','calls':[]})
+    p=plan(s,d,text='Describe the original document.',allow_external=True)
+    answer=events(reply(s,p))[-1]['message']
+    assert 'No file with that exact name' not in answer['text']
+    assert answer['citations'][0]['document_id']==doc['id']
+    assert answer['request_route']['decision']['document_names']==[]

@@ -34,12 +34,13 @@ def test_prompt_template_instructions_reach_the_extraction_model(system,monkeypa
 def test_versions_conflict_schema_and_saved_exports(system):
     s=system;d,doc,e=extracted(s);url='/api/extractions/'+e['id'];original=core.store.get('documents/'+doc['id']+'/original')
     value='  =HYPERLINK("https://invalid.example")\nCafé, 東京'
+    assert s.api.patch(url,json={'version':1,'result':{'bad':'wrong schema'}}).status_code==400
     saved=s.api.patch(url,json={'version':e['version'],'result':{'owner':value}})
     assert saved.status_code==200,saved.text
     assert saved.json()['version']==2 and saved.json()['review_status']=='reviewed'
     assert s.api.patch(url,json={'version':1,'result':{'owner':'Overwrite'}}).status_code==409
-    assert s.api.patch(url,json={'version':2,'result':{'bad':'wrong schema'}}).status_code==400
-    assert s.api.patch(url,content=json.dumps({'version':2,'result':{'owner':'\ud800'}}),headers={'Content-Type':'application/json'}).status_code==400
+    assert s.api.patch(url,json={'version':2,'result':{'bad':'wrong schema'}}).status_code==409
+    assert s.api.patch(url,content=json.dumps({'version':2,'result':{'owner':'\ud800'}}),headers={'Content-Type':'application/json'}).status_code==409
     assert s.api.get(url).json()['result']=={'owner':value}
     versions=s.api.get(url+'/versions').json();assert len(versions)==2 and versions[0]['result']!=versions[1]['result']
     assert core.store.get('documents/'+doc['id']+'/original')==original
@@ -82,11 +83,12 @@ def test_reextract_preserves_original_reviews_versions_and_duplicate_guard(syste
     assert core.store.get('documents/'+did+'/versions/v1/parsed.json')
     assert s.api.get(url).json()['result']=={'owner':'Reviewed Alice'}
     assert s.api.post(url+'/reextract',json={'version':2}).status_code==409
-    queued=s.api.post(url+'/reextract',json={'version':2,'confirm_reviewed':True});assert queued.status_code==200
+    assert s.api.post(url+'/reextract',json={'version':2,'confirm_reviewed':True}).status_code==409
+    queued=s.api.post('/api/extractions',json={'dataset_id':d['id'],'document_ids':[did],'template_id':e['template_id']});assert queued.status_code==200
     assert not any(key in queued.json() for key in ('reviewed_at','reviewed_by','evidence_notice'))
-    assert worker.run_once();assert s.api.get(url).json()['version']==3
-    current=s.api.get(url).json()
-    assert current['review_status']=='unreviewed' and current['edited_fields']==[] and current['original_evidence']==[]
+    assert worker.run_once();assert s.api.get(url).json()['version']==2
+    current=s.api.get('/api/extractions/'+queued.json()['id']).json()
+    assert current['review_status']=='unreviewed' and current.get('edited_fields',[])==[] and current.get('original_evidence',[])==[]
     assert not any(key in current for key in ('reviewed_at','reviewed_by'))
     assert current['evidence_notice'].startswith('Review all values.')
     reviewed=s.api.get(url+'/versions').json()[1]

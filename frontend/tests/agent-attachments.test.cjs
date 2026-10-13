@@ -37,8 +37,8 @@ function assistant(apiHandler,streamHandler){
  const storage=new Map();global.sessionStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
  let index=0;const hooks=[],calls=[],savedPrompts=[];const effects=[];
  const react={useState(initial){const slot=index++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];},useRef(initial){const slot=index++;if(!(slot in hooks))hooks[slot]={current:initial};return hooks[slot];},useCallback:fn=>fn,useEffect:fn=>effects.push(fn)};
- const empty=new Proxy({},{get:()=>()=>null});
- const {AgentV2}=compile('agent-v2.tsx',{'react':react,'lucide-react':empty,'./agent-attachments':helpers,'./prompt-upload':compile('prompt-upload.ts'),'./prompt-upload-preview':empty,'./agent-prompt-progress':promptProgress,'./workflow-stepper':workflowStepper,'./agent-logo':empty,'./agent-answer-workflow':empty,'./agent-prompt-selection':compile('agent-prompt-selection.ts'),'./agent-document-selection':compile('agent-document-selection.ts'),'./agent-v2.css':{},'./agent-document-filter':empty,'./chat-stream':streamHandler?compile('chat-stream.ts'):empty,'./agent-v2-chat':empty,'./batch-progress':empty,'./agent-v2-output':empty,'./batch-workflow':empty,'./agent-voice':empty});
+ const empty=new Proxy({},{get:(_target,key)=>key==='speechCapabilities'?()=>({input:false}):()=>null});
+ const {AgentV2}=compile('agent-v2.tsx',{'react':react,'lucide-react':empty,'./agent-attachments':helpers,'./prompt-upload':compile('prompt-upload.ts'),'./prompt-upload-preview':empty,'./agent-prompt-progress':promptProgress,'./workflow-stepper':workflowStepper,'./agent-logo':empty,'./agent-onboarding':empty,'./agent-answer-workflow':empty,'./agent-prompt-selection':compile('agent-prompt-selection.ts'),'./agent-document-selection':compile('agent-document-selection.ts'),'./agent-v2.css':{},'./agent-document-filter':empty,'./chat-stream':streamHandler?compile('chat-stream.ts'):empty,'./agent-v2-chat':empty,'./batch-progress':empty,'./agent-v2-output':empty,'./batch-workflow':empty,'./agent-voice':empty});
  const props={api:(...args)=>{calls.push(args);return apiHandler?apiHandler(...args):new Promise(()=>{});},stream:streamHandler||(()=>assert.fail('Dropping files must not start an answer')),username:'attachment-test',onJobs(){},onVisibleJobs(){},onReview(){},onPromptSaved:prompt=>savedPrompts.push(prompt),maxUploadMb:2};
  let root;function render(){index=0;effects.length=0;root=AgentV2(props);return root;}
  function elements(node){if(!node||typeof node!=='object')return [];if(Array.isArray(node))return node.flatMap(elements);return [node,...elements(node.props?.children)];}
@@ -80,7 +80,56 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const sentRequests=view=>view.elements().filter(node=>Object.hasOwn(node.props||{},'attachments'));
 const setRequest=(view,text='pls run extract')=>{view.find('aria-label','Message Aegis Agent').props.onChange({target:{value:text,selectionStart:text.length}});view.render();};
 const selectContext=view=>{view.find('aria-label','Agent dataset').props.onChange({target:{value:'dataset-one'}});view.find('aria-label','Agent Model').props.onChange({target:{value:'chat-model'}});view.render();};
+const selectorCatalog={datasets:[{id:'dataset-one',name:'Resume Extraction',models:[{id:'chat-model',name:'Qwen3 Chat',capabilities:['chat'],enabled:true,mapping_enabled:true}]}],models:[{id:'chat-model',name:'Qwen3 Chat',capabilities:['chat'],enabled:true}],documents:[],templates:[]};
+const startCatalog=view=>view.effects.find(effect=>String(effect).includes('speechCapabilities'))();
+
+test('agent fills dataset and model choices from the lightweight catalog',async()=>{
+ const previous=global.window;global.window={};
+ try{
+  const view=assistant(async path=>path.includes('/catalog')?selectorCatalog:[]);
+  assert.match(JSON.stringify(view.find('aria-label','Agent dataset').props.children),/Loading datasets/);
+  startCatalog(view);await flush();await flush();view.render();
+  assert.equal(view.calls[0][0],'/agent-v2/catalog?selectors_only=true');
+  assert.match(JSON.stringify(view.find('aria-label','Agent dataset').props.children),/Resume Extraction/);
+  assert.match(JSON.stringify(view.find('aria-label','Agent Model').props.children),/Qwen3 Chat/);
+ }finally{global.window=previous;}
+});
+
+test('catalog failure exposes retry and a successful retry restores both selectors',async()=>{
+ const previous=global.window;global.window={};let attempts=0;
+ try{
+  const view=assistant(async path=>{if(!path.includes('/catalog'))return [];if(++attempts===1)throw Error('Connection timed out');return selectorCatalog;});
+  startCatalog(view);await flush();await flush();view.render();
+  const notice=view.find('className','agent-v2-catalog-error');assert.equal(notice.props.role,'alert');
+  const retry=view.elements().find(node=>node.type==='button'&&node.props.children==='Retry datasets and models');assert.ok(retry);
+  retry.props.onClick();view.render();startCatalog(view);await flush();await flush();view.render();
+  assert.equal(view.find('className','agent-v2-catalog-error'),undefined);
+  assert.match(JSON.stringify(view.find('aria-label','Agent dataset').props.children),/Resume Extraction/);
+  assert.equal(view.find('aria-label','Agent Model').props.value,'chat-model');
+ }finally{global.window=previous;}
+});
 const uploadPlan=(body,id='upload-plan')=>({id,request:body.text,attached_filenames:body.attached_filenames,dataset_id:'dataset-one',document_ids:[],template_id:'',planner:{name:'Test'},calls:[{tool:'upload',title:'Upload documents',status:'pending'}]});
+
+test('clear chat detaches saved context and the next request starts a fresh conversation',async()=>{
+ let latest,number=0;
+ const view=assistant((path,method,body)=>{
+  assert.equal(path,'/agent-v2/plans');latest={...uploadPlan(body,'clear-plan-'+(++number)),calls:[],runtime:'langgraph',phase:'queued'};return Promise.resolve(latest);
+ },async()=>new Response('event: done\ndata: '+JSON.stringify({plan:{...latest,phase:'completed'},conversation_id:'saved-chat-'+number,message:{text:'Test response',status:'completed',citations:[]}})+'\n\n',{headers:{'Content-Type':'text/event-stream'}}));
+ selectContext(view);
+ const send=async text=>{setRequest(view,text);view.find('aria-label','Send agent request').props.onClick();await flush();view.render();};
+ await send('First question');await send('Follow up');
+ assert.equal(view.calls[1][2].conversation_id,'saved-chat-1');
+ // Exercise the component handler; catalog mount effects are excluded by this harness.
+ view.find('aria-label','Clear agent chat').props.onClick();view.render();
+ assert.equal(sentRequests(view).length,0);
+ assert.equal(sessionStorage.getItem('aegis-agent-v2:attachment-test-history'),'[]');
+ assert.equal(sessionStorage.getItem('aegis-agent-v2:attachment-test'),null);
+ assert.equal(view.find('aria-label','Agent dataset').props.value,'dataset-one');
+ await send('New question');
+ assert.equal(view.calls[2][2].conversation_id,'');
+ assert.deepEqual(JSON.parse(sessionStorage.getItem('aegis-agent-v2:attachment-test-history')),['clear-plan-3']);
+ assert.equal(view.calls.some(call=>call[1]==='DELETE'),false);
+});
 
 test('submitted files leave the composer immediately and remain with their question; confirmation uploads their original bytes',async()=>{
  let resolvePlan;const attached=new File(['Original invoice content'],'invoice.txt',{type:'text/plain'});
@@ -148,12 +197,12 @@ test('only JSON attachments ask for a role, and unresolved JSON cannot be sent',
  assert.deepEqual(view.calls[0][2].attached_filenames,['notes.txt','data.JSON']);assert.equal(view.calls[0][0],'/agent-v2/plans');
 });
 test('prompt choice validates, reviews, then saves once without document upload or model inference',async()=>{
- const view=assistant(async(path,method,body)=>path==='/templates'?{id:'saved-prompt',name:body.name}:path==='/agent-v2/catalog'?{datasets:[],documents:[],templates:[],models:[]}:{valid:true});
+ const view=assistant(async(path,method,body)=>path==='/templates'?{id:'saved-prompt',name:body.name}:path==='/agent-v2/catalog?selectors_only=true'?{datasets:[],documents:[],templates:[],models:[]}:{valid:true});
  view.find('aria-label','Agent dataset').props.onChange({target:{value:'dataset-one'}});view.render();view.root.props.onDrop(drag([jsonFile()]));view.render();
  button(view,'Prompt template').props.onClick();await flush();view.render();assert.equal(view.calls.length,1);assert.equal(view.calls[0][0],'/templates/validate');assert.deepEqual(view.calls[0][2].schema,promptSchema);
  assert.ok(preview(view).props.prompt);assert.equal(view.find('aria-label','Send agent request').props.disabled,true);preview(view).props.onConfirm();view.render();
  assert.equal(view.calls.length,1);view.find('aria-label','Send agent request').props.onClick();await flush();view.render();
- assert.deepEqual(view.calls.map(call=>call[0]),['/templates/validate','/templates','/agent-v2/catalog']);assert.equal(view.calls[1][2].dataset_id,'dataset-one');
+ assert.deepEqual(view.calls.map(call=>call[0]),['/templates/validate','/templates','/agent-v2/catalog?selectors_only=true']);assert.equal(view.calls[1][2].dataset_id,'dataset-one');
  assert.equal(view.calls[1][2].source_filename,'prompt.json');assert.equal(view.savedPrompts.length,1);assert.equal(view.savedPrompts[0].id,'saved-prompt');
  assert.equal(view.calls[1][2].name,'prompt.json');assert.deepEqual(view.names(),[]);
  view.find('aria-label','Send agent request').props.onClick();await flush();view.render();assert.equal(view.calls.filter(call=>call[0]==='/templates').length,1);
@@ -161,7 +210,7 @@ test('prompt choice validates, reviews, then saves once without document upload 
 
 test('a second upload of the same filename is reviewed as an update and sent without changing identity',async()=>{
  let version=0;
- const view=assistant(async(path,method,body)=>path==='/templates'?{id:'same-prompt',name:body.source_filename,version:++version}:path==='/templates/validate'?{valid:true,existing_template_id:version?'same-prompt':null}:path==='/agent-v2/catalog'?{datasets:[],documents:[],templates:[],models:[]}:{valid:true});
+ const view=assistant(async(path,method,body)=>path==='/templates'?{id:'same-prompt',name:body.source_filename,version:++version}:path==='/templates/validate'?{valid:true,existing_template_id:version?'same-prompt':null}:path==='/agent-v2/catalog?selectors_only=true'?{datasets:[],documents:[],templates:[],models:[]}:{valid:true});
  view.find('aria-label','Agent dataset').props.onChange({target:{value:'dataset-one'}});view.render();
  for(let iteration=0;iteration<2;iteration++){
   view.root.props.onDrop(drag([jsonFile('mani.json',JSON.stringify({name:'Different internal name '+iteration,schema:promptSchema}))]));view.render();
@@ -172,7 +221,7 @@ test('a second upload of the same filename is reviewed as an update and sent wit
  assert.deepEqual(view.savedPrompts.map(prompt=>prompt.id),['same-prompt','same-prompt']);
 });
 test('a confirmed prompt is supplied to extraction planning and excluded from document filenames',async()=>{
- const view=assistant((path,method,body)=>path==='/templates'?Promise.resolve({id:'saved-prompt',name:body.name}):path==='/agent-v2/catalog'?Promise.resolve({datasets:[],documents:[],templates:[],models:[]}):path==='/templates/validate'?Promise.resolve({valid:true}):new Promise(()=>{}));
+ const view=assistant((path,method,body)=>path==='/templates'?Promise.resolve({id:'saved-prompt',name:body.name}):path==='/agent-v2/catalog?selectors_only=true'?Promise.resolve({datasets:[],documents:[],templates:[],models:[]}):path==='/templates/validate'?Promise.resolve({valid:true}):new Promise(()=>{}));
  view.find('aria-label','Agent dataset').props.onChange({target:{value:'dataset-one'}});view.find('aria-label','Agent Model').props.onChange({target:{value:'chat-model'}});view.render();
  view.root.props.onDrop(drag([jsonFile(),file('invoice.pdf')]));view.render();button(view,'Prompt template').props.onClick();await flush();view.render();preview(view).props.onConfirm();view.render();
  // Reselecting the same dataset must keep the confirmed prompt for this submission.
@@ -184,7 +233,7 @@ test('a confirmed prompt is supplied to extraction planning and excluded from do
 
 test('update this saves the revised JSON before passing its prompt identity to chat',async()=>{
  const updatedSchema={type:'object',properties:{full_name:{type:'string'}},required:['full_name'],additionalProperties:false};
- const view=assistant((path,method,body)=>path==='/templates'?Promise.resolve({id:'existing-prompt',name:body.name,version:2}):path==='/agent-v2/catalog'?Promise.resolve({datasets:[],documents:[],templates:[],models:[]}):path==='/templates/validate'?Promise.resolve({valid:true,existing_template_id:'existing-prompt'}):new Promise(()=>{}));
+ const view=assistant((path,method,body)=>path==='/templates'?Promise.resolve({id:'existing-prompt',name:body.name,version:2}):path==='/agent-v2/catalog?selectors_only=true'?Promise.resolve({datasets:[],documents:[],templates:[],models:[]}):path==='/templates/validate'?Promise.resolve({valid:true,existing_template_id:'existing-prompt'}):new Promise(()=>{}));
  selectContext(view);view.root.props.onDrop(drag([jsonFile('sample_resume.json',JSON.stringify({name:'Internal name',schema:updatedSchema}))]));view.render();
  button(view,'Prompt template').props.onClick();await flush();view.render();assert.equal(preview(view).props.prompt.replacesExisting,true);
  assert.equal(view.calls.filter(call=>call[0]==='/templates').length,0);
@@ -215,7 +264,7 @@ test('server schema validation errors stay beside their file and block saving un
 
 test('the displayed mapped Agent Model is the same ID used to submit after catalog refresh',async()=>{
  const model={id:'mapped-chat',name:'Mapped Chat',enabled:true,capabilities:['chat']};
- const view=assistant((path,method,body)=>path==='/templates'?Promise.resolve({id:'saved-prompt',name:body.name}):path==='/templates/validate'?Promise.resolve({valid:true}):path==='/agent-v2/catalog'?Promise.resolve({datasets:[{id:'dataset-one',models:[model],default_chat_model_id:model.id}],models:[model],documents:[],templates:[]}):new Promise(()=>{}));
+ const view=assistant((path,method,body)=>path==='/templates'?Promise.resolve({id:'saved-prompt',name:body.name}):path==='/templates/validate'?Promise.resolve({valid:true}):path==='/agent-v2/catalog?selectors_only=true'?Promise.resolve({datasets:[{id:'dataset-one',models:[model],default_chat_model_id:model.id}],models:[model],documents:[],templates:[]}):new Promise(()=>{}));
  view.find('aria-label','Agent dataset').props.onChange({target:{value:'dataset-one'}});view.render();
  view.root.props.onDrop(drag([jsonFile()]));view.render();button(view,'Prompt template').props.onClick();await flush();view.render();preview(view).props.onConfirm();view.render();view.find('aria-label','Send agent request').props.onClick();await flush();view.render();
  assert.equal(view.find('aria-label','Agent Model').props.value,'mapped-chat');
@@ -308,7 +357,7 @@ test('saved prompt response retry needs no file and never saves another prompt v
  const view=assistant(async(path,method,body)=>{
   if(path==='/templates/validate')return {valid:true};
   if(path==='/templates')return {id:'saved-prompt',...receipt};
-  if(path==='/agent-v2/catalog')return {datasets:[],documents:[],models:[],templates:[]};
+  if(path==='/agent-v2/catalog?selectors_only=true')return {datasets:[],documents:[],models:[],templates:[]};
   if(path==='/agent-v2/plans'){submitted=body;return {...uploadPlan(body,'prompt-plan-'+(++planCount)),planner:{id:'chat-model',name:'Test'},template_id:'saved-prompt',submitted_prompt_id:body.submitted_prompt_id,prompt_receipt:receipt,calls:[],runtime:'langgraph',phase:'queued'};}
   return {...uploadPlan(submitted,'prompt-plan-1'),planner:{id:'chat-model',name:'Test'},template_id:'saved-prompt',submitted_prompt_id:'saved-prompt',prompt_receipt:receipt,calls:[],chat:{status:'failed',text:''}};
  },async()=>{
@@ -339,4 +388,16 @@ test('whole workflow restart sends retained scope once and begins with knowledge
  const requests=view.calls.filter(call=>call[0].endsWith('/restart'));assert.equal(requests.length,1);
  assert.deepEqual(requests[0][2],{dataset_id:'dataset-one',document_ids:['original'],template_id:'saved-template',extraction_mode:'independent',merge_strategy:'records',display_name:'QA result',allow_external:false,confirmed:true});
  assert.equal(button(view,'Restart workflow'),undefined);
+});
+
+test('re-extract publication failure retries saved knowledge without another extraction submission',async()=>{
+ const failed={id:'reextract-workflow',agent:'reextract',request:'re-extract',planner:{id:'chat-model',name:'Local'},dataset_id:'dataset-one',document_ids:['original'],template_id:'saved-template',calls:[{tool:'reextract',title:'Re-extract fields',status:'failed',publication_error:true,error:'Knowledge publication needs retry.'}]};
+ const waiting={...failed,calls:[{...failed.calls[0],status:'waiting',publication_pending:true,publication_error:false,error:undefined}]};
+ const view=assistant(async(path)=>path==='/agent-v2/plans'?failed:waiting);
+ selectContext(view);setRequest(view);view.find('aria-label','Send agent request').props.onClick();await flush();view.render();
+ assert.equal(button(view,'Adjust scope and retry extraction'),undefined);
+ const retry=button(view,'Retry knowledge update');assert.ok(retry);retry.props.onClick();await flush();view.render();
+ assert.equal(view.calls.filter(c=>c[0].endsWith('/knowledge/retry')).length,1);
+ assert.equal(view.calls.filter(c=>/\/calls\/|\/restart$/.test(c[0])).length,0);
+ assert.equal(button(view,'Retry knowledge update'),undefined);
 });

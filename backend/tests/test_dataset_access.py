@@ -31,9 +31,30 @@ def test_user_only_sees_assignments_and_cannot_configure_or_self_assign(accounts
     assert [row['id'] for row in client.get('/api/knowledge-bases').json()]==[a['id']]
     catalog=client.get('/api/agent-v2/catalog').json();assert [row['id'] for row in catalog['datasets']]==[a['id']]
     assert set(row['id'] for row in catalog['models'])==set(row['id'] for row in a['models'])
+    selectors=client.get('/api/agent-v2/catalog?selectors_only=true').json()
+    assert [row['id'] for row in selectors['datasets']]==[a['id']]
+    assert set(row['id'] for row in selectors['models'])==set(row['id'] for row in a['models'])
     assert client.get('/api/datasets/'+b['id']).status_code==404
     for path,method,values in [('/api/datasets','post',{'name':'Unauthorized'}),('/api/datasets/'+a['id']+'/status','patch',{'active':False}),('/api/datasets/'+a['id']+'/models','put',{'mappings':[]}),('/api/users/colleague/datasets','put',{'dataset_ids':[b['id']]}),('/api/settings','patch',{'model_provider':'mock'})]:
         assert getattr(client,method)(path,json=values).status_code==403
+
+def test_agent_selectors_do_not_wait_for_index_checks_or_retired_profiles(accounts,monkeypatch):
+    from app import dataset_models as routing
+    client=accounts;login(client);d=dataset(SimpleNamespace(api=client),name='Resume Extraction')
+    with core.Session() as session:owner=session.get(core.Record,d['id']).owner
+    ref='model/retired-selector-fixture/v1.json'
+    core.store.put_json(ref,{'enabled':False,'capabilities':['chat'],'connection_profile_id':'missing-retired-profile'})
+    with core.Session.begin() as session:session.add(core.Record(id='retired-selector-fixture',kind='model',owner=owner,name='Retired QA',ref=ref))
+    monkeypatch.setattr(routing,'document_public',lambda *args,**kwargs:pytest.fail('Selectors must not probe document/index readiness'))
+    monkeypatch.setattr(routing,'mapped_model',lambda *args,**kwargs:pytest.fail('Selectors must reuse already-authorized models'))
+    response=client.get('/api/agent-v2/catalog?selectors_only=true')
+    assert response.status_code==200,response.text
+    data=response.json()
+    assert data['can_onboard_datasets']
+    assert [row['id'] for row in data['datasets']]==[d['id']]
+    assert data['datasets'][0]['models_complete']
+    assert len(data['datasets'][0]['models'])==len(d['models'])
+    assert 'Retired QA' not in response.text
 
 
 def test_mapped_upload_chat_extract_review_and_reextract_are_shared_and_audited(accounts):
@@ -51,7 +72,8 @@ def test_mapped_upload_chat_extract_review_and_reextract_are_shared_and_audited(
     extraction=result.json();assert worker.run_once()
     saved=client.patch('/api/extractions/'+extraction['id'],json={'version':1,'result':{'total':42}})
     assert saved.status_code==200,saved.text
-    assert client.post('/api/extractions/'+extraction['id']+'/reextract',json={'version':2,'confirm_reviewed':True,'allow_external':True}).status_code==200
+    assert client.post('/api/extractions/'+extraction['id']+'/reextract',json={'version':2,'confirm_reviewed':True,'allow_external':True}).status_code==409
+    assert client.post('/api/extractions',json={'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':prompt['id'],'allow_external':True}).status_code==200
     assert worker.run_once()
     assert client.get('/api/extractions/'+extraction['id']).json()['status']=='ready'
     with core.Session() as session:

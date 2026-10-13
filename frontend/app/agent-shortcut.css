@@ -1,0 +1,11 @@
+.agent-shortcut{position:fixed;right:max(20px,env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom));z-index:60;display:grid;place-items:center;width:60px;height:60px;padding:8px;border:1px solid #a5c4ff;border-radius:50%;background:linear-gradient(145deg,#fff,#edf5ff);box-shadow:0 5px 20px #174baf26,0 0 0 4px #e5efff80;cursor:pointer;transition:box-shadow .18s,transform .18s}
+.agent-shortcut:hover{transform:translateY(-2px);box-shadow:0 7px 24px #174baf38,0 0 0 4px #deebff}
+.agent-shortcut:focus-visible{outline:3px solid #0667ef;outline-offset:5px}
+.agent-shortcut-badge{position:absolute;right:0;bottom:0;display:grid;place-items:center;width:20px;height:20px;border:2px solid white;border-radius:50%;background:#0667ef;color:white}
+.agent-shortcut-label{position:absolute;right:calc(100% + 12px);padding:8px 11px;border:1px solid #dce5f1;border-radius:9px;white-space:nowrap;background:white;color:#17376b;font-size:12px;font-weight:600;box-shadow:0 4px 12px #17376b14;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s}
+.agent-shortcut:is(:hover,:focus-visible) .agent-shortcut-label{opacity:1;visibility:visible}
+.agent-shortcut.in-review{bottom:calc(90px + env(safe-area-inset-bottom))}
+.agent-shortcut~.operation-popup:not(.is-loading){bottom:calc(100px + env(safe-area-inset-bottom))}
+.agent-shortcut.in-review~.operation-popup:not(.is-loading){bottom:calc(170px + env(safe-area-inset-bottom))}
+@media(max-width:700px){.agent-shortcut{width:52px;height:52px;right:max(14px,env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));padding:7px}.agent-shortcut>.aegis-agent-logo{width:36px;height:36px}.extract-list-pagination{padding-right:64px}}
+@media(prefers-reduced-motion:reduce){.agent-shortcut,.agent-shortcut-label{transition:none}.agent-shortcut:hover{transform:none}}

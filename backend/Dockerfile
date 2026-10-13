@@ -4,8 +4,10 @@ COPY requirements.txt requirements.lock requirements-local.txt requirements-loca
 ARG INSTALL_LOCAL_EMBEDDINGS=true
 ARG INSTALL_CLOUD_MODELS=true
 ARG INSTALL_ORACLE=false
+ARG INSTALL_OCI=false
 RUN pip install --no-cache-dir -r requirements.lock && if [ "$INSTALL_LOCAL_EMBEDDINGS" = "true" ]; then pip install --no-cache-dir -r requirements-local.lock -c requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu; fi && if [ "$INSTALL_CLOUD_MODELS" = "true" ]; then pip install --no-cache-dir -r requirements-models.txt -c requirements.lock; fi
 RUN if [ "$INSTALL_ORACLE" = "true" ]; then pip install --no-cache-dir -r requirements-oracle.txt -c requirements.lock; fi
+RUN if [ "$INSTALL_OCI" = "true" ]; then pip install --no-cache-dir -r requirements-oci.txt -c requirements.lock; fi
 COPY requirements-reranker.txt requirements-reranker.lock ./
 RUN pip install --no-cache-dir -r requirements-reranker.lock -c requirements.lock
 COPY app ./app

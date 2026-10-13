@@ -218,7 +218,7 @@ test("capture all real Aegis screens and dataset model configuration with synthe
     return result.status;
   }, { timeout: 90000 }).toBe("ready");
   await page.getByTitle("Reload extraction").click();
-  await expect(page.getByLabel("Extraction result JSON")).toHaveValue(/MOCK TEST VALUE/);
+  await expect(page.locator('.review-field input').first()).toHaveValue(/MOCK TEST VALUE/);
   await expect(page.getByText(/MOCK TEST OUTPUT · Synthetic development data/)).toBeVisible();
   await page.getByLabel("Refresh workspace").click();
   await expect(page.getByRole("heading", { name: "Review extraction", exact: true })).toBeVisible();

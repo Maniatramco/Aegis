@@ -24,14 +24,24 @@ def _sdk():
         raise OCIProviderUnavailable('OCI SDK missing; install requirements-oci.txt') from None
 
 
-def _client(service: str, endpoint: str | None = None, *, region=None, auth_mode=None, profile=None, config_file=None):
+def _client(service: str, endpoint: str | None = None, *, region=None, auth_mode=None, profile=None, config_file=None, key_file=None):
     oci = _sdk()
     mode = auth_mode or os.getenv('OCI_AUTH_MODE', 'config_file')
     config = {}
     kwargs = {'timeout': (10, 60), 'retry_strategy': oci.retry.NoneRetryStrategy()}
     try:
         if mode == 'config_file':
-            config = oci.config.from_file(config_file or os.getenv('OCI_CONFIG_FILE', '~/.oci/config'), profile or os.getenv('OCI_PROFILE', 'DEFAULT'))
+            location=config_file or os.getenv('OCI_CONFIG_FILE', '~/.oci/config')
+            selected_profile=profile or os.getenv('OCI_PROFILE', 'DEFAULT')
+            if key_file:
+                # from_file validates the host path before returning. Apply the
+                # read-only mount path before the SDK's configuration check.
+                import configparser
+                parser=configparser.ConfigParser(interpolation=None)
+                with open(os.path.expanduser(location),encoding='utf-8') as handle:parser.read_file(handle)
+                config=dict(parser[selected_profile]);config['key_file']=key_file
+                oci.config.validate_config(config)
+            else:config=oci.config.from_file(location,selected_profile)
         elif mode == 'instance_principal':
             kwargs['signer'] = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
         elif mode == 'resource_principal':
@@ -75,13 +85,13 @@ class OCIStorageAdapter:
     Same logical key always maps to the same object. No bucket creation, public
     URLs, filesystem access or automatic provider fallback occurs.
     """
-    def __init__(self, client=None, namespace=None, bucket=None, prefix=None, *, region=None, auth_mode=None, profile=None, config_file=None):
+    def __init__(self, client=None, namespace=None, bucket=None, prefix=None, *, region=None, auth_mode=None, profile=None, config_file=None, key_file=None):
         self.namespace = namespace or os.getenv('OCI_NAMESPACE')
         self.bucket = bucket or os.getenv('OCI_BUCKET')
         self.prefix = os.getenv('OCI_OBJECT_PREFIX', 'aegis') if prefix is None else prefix
         if not self.namespace or not self.bucket: raise OCIProviderUnavailable('OCI_NAMESPACE and OCI_BUCKET are required')
         if self.prefix: _key(self.prefix)
-        self.client = client if client is not None else _client('storage', region=region, auth_mode=auth_mode, profile=profile, config_file=config_file)
+        self.client = client if client is not None else _client('storage', region=region, auth_mode=auth_mode, profile=profile, config_file=config_file,key_file=key_file)
 
     def object_key(self, key):
         logical = _key(key)

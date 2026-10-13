@@ -44,11 +44,20 @@ def answer_prefix(raw):
 
 
 def qwen_request(payload,timeout,on_token):
+    # HTTP engine failures happen before tokens. Never replay a partial stream.
+    try:return ollama_provider.retry_runner(lambda remaining:_qwen_request(payload,remaining,on_token),timeout)
+    except ollama_provider.OllamaError as exc:raise providers.ProviderError(str(exc)) from exc
+
+
+def _qwen_request(payload,timeout,on_token):
+    on_token('')  # A cancelled request must not start a recovery inference.
     raw='';published='';terminal=None
     try:
         with httpx.Client(timeout=timeout,trust_env=False,follow_redirects=False) as client:
             with client.stream('POST',ollama_provider.base_url()+'/api/chat',json=dict(payload,stream=True)) as response:
-                if response.status_code>=300:raise providers.ProviderError('Local model streaming request failed (HTTP '+str(response.status_code)+').')
+                if response.status_code>=300:
+                    response.read()
+                    ollama_provider.response_error(response)
                 for line in response.iter_lines():
                     on_token('')  # Cancellation check, including tool/control tokens.
                     if not line:continue

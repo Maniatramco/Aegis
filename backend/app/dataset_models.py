@@ -1,6 +1,8 @@
 """Dataset-owned model routing; SQL contains references, never configuration or secrets."""
 import copy
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from fastapi import HTTPException, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -11,7 +13,46 @@ ROUTING_DEFAULTS={'mappings':[], 'default_chat_model_id':None, 'default_extracti
 MODEL_KEYS=('model_provider','model','model_connection','timeout','context_limit','max_output_tokens','extra_parameters','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_model')
 EMBED_KEYS=('embedding_provider','embedding_model','embedding_connection','embedding_context_limit','embedding_extra_parameters','search_provider','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_vector_store_id','timeout','chunk_size','chunk_overlap','top_k')
 
+_snapshot_reads=ContextVar('aegis_snapshot_reads',default=None)
+
+@contextmanager
+def snapshot_reads(dataset,model_id=None):
+    """Batch configuration reads for one snapshot, never across requests/actors."""
+    active=_snapshot_reads.get()
+    if active and active['dataset']==dataset.id and active['actor']==access.request_actor.get():
+        yield;return
+    data=core.store.json(dataset.ref)
+    ids={m['model_id'] for m in data.get('mappings',[])}|{model_id,data.get('default_chat_model_id'),data.get('default_extraction_model_id'),data.get('embedding_model_id')}
+    ids.discard(None);ids.discard('')
+    with core.Session() as session:
+        rows=list(session.scalars(select(core.Record).where(core.Record.id.in_(ids),core.Record.kind=='model')))
+    scope={'dataset':dataset.id,'actor':access.request_actor.get(),'models':{id:None for id in ids},'json':{dataset.ref:data},'owned':{}}
+    scope['models'].update({r.id:r for r in rows})
+    token=_snapshot_reads.set(scope)
+    try:yield
+    finally:_snapshot_reads.reset(token)
+
+def configuration(record):
+    scope=_snapshot_reads.get()
+    if scope is None:return core.store.json(record.ref)
+    if record.ref not in scope['json']:scope['json'][record.ref]=core.store.json(record.ref)
+    return copy.deepcopy(scope['json'][record.ref])
+
+def model_record(id):
+    scope=_snapshot_reads.get()
+    if scope is not None and id in scope['models']:return scope['models'][id]
+    with core.Session() as session:model=session.get(core.Record,id)
+    if scope is not None:scope['models'][id]=model
+    return model
+
 def owned(id,owner,kind):
+    scope=_snapshot_reads.get();key=(access.request_actor.get(),id,owner,kind)
+    if scope is not None and key in scope['owned']:return scope['owned'][key]
+    result=_owned(id,owner,kind)
+    if scope is not None:scope['owned'][key]=result
+    return result
+
+def _owned(id,owner,kind):
     actor=access.request_actor.get()
     if actor and core.is_administrator(actor) and kind in {'model','config_profile','knowledge_base','document','template','extraction'}:return access.get_record(id,actor,kind)
     if actor==owner or core.is_administrator(owner):return access.get_record(id,owner,kind)
@@ -30,9 +71,9 @@ def write_version(record,data):
         r=s.get(core.Record,record.id);r.ref=ref;r.version=version;r.updated_at=time.time()
     return r
 
-def create(kind,owner,name,data,parent=''):
+def create(kind,owner,name,data,parent='',status='ready'):
     id=core.uid();ref=f'{kind}/{id}/v1.json';core.store.put_json(ref,data)
-    r=core.Record(id=id,kind=kind,owner=owner,name=name,parent_id=parent,ref=ref,created_at=time.time(),updated_at=time.time())
+    r=core.Record(id=id,kind=kind,owner=owner,name=name,parent_id=parent,ref=ref,status=status,created_at=time.time(),updated_at=time.time())
     with core.Session.begin() as s:s.add(r)
     return r
 
@@ -45,7 +86,7 @@ def profile_snapshot(profile,version=None):
         refs[provider]=f'secrets/profiles/{profile.id}/v{version}/{filename}' if data.get(key) else None
     return {'settings':copy.deepcopy(cfg),'secret_refs':refs,'connection_profile_id':profile.id,'connection_profile_version':version}
 
-def model_data(r):return core.store.json(r.ref)
+def model_data(r):return configuration(r)
 def model_public(r):
     data=model_data(r);profile=owned(data['connection_profile_id'],r.owner,'config_profile');snap=profile_snapshot(profile,data.get('connection_profile_version'))
     p=snap['settings']['embedding_provider'] if data['capabilities']==['embedding'] else snap['settings']['model_provider']
@@ -55,24 +96,26 @@ def model_public(r):
     embedding=data['capabilities']==['embedding'];cfg=snap['settings']
     return core.representation(r)|data|{'provider':connection['protocol'] if connection else p,'connection_profile_version':snap['connection_profile_version'],'credential_configured':configured,'connection':copy.deepcopy(connection),'timeout':cfg.get('timeout',60),'context_limit':cfg.get('embedding_context_limit' if embedding else 'context_limit') or (8192 if embedding else 32768),'max_output_tokens':None if embedding else cfg.get('max_output_tokens') or 4096,'extra_parameters':copy.deepcopy(cfg.get('embedding_extra_parameters' if embedding else 'extra_parameters',{}))}
 
-def dataset_config(r):return core.store.json(r.ref)
+def dataset_config(r):return configuration(r)
 def mapped_model(dataset,id):
     if not any(mapping['model_id']==id for mapping in dataset_config(dataset).get('mappings',[])):raise HTTPException(404,'Model is not mapped to this dataset.')
-    with core.Session() as session:model=session.get(core.Record,id)
+    model=model_record(id)
     if not model or model.kind!='model':raise HTTPException(404,'Mapped model not found.')
     return model
-def routing_public(r):
-    data=dataset_config(r);out=copy.deepcopy(ROUTING_DEFAULTS)|{k:data[k] for k in ROUTING_DEFAULTS if k in data};models=[]
+def routing_public(r,model_lookup=None,data=None):
+    data=dataset_config(r) if data is None else data;out=copy.deepcopy(ROUTING_DEFAULTS)|{k:data[k] for k in ROUTING_DEFAULTS if k in data};models=[]
     for mapping in out['mappings']:
-        try:models.append(model_public(mapped_model(r,mapping['model_id']))|{'mapping_enabled':mapping['enabled']})
+        try:
+            model=model_public(mapped_model(r,mapping['model_id'])) if model_lookup is None else model_lookup.get(mapping['model_id'])
+            if model is not None:models.append(model|{'mapping_enabled':mapping['enabled']})
         except HTTPException:continue
     selection=public_selection(data['embedding_snapshot']|{'dataset_id':r.id,'index_generation':out['index_generation']}) if data.get('embedding_snapshot') else None
     complete=all(out.get(key) and any(m['id']==out[key] and m.get('enabled',True) and m.get('mapping_enabled',True) and cap in m['capabilities'] for m in models) for cap,key in [('embedding','embedding_model_id'),('chat','default_chat_model_id'),('extraction','default_extraction_model_id')])
     return out|{'dataset_id':r.id,'version':r.version,'models':models,'embedding_selection':selection,'models_complete':complete,'migration_required':'mappings' not in data}
 
-def dataset_public(r):
+def dataset_public(r,model_lookup=None):
     data=dataset_config(r)
-    return core.representation(r)|{'name':r.name,'description':data.get('description',''),'active':data.get('active',True)}|routing_public(r)
+    return core.representation(r)|{'name':r.name,'description':data.get('description',''),'active':data.get('active',True)}|routing_public(r,model_lookup,data)
 
 def require_active(r):
     if not dataset_config(r).get('active',True):raise HTTPException(409,'Dataset is inactive. Activate it before starting new uploads, indexing, chat, or extraction.')
@@ -80,13 +123,18 @@ def require_active(r):
 def resolve_model(r,capability,model_id=None):
     cfg=dataset_config(r);mappings=cfg.get('mappings',[])
     selected=model_id or cfg.get('default_'+capability+'_model_id')
+    if selected:
+        old=model_record(selected)
+        if old and old.kind=='model':
+            retired=model_data(old)
+            if retired.get('archived'):selected=retired.get('replacement_models',{}).get(capability,selected)
     eligible=[]
     for mapping in mappings:
         if not mapping.get('enabled',True):continue
         try:model=mapped_model(r,mapping['model_id'])
         except HTTPException:continue
         data=model_data(model)
-        if data.get('enabled',True) and capability in data['capabilities']:eligible.append(model)
+        if not data.get('archived') and data.get('enabled',True) and capability in data['capabilities']:eligible.append(model)
     if not selected:
         if len(eligible)!=1:raise HTTPException(409,'Map an enabled '+capability+' model and choose a default, or select one of the mapped models.')
         selected=eligible[0].id
@@ -104,12 +152,18 @@ def resolve_model(r,capability,model_id=None):
     return snap
 
 def embedding_snapshot(r):
+    with snapshot_reads(r):return _embedding_snapshot(r)
+
+def _embedding_snapshot(r):
     data=dataset_config(r);selected=data.get('embedding_model_id')
     if not selected or not data.get('embedding_snapshot'):raise HTTPException(409,'Map an embedding model for this dataset before indexing or asking questions.')
     # Enforce current ownership, enabled state and capability without changing the pinned space.
     current=resolve_model(r,'embedding',selected);snap=copy.deepcopy(data['embedding_snapshot'])
     if current['model_version']!=snap['model_version'] or current['connection_profile_version']!=snap['connection_profile_version']:raise HTTPException(409,'Embedding model configuration changed. Save the dataset model mapping and reindex documents.')
     cfg=core.settings().copy();cfg.update({k:snap['settings'][k] for k in EMBED_KEYS if k in snap['settings']})
+    from .database_control import vector_backend
+    transport=vector_backend()
+    if transport:cfg['search_provider']=transport
     snap['settings']=cfg
     if cfg['embedding_provider']=='ollama':
         from .ollama_provider import model_digest,OllamaError
@@ -121,6 +175,9 @@ def embedding_snapshot(r):
     return snap
 
 def execution_snapshot(r,capability,model_id=None):
+    with snapshot_reads(r,model_id):return _execution_snapshot(r,capability,model_id)
+
+def _execution_snapshot(r,capability,model_id=None):
     # Activity gates new work only; inspecting existing indexes must remain possible.
     require_active(r)
     if not routing_public(r)['models_complete']:raise HTTPException(409,'Model Mapping requires an enabled Embedding, Chat, and Extraction selection for this dataset before starting new work.')
@@ -208,7 +265,7 @@ class DatasetInput(BaseModel):
 class DatasetStatusInput(BaseModel):active:bool=Field(strict=True)
 class AssignInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=100)
 
-def validate_model(body,owner):
+def validate_model(body,owner,existing=None):
     data=body.model_dump();data['capabilities']=sorted(set(data['capabilities']))
     if set(data['capabilities'])-CAPABILITIES or ('embedding' in data['capabilities'] and len(data['capabilities'])>1):raise HTTPException(400,'Use chat/extraction capabilities together, or a separate embedding model.')
     profile=owned(body.connection_profile_id,owner,'config_profile');cfg=profile_snapshot(profile)['settings']
@@ -220,6 +277,9 @@ def validate_model(body,owner):
         from .ollama_provider import local_model_name,OllamaError
         try:local_model_name(body.provider_model)
         except OllamaError as exc:raise HTTPException(400,str(exc))
+    from .model_registry import equivalent
+    duplicate=equivalent(owner,cfg,data['provider_model'],data['capabilities'],existing.id if existing else None)
+    if duplicate:raise HTTPException(409,'An equivalent model is already registered as '+duplicate.name+'. Use Model Mapping or edit that registration.')
     return data
 
 def save_mappings(r,body):
@@ -227,6 +287,8 @@ def save_mappings(r,body):
     values=body.model_dump(exclude={'expected_version','acknowledge_reindex'});ids=[m['model_id'] for m in values['mappings']]
     if len(ids)!=len(set(ids)):raise HTTPException(400,'Each model can be mapped only once.')
     for id in ids:owned(id,r.owner,'model')
+    if any(model_data(owned(id,r.owner,'model')).get('archived') for id in ids):
+        raise HTTPException(409,'An archived model was selected. Refresh and choose its active replacement.')
     data=dataset_config(r)|values
     # Validate against the proposed mapping without publishing it first.
     eligible={}
@@ -257,13 +319,16 @@ def save_mappings(r,body):
 
 def install_routes(app,auth,write_profile):
     @app.get('/api/models')
-    def models(owner=Depends(auth)):return [model_public(r) for r in rows(owner,'model')]
+    def models(include_archived:bool=False,owner=Depends(auth)):
+        return [model_public(r) for r in rows(owner,'model') if include_archived or not model_data(r).get('archived')]
     @app.post('/api/models')
     def add_model(body:ModelInput,owner=Depends(auth)):
         data=validate_model(body,owner);return model_public(create('model',owner,body.name,data))
     @app.put('/api/models/{id}')
     def update_model(id:str,body:ModelInput,owner=Depends(auth)):
-        data=validate_model(body,owner)
+        existing=owned(id,owner,'model')
+        if model_data(existing).get('archived'):raise HTTPException(409,'This registration is archived. Edit its replacement model instead.')
+        data=validate_model(body,owner,existing)
         with core.document_lock('model-'+id):
             r=owned(id,owner,'model');r=write_version(r,data)
             with core.Session.begin() as s:s.get(core.Record,id).name=body.name
@@ -291,13 +356,18 @@ def install_routes(app,auth,write_profile):
             r=owned(id,owner,'knowledge_base')
             owner=r.owner
             if dataset_config(r).get('mappings'):raise HTTPException(409,'Dataset already has model mappings; update them explicitly.')
-            profile=write_profile(owner,r.name+' imported connection');cfg=core.settings()
+            cfg=core.settings()
             generation=cfg.get('oci_model') if cfg['model_provider']=='oci' else cfg['model']
             generation=generation or 'mock-generation'
             embedding='sentence-transformers/all-MiniLM-L6-v2' if cfg['embedding_provider']=='sentence_transformers' else cfg['embedding_model']
-            shared={'connection_profile_id':profile['id'],'enabled':True}
-            gen=create('model',owner,r.name+' model',shared|{'name':r.name+' model','provider_model':generation,'capabilities':['chat','extraction']})
-            emb=create('model',owner,r.name+' embeddings',shared|{'name':r.name+' embeddings','provider_model':embedding,'capabilities':['embedding']})
+            from .model_registry import equivalent
+            gen=equivalent(owner,cfg,generation,['chat','extraction'])
+            emb=equivalent(owner,cfg,embedding,['embedding'])
+            if not gen or not emb:
+                profile=write_profile(owner,r.name+' imported connection')
+                shared={'connection_profile_id':profile['id'],'enabled':True}
+                if not gen:gen=create('model',owner,r.name+' model',shared|{'name':r.name+' model','provider_model':generation,'capabilities':['chat','extraction']})
+                if not emb:emb=create('model',owner,r.name+' embeddings',shared|{'name':r.name+' embeddings','provider_model':embedding,'capabilities':['embedding']})
             r=save_mappings(r,MappingInput(mappings=[Mapping(model_id=gen.id),Mapping(model_id=emb.id)],default_chat_model_id=gen.id,default_extraction_model_id=gen.id,embedding_model_id=emb.id))
             return dataset_public(r)
     @app.post('/api/datasets/{id}/assign-documents')

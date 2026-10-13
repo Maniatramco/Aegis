@@ -27,16 +27,30 @@ test('V2 shares saved chat history and canonical sources without fabricating unf
  const conversation={id:'saved-chat',mode:'documents',dataset_id:'dataset-a',document_ids:['doc-a'],messages:[{id:'q1',role:'user',text:'Question',model_selection:{model_id:'m',model_name:'Local model'}},{id:'a1',role:'assistant',text:'Supported answer [1]',status:'completed',citations:[{index:1,document_id:'doc-a',document_name:'Evidence.txt',text:'Canonical excerpt',page:2}]},{id:'q2',role:'user',text:'Follow-up'}]};
  const exchanges=conversationExchanges(conversation);assert.equal(exchanges.length,2);assert.equal(exchanges[0].conversation_id,'saved-chat');assert.equal(exchanges[1].chat,undefined);assert.deepEqual(exchanges[0].calls,[]);
  const html=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:exchanges[0].chat,api:()=>{},onError:()=>{}}));
- assert.match(html,/Sources · 1/);assert.match(html,/Canonical excerpt/);assert.match(html,/\/api\/documents\/doc-a\/source#page=2/);assert.match(html,/Copy agent answer/);assert.match(html,/Helpful agent answer/);
+ assert.match(html,/Sources · 1/);assert.match(html,/Canonical excerpt/);assert.match(html,/\/api\/documents\/doc-a\/source#page=2/);assert.match(html,/Copy agent answer/);assert.doesNotMatch(html,/Helpful agent answer|Unhelpful agent answer/);
 });
 test('compact chat formatting escapes HTML and preserves readable code',()=>{
  const html=renderToStaticMarkup(React.createElement(AgentAnswerText,{text:'**Bold** and `value`\n```python\nprint("hello")\n```\n<script>alert(1)</script>'}));
  assert.match(html,/<strong>Bold<\/strong>/);assert.match(html,/<code>value<\/code>/);assert.match(html,/<pre><code>/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
  const failed=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:{text:'Partial',status:'failed',error:{detail:'Offline'}},api:()=>{},onError:()=>{}}));
- assert.match(failed,/role="alert"/);assert.match(failed,/Offline/);assert.match(failed,/Helpful agent answer[^>]*disabled/);
+ assert.match(failed,/role="alert"/);assert.match(failed,/Offline/);assert.match(failed,/Copy agent answer/);assert.doesNotMatch(failed,/Helpful agent answer|Unhelpful agent answer/);
+});
+
+test('unified knowledge citations open the authorized source rather than a missing document',()=>{
+ const html=renderToStaticMarkup(React.createElement(AgentChatAnswer,{message:{text:'Supplier dataset [1]',status:'completed',citations:[{index:1,kind:'knowledge',source_type:'dataset',knowledge_id:'point-id',knowledge_collection:'aegis_knowledge_abc',document_name:'Supplier dataset',text:'Canonical dataset description',source_version:2}]},api:()=>{},onError:()=>{}}));
+ assert.match(html,/dataset · version 2/);
+ assert.match(html,/\/api\/knowledge\/sources\/point-id\?collection=aegis_knowledge_abc/);
+ assert.doesNotMatch(html,/documents\/undefined/);
+ assert.match(html,/Canonical dataset description/);
 });
 const items=Array.from({length:10},(_,i)=>({id:'row-'+i,name:'invoice-'+i+'.txt',status:'submitted',processing:true,document:{id:'doc-'+i,status:'processing'},job:{status:'running',workflow:{current:'extract',stages:{extract:{status:'running'}}}}}));
 const jobs=items.map((item,i)=>({...item.job,id:'job-'+i,kind:'index',document_id:item.document.id}));
+
+test('Agent keeps requests and background jobs inline without a second floating workflow',()=>{
+ const props={requests:[{id:'refresh',label:'Reading workspace'}],workspaceLoading:true,jobs:[...jobs,{id:'extract',kind:'extract',status:'running',workflow:{stages:{generate:{status:'running'}}}}],uploadItems:items};
+ assert.equal(renderToStaticMarkup(React.createElement(OperationProgress,{...props,agentWorkspace:true})), '');
+ assert.match(renderToStaticMarkup(React.createElement(OperationProgress,props)),/aria-label="Workspace progress"/);
+});
 test('closing the upload panel gives ten documents one background workflow',()=>{
  const html=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs,uploadItems:items}));
  assert.equal((html.match(/aria-label="Batch upload workflow"/g)||[]).length,1);

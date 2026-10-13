@@ -14,6 +14,9 @@ def system(tmp_path,monkeypatch):
     # Existing regression fixtures explicitly exercise the retained legacy
     # router. New graph tests override this and use scripted native tool calls.
     monkeypatch.setenv('AEGIS_AGENT_ENGINE','legacy')
+    # Retained tool-loop contracts are regression-tested explicitly. The new
+    # vector-only Chat Agent suite enables the production default separately.
+    monkeypatch.setenv('AEGIS_CHAT_AGENT_VECTOR_ONLY','false')
     engine=create_engine('sqlite:///'+str(tmp_path/'control.db'),connect_args={'check_same_thread':False});session=sessionmaker(engine,expire_on_commit=False)
     for module in (core,main,worker):monkeypatch.setattr(module,'Session',session)
     for module in (core,main):monkeypatch.setattr(module,'engine',engine)

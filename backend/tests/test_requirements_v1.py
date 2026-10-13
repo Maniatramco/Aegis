@@ -13,6 +13,7 @@ def test_original_pdf_page_image_is_scoped_and_preserves_source(system):
     response=s.api.post('/api/documents/upload',data={'dataset_id':d['id']},files={'files':('source.pdf',raw,'application/pdf')})
     assert response.status_code==200
     id=response.json()['documents'][0]['id']
+    assert s.api.get('/api/documents/'+id+'/preview').json()['page_count']==1
     rendered=s.api.get('/api/documents/'+id+'/page-image?page=1')
     assert rendered.status_code==200 and rendered.headers['content-type']=='image/png'
     assert Image.open(io.BytesIO(rendered.content)).width>100
@@ -20,6 +21,21 @@ def test_original_pdf_page_image_is_scoped_and_preserves_source(system):
     assert s.api.get('/api/documents/'+id+'/page-image?page=0').status_code==422
     assert s.api.get('/api/documents/'+id+'/page-image?page=2').status_code==422
     s.owner='bob';assert s.api.get('/api/documents/'+id+'/page-image?page=1').status_code==404
+    assert s.api.get('/api/documents/'+id+'/preview').status_code==404
+
+
+def test_review_page_count_includes_blank_original_pages_before_indexing(system):
+    from pypdf import PdfWriter
+    s=system;d=dataset(s);writer=PdfWriter()
+    writer.add_blank_page(width=300,height=400);writer.add_blank_page(width=300,height=400)
+    output=io.BytesIO();writer.write(output);raw=output.getvalue()
+    response=s.api.post('/api/documents/upload',data={'dataset_id':d['id']},files={'files':('two-pages.pdf',raw,'application/pdf')})
+    assert response.status_code==200
+    id=response.json()['documents'][0]['id']
+    assert s.api.get('/api/documents/'+id+'/preview').json()['page_count']==2
+    assert s.api.get('/api/documents/'+id+'/page-image?page=2').status_code==200
+    assert s.api.get('/api/documents/'+id+'/page-image?page=3').status_code==422
+    assert s.api.get('/api/documents/'+id+'/download').content==raw
 
 
 def run_extraction(s):

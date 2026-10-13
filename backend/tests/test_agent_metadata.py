@@ -38,6 +38,12 @@ def test_document_metadata_includes_unextracted_failed_and_queued_files_and_pagi
     assert found==expected and hidden.id not in found
     assert {r['status'] for page in pages for r in page['documents']}=={'ready','queued','failed'}
     assert tools.find_extractions()['total']==0
+    assert pages[0]['processing_summary']['extraction_status_counts']=={}
+    assert pages[0]['processing_summary']['document_count']==43
+    assert 'not extraction completion' in pages[0]['document_status_meaning']
+    status=tools.get_dataset_status()
+    assert len(status['document_names'])==20 and status['document_names_complete'] is False
+    assert hidden.name not in status['document_names']
     scoped=tools_for(s,d,document_ids=[next(iter(expected))])
     assert scoped.list_documents()['document_count']==1
     with pytest.raises(HTTPException):tools_for(s,d,document_ids=[hidden.id]).list_documents()
@@ -48,10 +54,13 @@ def test_status_models_and_help_are_read_only_and_do_not_leak_connection_data(sy
     jobs=s.api.get('/api/jobs').json()
     state=tools.get_dataset_status()
     assert state['document_status_counts']=={'queued':1} and state['active_job_count']==1
+    assert state['document_names']==['invoice.txt'] and state['document_names_complete'] is True
+    assert 'IDs are not filenames' in state['filename_list_notice']
     assert state['recent_jobs'][0]['status']=='queued'
     models=tools.get_model_configuration()
     assert models['default_roles']['chat']==d['default_chat_model_id']
-    assert all(set(m)<=set(['id','name','version','provider_model','capabilities','enabled','mapping_enabled']) for m in models['models'])
+    assert all(set(m)<=set(['id','name','version','provider_model','capabilities','enabled','mapping_enabled','context_limit','max_output_tokens']) for m in models['models'])
+    assert all(m['context_limit']>0 for m in models['models'])
     help=tools.get_application_info('documents',include_api=True)
     assert any(e['operation']=='POST /api/documents/upload' for e in help['entries'])
     assert tools.get_application_info()['source']=='Aegis built-in application documentation'
@@ -95,6 +104,135 @@ def test_chat_agent_selects_metadata_tool_and_route_is_saved(system,monkeypatch)
     assert 'available.txt' in answer['text'] and not answer['citations']
     assert [o['tool'] for o in answer['tool_trace']]==['list_documents']
     assert answer['request_route']['decision']['source']=='metadata'
+    assert s.api.get('/api/jobs').json()==before
+
+
+def test_failed_initial_metadata_read_returns_to_tool_repair(system,monkeypatch):
+    s=system;d=dataset(s);document(s,d,'file.txt');reads=[];seen=[]
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:frame(initial_reads=['list_documents']))
+    original=Tools.list_documents
+    def read(self,**kwargs):
+        reads.append(kwargs)
+        if len(reads)==1:raise HTTPException(503,'Temporary metadata read failure')
+        return original(self,**kwargs)
+    monkeypatch.setattr(Tools,'list_documents',read)
+    def complete(messages,contracts,**kwargs):
+        seen.append(messages)
+        if len(seen)==1:
+            assert 'list_documents' in {c['function']['name'] for c in contracts}
+            assert any('Temporary metadata read failure' in m['content'] for m in messages if m['role']=='tool')
+            return tool('list_documents')
+        assert 'list_documents' not in {c['function']['name'] for c in contracts}
+        return {'text':'file.txt','calls':[]}
+    monkeypatch.setattr(agent_model,'complete',complete)
+    answer=events(reply(s,plan(s,d,text='List filenames')))[-1]['message']
+    assert len(seen)==2 and len(reads)==2
+    assert answer['tool_trace'][0]['result']['error']
+    assert not answer['tool_trace'][1]['result'].get('error')
+
+
+def test_semantic_initial_metadata_reads_skip_duplicate_selection_and_keep_scope(system,monkeypatch):
+    s=system;d=dataset(s);other=dataset(s,'Other')
+    visible=document(s,d,'visible.txt');document(s,other,'private.txt');seen=[]
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:frame(
+        initial_reads=['list_documents','get_dataset_status']))
+    def complete(messages,contracts,**kwargs):
+        seen.append(messages)
+        assert contracts==[]
+        reads={m['tool_name']:json.loads(m['content']) for m in messages if m['role']=='tool'}
+        assert [r['id'] for r in reads['list_documents']['documents']]==[visible.id]
+        assert reads['get_dataset_status']['document_count']==1
+        assert 'private.txt' not in json.dumps(reads)
+        return {'text':'visible.txt is available.','calls':[]}
+    monkeypatch.setattr(agent_model,'complete',complete)
+    before=s.api.get('/api/jobs').json()
+    answer=events(reply(s,plan(s,d,text='List filenames and their processing status')))[-1]['message']
+    assert len(seen)==1
+    assert [o['tool'] for o in answer['tool_trace']]==['list_documents','get_dataset_status']
+    assert s.api.get('/api/jobs').json()==before
+
+
+def test_initial_metadata_reads_still_require_all_catalog_pages(system,monkeypatch):
+    s=system;d=dataset(s)
+    for i in range(23):document(s,d,f'file-{i}.txt')
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:frame(initial_reads=['list_documents']))
+    seen=[]
+    def complete(messages,contracts,**kwargs):
+        seen.append(messages)
+        if len(seen)==1:
+            assert 'list_documents' in {c['function']['name'] for c in contracts}
+            return tool('list_documents',offset=20)
+        assert contracts==[]
+        pages=[json.loads(m['content']) for m in messages if m.get('tool_name')=='list_documents']
+        assert sum(len(p['documents']) for p in pages)==23
+        return {'text':'There are 23 documents.','calls':[]}
+    monkeypatch.setattr(agent_model,'complete',complete)
+    answer=events(reply(s,plan(s,d,text='List every filename')))[-1]['message']
+    assert len(seen)==2 and len(answer['tool_trace'])==2
+
+
+def test_semantic_count_uses_fresh_authorized_total_without_answer_generation(system,monkeypatch):
+    s=system;d=dataset(s);other=dataset(s,'Private')
+    for i in range(23):document(s,d,f'file-{i}.txt')
+    document(s,other,'hidden.txt')
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:frame(answer_kind='count',
+        initial_reads=['list_documents'],metadata_answer='document_count'))
+    monkeypatch.setattr(agent_model,'complete',lambda *a,**kw:pytest.fail('Verified count does not need answer generation'))
+    first=events(reply(s,plan(s,d,text='How many documents are available?')))[-1]['message']
+    assert first['text']=='There are 23 documents in this dataset.'
+    assert first['tool_trace'][0]['result']['next_offset']==20
+    document(s,d,'new.txt')
+    second=events(reply(s,plan(s,d,text='What is the number of available documents?')))[-1]['message']
+    assert second['text']=='There are 24 documents in this dataset.'
+
+
+def test_application_help_composes_after_one_topic_read_without_repeating_tools(system,monkeypatch):
+    s=system;d=dataset(s);seen=[]
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:frame('application',answer_kind='other'))
+    def complete(messages,contracts,**kwargs):
+        seen.append(messages)
+        if len(seen)==1:
+            assert {c['function']['name'] for c in contracts}=={'get_application_info'}
+            return tool('get_application_info',topic='review')
+        assert contracts==[]
+        reads=[m for m in messages if m.get('tool_name')=='get_application_info']
+        assert len(reads)==1
+        assert 'Save changes' in json.loads(reads[0]['content'])['user_guide']['review']
+        return {'text':'Open the saved result in Review, edit the fields, then use Save changes.','calls':[]}
+    monkeypatch.setattr(agent_model,'complete',complete)
+    before=s.api.get('/api/jobs').json()
+    answer=events(reply(s,plan(s,d,text='How do I open Review and save edited fields?')))[-1]['message']
+    assert len(seen)==2
+    assert [o['tool'] for o in answer['tool_trace']]==['get_application_info']
+    assert s.api.get('/api/jobs').json()==before
+
+
+@pytest.mark.parametrize('route',[
+    frame(initial_reads=['prepare_workflow']),
+    frame(initial_reads=['list_documents'],supplementary_sources=['results']),
+    frame(initial_reads=['list_documents'],document_names=['specific.txt']),
+])
+def test_initial_reads_cannot_bypass_normal_argument_and_source_selection(system,monkeypatch,route):
+    s=system;d=dataset(s);document(s,d,'available.txt');seen=[]
+    monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph')
+    monkeypatch.setattr(agent_model,'classify',lambda messages:route)
+    def complete(messages,contracts,**kwargs):
+        seen.append(messages)
+        assert not any(m['role']=='tool' for m in messages)
+        assert contracts
+        # Stop after confirming the normal tool agent is required, avoiding a
+        # synthetic answer that pretends an unperformed read succeeded.
+        raise main.providers.ProviderError('Test stops at normal tool selection.')
+    monkeypatch.setattr(agent_model,'complete',complete)
+    before=s.api.get('/api/jobs').json()
+    response=s.api.post('/api/agent-v2/plans',json={'text':'Read the current scope','dataset_id':d['id'],
+        'planner_model_id':next(m['id'] for m in d['models'] if 'chat' in m['capabilities'])})
+    assert len(seen)==1
     assert s.api.get('/api/jobs').json()==before
 
 

@@ -40,8 +40,11 @@ export function JobProgress({job}:{job:Entity}) {
   {job.error&&<p role="alert" className="review-error">{job.error}</p>}
  </div>;
 }
-export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false,visibleJobId=null,visibleJobIds=[],workspaceLoading=false,compact=false}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean;visibleJobId?:string|null;visibleJobIds?:string[];workspaceLoading?:boolean;compact?:boolean}) {
+export function OperationProgress({requests,jobs,uploadItems=[],documents=[],uploadWorkflowVisible=false,visibleJobId=null,visibleJobIds=[],workspaceLoading=false,compact=false,agentWorkspace=false}:{requests:{id:string;label:string}[];jobs:Entity[];uploadItems?:UploadProgressItem[];documents?:Entity[];uploadWorkflowVisible?:boolean;visibleJobId?:string|null;visibleJobIds?:string[];workspaceLoading?:boolean;compact?:boolean;agentWorkspace?:boolean}) {
  const [expanded,setExpanded]=useState(false);
+ // Agent replies, document journeys and onboarding own their inline progress.
+ // Never mirror API requests or job updates into a second floating workflow.
+ if(agentWorkspace)return null;
  const active=jobs.filter(j=>['queued','running'].includes(j.status)&&j.id!==visibleJobId&&!visibleJobIds.includes(j.id));
  const backgroundUploads=uploadItems.filter(item=>!item.job?.id||(item.job.id!==visibleJobId&&!visibleJobIds.includes(item.job.id)));
  const tracked=new Set(backgroundUploads.flatMap(item=>item.document?[item.id,item.document.id]:[]));
@@ -55,7 +58,7 @@ export function OperationProgress({requests,jobs,uploadItems=[],documents=[],upl
  const requestLabels=Array.from(new Set(requests.map(request=>request.label)));
  const loadingTitle=requestLabels.length===1?requestLabels[0]:requestLabels.every(label=>label.startsWith('Loading '))?'Loading workspace…':'Updating workspace…';
  if(!workspaceLoading&&!requests.length&&!otherJobs.length&&(!batchItems.length||uploadWorkflowVisible))return null;
- return <aside className={`operation-popup${workspaceLoading||requests.length?' is-loading':''}`} aria-label="Workspace progress" role="status" aria-live="polite">
+ return <aside className={`operation-popup${workspaceLoading||requests.length?' is-loading':''}${agentWorkspace?' in-agent':''}`} aria-label="Workspace progress" role="status" aria-live="polite">
   <div className="operation-popup-heading"><span className="operation-popup-icon"><Loader2 size={20} className="animate-spin" aria-hidden="true"/></span><div><strong>{workspaceLoading?'Loading your workspace…':requests.length?loadingTitle:'Processing in background'}</strong>{(workspaceLoading||requests.length>0)&&<p className="operation-popup-description">{workspaceLoading?'Getting your datasets, documents, and models ready.':'This will close automatically when complete.'}</p>}</div></div>
   {compact&&<button className="text-button" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}>{expanded?'Hide background progress':'Show background progress'}</button>}
   {(!compact||expanded)&&<>

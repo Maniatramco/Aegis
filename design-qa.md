@@ -1,3 +1,114 @@
+# Extract list and separate Review page — 11 October 2026
+
+final result: passed
+
+## Grouped workspace navigation and Extract actions — 2026-10-11
+
+Implemented Home and Aegis Agent as top-level links, Onboard with Dataset / Prompt / Extract, and Model with Model Reg / Model Mapping. Existing admin-only model permissions remain enforced. The standalone Re-extract screen is removed; legacy links redirect to Extract. Every eligible extraction row has Re-extract and Review actions. Re-extract opens options and live shared workflow progress in a dialog, creates a fresh result, and preserves the selected run and original files.
+
+Browser verification used the real local mapped model on the fictional Alice Example benchmark fixture. Starting from reviewed extraction `65598326-0e05-494b-9786-8424cdeae9bb` (version 3), the row action produced `2e973c30-1c46-4b0f-a62c-d25d29f86228` (version 1). Review opened the new result with Alice Example / Cedar City / Python / 5 and Save disabled until edited. Returning to the previous result confirmed its reviewed version 3 and values remained intact. Canceling options before starting did not create a run.
+
+Verified all five grouped destination links, Onboard collapse/expand, legacy #Re-extract redirect, and the mobile drawer opening and closing on navigation. At 390px viewport, page content width equals viewport width, and both row actions are accessible. The re-extraction dialog fits mobile height and its completed Review results action works. Browser console reported no warnings or errors.
+
+Evidence: `C:/Users/Laya/Documents/Codex/2026-10-11/can/outputs/grouped-navigation-extract.png` (desktop groups and row actions), `extract-row-reextract-running.png` (real active workflow), and `extract-row-reextract-mobile.png` (mobile completed workflow). Six focused frontend checks passed; TypeScript and the deployed production web build passed; git diff whitespace checks passed.
+
+## Sources and normalization
+
+- List source: `C:/Users/Laya/Documents/Codex/2026-10-11/can/.codex-remote-attachments/01a12a89-7465-75b0-9df1-37b560e1397e/9ac8e65b-df51-4c4d-bb0c-d3bd038f8597/1-90558.jpg`, 1280 × 960 pixels.
+- Editor source: the previously approved `.../927ec5c2-1a18-46c9-87c9-e72afc3ab5e1/1-90559.jpg`, 1280 × 960 pixels; full path retained in the earlier report below.
+- Implementation evidence: `C:/Users/Laya/Documents/Codex/2026-10-11/can/outputs/extract-list-desktop-final.png` and `review-separated-desktop.png`, both 1280 × 800 PNG pixels, captured through the in-app browser's CDP capability at 1280 × 800 CSS pixels and devicePixelRatio approximately 1.
+- Responsive evidence: `extract-list-mobile-final.png` and `review-separated-mobile.png`, 390 × 844 pixels/CSS viewport, same evidence folder.
+- Both source photographs and both desktop implementation images were opened together in one comparison input. The photographed application regions, approximately x=235–1150/y=45–695 for the list and x=180–1200/y=45–705 for the editor, are the comparison targets. Browser chrome, keyboard, taskbar, perspective distortion, and another company's branding are excluded. This implements the user's requested two-screen pattern in the existing Aegis design system; it is not a pixel-identical copy of the photographed banking application.
+- The table headers, status badges, Review actions, pane headers, field inputs, PDF toolbar/thumbnails, and footer are readable in the full-resolution comparison. Separate focused captures were not needed to judge these controls.
+
+## Findings and comparison history
+
+1. Initial desktop list had wrapped filters and excessive total height. Initial evidence: `extract-list-desktop.png`. Adjusted toolbar to four compact columns, reduced row metadata to two lines, shortened displayed IDs with full-ID hover text, and bounded the table scroll area. Final list has visible actions and pagination within the desktop viewport; measured page height equals viewport height (800).
+2. Initial Review grew below the viewport after its context header was added. Bounded pane height relative to viewport; final desktop has two equal panes, both 477.2 × 415 CSS pixels, with the bottom Save footer visible and page height 800.
+3. Initial mobile list hid document names behind metadata columns: `extract-list-mobile.png`. Final mobile prioritizes Document / extraction, Review status, and Actions; dataset remains selected through the filter. `extract-list-mobile-final.png` shows identifiable files and available Review controls. Page width 390 equals viewport width; Review page width remains at or below viewport width. On intermediate widths, the Action column stays visible while the table scrolls horizontally.
+
+No actionable P0/P1/P2 findings remain.
+
+## Required fidelity surfaces
+
+- Typography: existing Aegis UI fonts and compact hierarchy retained; table copy 11–12 px and secondary metadata 9–10 px. Long dataset names truncate with full text available on hover; document identities wrap. Source is a perspective photograph, so font identity cannot be established precisely.
+- Spacing: search/filter toolbar above a dense striped table; right-aligned per-row Review actions. Review has aligned field/source panes and a bottom save area. The list and editor are separate routes and visible regions.
+- Colors: existing white/navy/blue Aegis surfaces and actions retained. Reviewed is green; Pending review is amber; failed processing remains distinct from review status.
+- Assets: existing Aegis logo and Lucide icons reused. PDF displays the actual original document through authenticated page-image endpoints; no placeholder or fabricated source image. Reference company's logo is intentionally not adopted.
+- Copy/content: application labels are Extract and Review; Dataset, Prompt template, Document / extraction, Extracted time, Review status, Actions reflect actual Aegis metadata. Trade Type / Deal Name from the reference map to Aegis's template / document identity, rather than inventing financial attributes.
+
+## Browser interactions verified
+
+- Extract → Review opens canonical `#Review/<extraction-id>`; the editor does not appear in the list.
+- Back preserves search/column filters in the same live session; returns to Extract. Agent → Review → Back restores the same conversation and completed goal. New extraction remains available through `#Extract/create`.
+- Review route survives browser reload and loads the exact extraction through the existing authorized API.
+- Dataset and review-status filters, full extraction ID search, column search, empty results, Clear, sorting, and next/previous pagination verified against 70 existing runs.
+- Save initially disabled; edit enables Save; Cancel restores values and disables Save. A synthetic Alice benchmark result was saved, reloaded, and its city restored to Cedar City through the UI; review status is Reviewed and version is 3. Original source text stayed unchanged. No user document values were edited.
+- Unsaved navigation is blocked without discarding the draft; Cancel restores the saved value.
+- Actual PDF renders (natural width 993 px), reports one page, and zoom changes from 100% to 125% then resets to 100%.
+- Mobile document names and review actions visible; Save remains at the bottom and disabled when unchanged.
+- Browser error logs: none in the verification tab.
+- TypeScript check, production Docker web build, four directory/citation regression tests, and git diff whitespace check passed. Existing review-flow automation selectors were updated for the split routes; this turn's UI E2E verification used computer skills, not terminal Playwright.
+
+## Follow-up polish
+
+None required for this request. Wider tablets retain horizontal table scrolling for full metadata; mobile intentionally shows the primary columns.
+
+---
+
+## Earlier accepted editor design QA (retained)
+
+# Extraction Review redesign — 11 October 2026
+
+final result: passed
+
+Source visual truth: `C:/Users/Laya/Documents/Codex/2026-10-11/can/.codex-remote-attachments/01a12a89-7465-75b0-9df1-37b560e1397e/927ec5c2-1a18-46c9-87c9-e72afc3ab5e1/1-90559.jpg` (1280 × 960 pixels).
+
+Implementation: `http://localhost:3003/#Extraction%20Review`, production Docker web/API against the existing workspace. Evidence folder: `C:/Users/Laya/Documents/Codex/2026-10-11/can/outputs/`.
+
+## Comparison evidence and normalization
+
+- Full final screenshot: `review-desk-final-full.png`, 1264 × 811 raster pixels. Desktop viewport: 1280 × 800 CSS pixels, observed devicePixelRatio approximately 1. Full-page capture includes document height; scrollbar/capture normalization accounts for the narrower raster width. The reference is a perspective photograph, with browser chrome, Windows taskbar, and laptop keyboard. Comparison uses its application region (approximately x=180–1200, y=45–705), rather than claiming pixel equality with the photographed device.
+- Reference and final screenshot were opened together in the same comparison input. Focused evidence: `review-desk-focused.png` (953 × 415), showing field density, selection, matched pane headers, original document thumbnail and toolbar. Full evidence is authoritative for the complete toolbar and surrounding navigation.
+- Saved state: actual Sara Khan fictional sample extraction, version 1, with unchanged source PDF. One original page is displayed because that original contains one page. The financial fields and third-party branding from the reference are intentionally replaced by actual Aegis data and its existing identity.
+- Edited state: `review-desk-edited.png` (1265 × 791), 1280 × 800 CSS viewport. Yellow modified field and enabled bottom Save are visible. This draft was cancelled without saving to that extraction.
+- Tablet: `review-desk-tablet.png` (753 × 784), 768 × 800 CSS viewport. Phone: `review-desk-mobile.png` and `review-desk-mobile-document.png` (each 375 × 811), 390 × 844 CSS viewport. Also checked 662 × 668 CSS viewport. Screenshots exclude the vertical scrollbar and use browser capture normalization; screenshots were not stretched to match the source.
+
+## Findings and comparison history
+
+1. [P1 resolved] Existing review gave fields four times the source width and showed a large results directory above the review. The reference uses a compact selector row and balanced fields/document panes. Implemented compact dataset/extraction selectors, a browse disclosure, and equal pane tracks. Final desktop panes are balanced and the source is readable.
+2. [P2 resolved, pass 1] `review-desk-desktop-pass1.png` showed the Save label wrapping and the page scrolling the workspace header out of view. Changed footer buttons to retain their intrinsic width and opened standalone reviews at the top of the page. Reduced the duplicate heading and adjusted pane height for the viewport. Post-fix: `review-desk-desktop.png`, `review-desk-final-full.png`, and edited-state evidence show a single-line Save label, visible global header, and bottom footer inside the 800px viewport (bottom=790px).
+3. [P2 resolved] Save was previously above the fields. It now lives in a sticky bottom footer, remains disabled for unchanged results and invalid JSON, enables for valid edits, and disables after Cancel or successful save. Edit inputs are disabled while saving to prevent losing newer keystrokes during a request.
+
+No actionable P0/P1/P2 findings remain.
+
+## Required fidelity surfaces
+
+- Typography: retained Aegis Segoe UI, Arial, system-ui fallback. Compact 11px field labels, 12px values, 13px panel headings and 16px review title match the reference's dense workstation hierarchy. Uppercase labels, sensible weights and line heights, native input scrolling, multiline long values, and wrapping field paths were inspected at desktop/tablet/phone sizes. No distorted text or missing fallback font was observed. The reference photograph does not permit an exact typeface or antialiasing measurement.
+- Spacing/layout: aligned selector row and panel headings; equal columns; thin table dividers; shallow borders and small radii. Fields and source scroll independently. Mobile stacks the panes while retaining the bottom action bar. No horizontal document overflow at 1280, 768, 662, or 390 CSS pixels. Footer controls remained visible at all tested sizes.
+- Colors/tokens: retained Aegis blue and white, navy text and subtle neutral borders. Selected fields use pale blue; unsaved modified values use pale yellow; saved status uses green. The original viewer uses dark neutral chrome, white original pages and a blue thumbnail selection. Disabled actions are visibly subdued and semantically disabled.
+- Assets/images: existing platform logo and Lucide library controls were reused. Document and thumbnail images are rendered from actual unchanged original PDFs, with their natural aspect ratio and sharp text. No document screenshot, logo, photo, or illustration was fabricated. Zoom intentionally permits scrolling within the document canvas. TXT/DOCX retain the honest text fallback and original download.
+- Copy/content: labels describe actual Aegis selections and results. Metadata/provenance remain accessible in disclosures. Evidence warnings and original-document provenance are preserved; coordinates and verified highlights are not invented. Save confirmation accurately says results change while originals remain unchanged.
+- Icons/accessibility: toolbar icon buttons have accessible names; download/open icons also have titles. Fields, PDF page input, selectors and Save/Cancel are labelled native controls. Blue keyboard focus, selected row state, disabled states, and native modal focus handling were verified. Escape closes the expanded source view. No new animation or motion was introduced.
+
+## Interaction and validation evidence
+
+- Production frontend build, TypeScript check, and `git diff --check` passed.
+- 15 backend tests passed (`test_requirements_v1.py`, `test_merged_documents.py`). Coverage includes actual PDF page counts before indexing, blank second-page rendering, out-of-range rejection, cross-owner denial, unchanged original bytes, immutable review revisions, stale-version conflict and merged-source preservation.
+- Real browser: Save initially disabled; editing a fictional QA field enables Save and marks one modified row; Cancel restores the original and disables Save; invalid complete JSON blocks Save. Saved `Alice Example — review QA` in the existing isolated journey QA extraction, reloaded the application, reopened it and confirmed persistence with Save disabled. Restored `Alice Example` and saved again; review history retains both revisions. No original document was modified.
+- Verified merged record-to-original navigation (second record selects the second source), profile filtering, dataset/extraction switching, actual one-page bounds, PDF zoom/reset, expand/close and Escape. Mobile export and browse menus remain within the 390px viewport. Existing export formats remain available.
+- Console: browser error log returned `[]` after the verified flows. A temporary test tab encountered connection refusal during the service restart; verification continued in a fresh tab after the service was healthy. This was not an application render error.
+- Residual coverage limits: available saved original PDFs were single-page; multi-page rendering/count validation was tested against a two-page backend fixture. Re-extraction and production export downloads were preserved but not rerun in this visual redesign pass.
+- Cleanup: fictional QA value restored, transient Sara draft cancelled, viewport overrides cleared and temporary verification tab closed. User tab retained its original sample-resume extraction with Save disabled.
+
+## Follow-up polish
+
+No blocking follow-up. The source photograph's financial grouping names and brand are not part of Aegis's data model and were not copied.
+
+---
+
+## Historical QA — 7 October 2026
+
 Aegis design QA — 7 October 2026
 
 Source visual truth:

@@ -280,7 +280,7 @@ test("switches zero, one and multiple mapped models and routes chat and extracti
       return result.status;
     }, { timeout: 90000 }).toBe("ready");
     await page.getByTitle("Reload extraction").click();
-    await expect(page.getByLabel("Extraction result JSON")).toHaveValue(/MOCK TEST VALUE/);
+    await expect(page.locator('.review-field input').first()).toHaveValue(/MOCK TEST VALUE/);
   }
   await expect(page.getByRole("button", { name: "Dismiss error" })).toHaveCount(0);
 });

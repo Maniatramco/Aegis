@@ -10,6 +10,8 @@ from .relational import audit_as
 MAX_ATTEMPTS=3
 _last_reconcile=0.0
 _last_cleanup=0.0
+_knowledge_thread=None
+_knowledge_started=0.0
 
 def claim_query(now, job_id=None, dialect='sqlite'):
     query=select(Job).where(or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now)),Job.attempts<MAX_ATTEMPTS,Job.id==job_id if job_id else True).order_by(Job.created_at,Job.id).limit(1)
@@ -196,7 +198,7 @@ def _process(jid,token,snapshot):
     if kind=='index' and kb!=snapshot['dataset_id']:raise ValueError('Document dataset changed; submit a new indexing job.')
     if kind=='index':
         consent=store.json('jobs/'+jid+'.json').get('allow_external',False)
-        if (cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider']=='oci') and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
+        if (cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider'] in ('oci','oracle')) and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
         with Session.begin() as s:s.get(Record,did).status='processing'
         state=workflow.read(jid)
         # Retry an indexing failure from its saved extraction, using the same pinned configuration.
@@ -284,10 +286,17 @@ def _process(jid,token,snapshot):
 
 @audit_as('worker')
 def run_once():
+    from .workspace_reset import paused
+    if paused():return False
     from .queue_transport import get_transport
-    global _last_reconcile,_last_cleanup
+    global _last_reconcile,_last_cleanup,_knowledge_thread,_knowledge_started
     transport=get_transport(settings()['queue_provider']);delivery=None;claimed=None
     now=time.monotonic()
+    if settings()['search_provider'] in ('qdrant','oracle') and now-_knowledge_started>=60 and (_knowledge_thread is None or not _knowledge_thread.is_alive()):
+        from .knowledge import reconcile
+        _knowledge_started=now
+        _knowledge_thread=threading.Thread(target=reconcile,daemon=True)
+        _knowledge_thread.start()
     if now-_last_cleanup>=60:
         _last_cleanup=now
         from .temporary_files import purge_expired
@@ -305,7 +314,9 @@ def run_once():
             existing=session.get(Job,delivery.job_id)
             if existing:transport.ack_terminal(delivery,existing.status)
     if not claimed:claimed=claim()
-    if not claimed:return False
+    if not claimed:
+        from .agent_onboarding import run_pending
+        return run_pending()
     jid,token=claimed
     stop=threading.Event()
     @audit_as('worker')

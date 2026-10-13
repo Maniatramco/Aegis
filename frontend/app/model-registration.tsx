@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Check, Layers, Plus, Search, X } from "lucide-react";
+import { Check, Layers, Plus, Search, X, Pencil } from "lucide-react";
 import "./model-configuration.css";
 import { parseModelParameters, supportedModelParameters } from "./model-parameters";
 
@@ -78,16 +78,24 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
 
   return <div className="model-registration">
     {settings.local_only && <div className="notice"><Layers size={17} /><div>This deployment runs in local-only mode. You can register cloud connections, but testing and applying them require cloud use to be enabled by the deployment administrator.</div></div>}
-    {!open ? <section className="panel">
+    {!open ? <section className="panel registration-directory">
       <div className="panel-head"><div><h2>Registered models</h2><p className="muted small">Register a model once, then use it across your datasets.</p></div><button className="btn primary" onClick={() => start()}><Plus size={15} />Register model</button></div>
-      {!!models.length && <label className="registration-search"><Search size={16} /><input aria-label="Search registered models" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search models or categories" /></label>}
-      <div className="registration-list">{visible.map(m => <div className="registration-row" key={m.id}>
-        <span className="file-icon"><Layers size={18} /></span><div className="registration-name"><strong>{m.name}</strong><small>{m.provider_model} · {protocols.find(([value]) => value === m.provider)?.[1] || m.provider}</small>{m.context_limit && <small>{m.capabilities[0] === "embedding" ? "Input" : "Context"}: {m.context_limit.toLocaleString()} tokens{m.max_output_tokens ? ` · Output: ${m.max_output_tokens.toLocaleString()}` : ""}{Object.keys(m.extra_parameters || {}).length ? ` · ${Object.keys(m.extra_parameters).length} extra parameters` : ""}</small>}{m.connection && <small className="registration-endpoint">{m.connection.endpoint}</small>}</div>
-        <div className="model-chips">{m.capabilities.map((cap: string) => <span className="model-chip" key={cap}>{cap === "extraction" ? "Extraction" : cap === "embedding" ? "Embedding" : "Chat"}</span>)}<span className={`pill ${m.enabled ? "green" : "amber"}`}>{m.enabled ? "Enabled" : "Disabled"}</span></div>
-        <button className="btn" disabled={busy} onClick={() => start(m)}>Edit <span className="sr-only">{m.name}</span></button>
-      </div>)}</div>
+      {!!models.length && <label className="registration-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search registered models" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}} placeholder="Search models or categories" />{search&&<button className="btn icon" type="button" title="Clear search" aria-label="Clear model search" onClick={()=>setSearch('')}><X size={14}/></button>}</label>}
+      {!!models.length && <div className="registration-table" role="region" aria-label="Registered models table" tabIndex={0}>
+        <table aria-label="Registered models"><thead><tr><th scope="col">Model</th><th scope="col">Category</th><th scope="col">Provider</th><th scope="col">Endpoint</th><th scope="col" className="registration-tokens" title="Configured input limit for embeddings; total context limit for chat and extraction">Input / context</th><th scope="col" className="registration-tokens" title="Configured maximum output tokens">Output</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+          <tbody>{visible.map(m=><tr key={m.id}>
+            <th scope="row"><div className="registration-model-cell"><Layers size={16} aria-hidden="true"/><div><strong>{m.name}</strong><small>{m.provider_model}</small>{!!Object.keys(m.extra_parameters||{}).length&&<small>{Object.keys(m.extra_parameters).length} extra parameters</small>}</div></div></th>
+            <td><div className="model-chips">{m.capabilities.map((cap:string)=><span className="model-chip" key={cap}>{cap==='extraction'?'Extraction':cap==='embedding'?'Embedding':'Chat'}</span>)}</div></td>
+            <td>{protocols.find(([value])=>value===(m.connection?.protocol||m.provider))?.[1]||m.provider}</td>
+            <td><span className="registration-endpoint" title={m.connection?.endpoint||'No endpoint configured'}>{m.connection?.endpoint||'—'}</span></td>
+            <td className="registration-tokens" title={m.capabilities[0]==='embedding'?'Input tokens':'Context tokens'}>{m.context_limit?.toLocaleString()||'—'}</td>
+            <td className="registration-tokens" title={m.capabilities[0]==='embedding'?'Not applicable to embeddings':'Maximum output tokens'}>{m.capabilities[0]==='embedding'?'—':m.max_output_tokens?.toLocaleString()||'—'}</td>
+            <td><span className={`pill ${m.enabled?'green':'amber'}`}>{m.enabled?'Enabled':'Disabled'}</span></td>
+            <td><button className="btn icon registration-edit" disabled={busy} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`} onClick={()=>start(m)}><Pencil size={15}/></button></td>
+          </tr>)}{!visible.length&&<tr><td colSpan={8} className="registration-table-empty">No models match your search.</td></tr>}</tbody>
+        </table>
+      </div>}
       {!models.length && <div className="empty"><Layers size={30} /><h3>Start with your models</h3><p>Register an Embedding, Chat, and Extraction model. Each dataset needs all three categories.</p></div>}
-      {!!models.length && !visible.length && <p className="muted">No models match your search.</p>}
       <div className="registration-footer"><button className="btn" onClick={onMapping}>Open Model Mapping</button></div>
     </section> : <section className="panel registration-form-panel">
       <form onSubmit={e => { e.preventDefault(); run(async () => { const saved = await api(`/model-registrations${editing ? "/" + editing.id : ""}`, editing ? "PUT" : "POST", payload()); onSaved(saved); close(); }); }}>

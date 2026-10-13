@@ -81,6 +81,12 @@ def embed(texts,query=False):
     raise ProviderError('Embedding provider is disabled or unsupported')
 def collection():return 'aegis_'+fingerprint()
 def client():
+    if settings()['search_provider']=='oracle':
+        from .oracle_vectors import OracleVectors
+        return OracleVectors()
+    return qdrant_client()
+
+def qdrant_client():
     from qdrant_client import QdrantClient
     return QdrantClient(url=os.getenv('QDRANT_URL','http://qdrant:6333'),api_key=os.getenv('QDRANT_API_KEY') or None,timeout=20)
 def put_vectors(document_id,owner,kb_id,chunks,vectors):
@@ -105,7 +111,7 @@ def delete_vectors(document_id):
         if previous_execution:
             with execution_context(previous_execution):oci_vector().delete(document_id,store)
         else:oci_vector().delete(document_id,store)
-    if settings()['search_provider']!='qdrant' and previous!='qdrant':return
+    if settings()['search_provider'] not in ('qdrant','oracle') and previous not in ('qdrant','oracle'):return
     from qdrant_client.models import Filter,FieldCondition,MatchValue,FilterSelector
     q=client()
     for c in q.get_collections().collections:

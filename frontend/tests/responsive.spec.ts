@@ -124,7 +124,7 @@ test("responsive workspace across phone, tablet, desktop and landscape", async (
   const extraction = await checked(await pending);
   await expect.poll(async () => (await checked(await page.request.get(`/api/extractions/${extraction.id}`))).status, { timeout: 90000 }).toBe("ready");
   await page.getByTitle("Reload extraction").click();
-  await expect(page.getByLabel("Extraction result JSON")).toHaveValue(/MOCK TEST VALUE/);
+  await expect(page.locator('.review-field input').first()).toHaveValue(/MOCK TEST VALUE/);
   expect.soft((await geometry(page)).overflow, "Extraction review").toEqual([]);
   await page.screenshot({ path: path.join(output, "320-extraction-review.png"), fullPage: true });
   await page.getByRole("button", { name: "Extraction history", exact: true }).click();

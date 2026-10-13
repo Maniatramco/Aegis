@@ -22,6 +22,9 @@ body .sidebar :is(.sidebar-foot,.sidebar-foot p,.sidebar-foot small,.nav-footer,
 .operation-popup{position:fixed;right:24px;bottom:24px;z-index:100;width:min(380px,calc(100vw - 32px));max-height:45vh;overflow:auto;padding:18px;background:#fff;border:1px solid #b9c9f6;border-top:4px solid var(--blue);border-radius:12px;box-shadow:0 10px 36px #17386b20;color:var(--ink)}
 /* Foreground requests use one centered, non-blocking status card. */
 .operation-popup.is-loading{top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:20px;border:1px solid #d9e5fa;border-radius:16px;box-shadow:0 12px 48px #17386b30}
+/* Passive background status must not cover the Agent composer or intercept its controls. */
+.operation-popup.in-agent:not(.is-loading){bottom:calc(180px + env(safe-area-inset-bottom));max-height:32vh;pointer-events:none}
+.operation-popup.in-agent:not(.is-loading) button{pointer-events:auto}
 .operation-popup-heading{display:flex;align-items:center;gap:12px}
 .operation-popup-heading strong{display:block;font-size:var(--text-body);line-height:1.4}
 .operation-popup-icon{display:grid;place-items:center;flex:0 0 40px;height:40px;border-radius:12px;background:#edf4ff;color:var(--blue)}

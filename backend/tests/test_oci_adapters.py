@@ -19,6 +19,17 @@ def test_storage_put_contract_and_stable_key():
         content_length=5,content_type='application/octet-stream',content_md5=base64.b64encode(hashlib.md5(raw).digest()).decode(),opc_meta={'sha256':hashlib.sha256(raw).hexdigest()})
     assert s.object_key('documents/id/original')=='aegis/documents/id/original'
 
+def test_mounted_key_override_precedes_sdk_validation(tmp_path,monkeypatch):
+    from app import oci_adapters
+    configuration=tmp_path/'config';configuration.write_text('[DEFAULT]\nuser=u\ntenancy=t\nfingerprint=f\nregion=ap-mumbai-1\nkey_file=C:/Users/Example/key.pem\n')
+    client=Mock();validate=Mock()
+    sdk=NS(config=NS(validate_config=validate,from_file=lambda *a:pytest.fail('Host key path must not be validated first')),
+        retry=NS(NoneRetryStrategy=lambda:None),object_storage=NS(ObjectStorageClient=lambda cfg,**kw:client))
+    monkeypatch.setattr(oci_adapters,'_sdk',lambda:sdk)
+    adapter=OCIStorageAdapter(namespace='ns',bucket='bucket',config_file=str(configuration),key_file='/run/oci/key.pem')
+    assert adapter.client is client
+    assert validate.call_args.args[0]['key_file']=='/run/oci/key.pem'
+
 
 @pytest.mark.parametrize('key',['','/absolute','../escape','a/../b','a//b','a/./b','a\\b','a\x00b','a/'])
 def test_reject_keys(key):
@@ -129,7 +140,7 @@ def test_storage_destination_config_passed_to_sdk_factory():
     with patch('app.oci_adapters._client',return_value=Mock()) as factory:
         s=OCIStorageAdapter(namespace='teamns',bucket='documents',prefix='v2',region='us-phoenix-1',auth_mode='config_file',profile='AEGIS',config_file='/run/secrets/oci/config')
         assert s.object_key('docs/1')=='v2/docs/1'
-        factory.assert_called_once_with('storage',region='us-phoenix-1',auth_mode='config_file',profile='AEGIS',config_file='/run/secrets/oci/config')
+        factory.assert_called_once_with('storage',region='us-phoenix-1',auth_mode='config_file',profile='AEGIS',config_file='/run/secrets/oci/config',key_file=None)
 
 
 def test_storage_json_probe_does_not_expose_destination():

@@ -55,10 +55,19 @@ class SearchArgs(Args):
     query: str = Field(min_length=1, max_length=2000)
     document_ids: list[str] = Field(default_factory=list, max_length=20)
 
+class KnowledgeArgs(Args):
+    query: str = Field(min_length=1, max_length=2000)
+    source_types: list[Literal['dataset','document','document_chunk','extraction','prompt','model','workflow','application']] = Field(default_factory=list,max_length=8)
+    scope: Literal['selected_dataset','accessible_datasets'] = 'selected_dataset'
+
 class WorkflowArgs(Args):
     operation: Literal['upload', 'extract', 'reextract', 'upload_extract']
     document_ids: list[str] = Field(default_factory=list, max_length=20)
     template_id: str = ''
+
+class OnboardingArgs(Args):
+    name: str = Field(default='', max_length=200)
+    description: str = Field(default='', max_length=10000)
 
 class StatusArgs(Args):
     workflow_id: str = ''
@@ -72,16 +81,19 @@ class PromptArgs(Args):
 
 CONTRACTS = {
     'list_datasets':(ListArgs,'List authorized dataset names and IDs. Page by next_offset; does not read document content.'),
+    'get_dataset_onboarding_status': (ListArgs, 'Read actual saved progress/errors, model roles, document filenames, prompt identity and extraction result IDs for your dataset onboarding workflows. Optional name filters the dataset name. This reads personal onboarding history across datasets. Read next_offset pages as needed.'),
     'get_dataset_status':(EmptyArgs,'Read live document/indexing and extraction counts, recent job progress and errors in the selected dataset/document scope. No processing is started.'),
     'get_model_configuration':(EmptyArgs,'Read selected dataset model names, versions, capabilities and default roles. No credentials or configuration changes.'),
     'get_application_info':(HelpArgs,'Read built-in Aegis product guidance for features and access rules. Set include_api=true only for explicit developer/API questions. This is guidance, not live workspace status.'),
     'list_prompts':(ListArgs,'List saved prompt filenames and versions in the selected dataset. Page by next_offset.'),
     'read_prompt':(PromptArgs,'Read the selected or named saved prompt schema, filename and version. Empty ID uses the selected prompt.'),
-    'list_documents': (ListArgs, 'List actual document filenames, IDs, size, version and processing status in the selected dataset/document scope. Includes files without extraction results. For all files leave name empty and read every next_offset page.'),
+    'list_documents': (ListArgs, 'List actual document filenames, IDs, size, version and indexing status, plus current extraction counts for the selected dataset/document scope. Includes files without extraction results. Indexing ready does not mean extraction completed. For all files leave name empty and read every next_offset page.'),
     'find_extractions': (FindArgs, 'Check real saved extraction status/coverage for document IDs; latest results first. Use name to narrow an explicitly named saved extraction. Page by next_offset.'),
     'read_extraction_results': (ReadArgs, 'Read saved fields, version and review state. Each page has up to two profiles; read all required pages. Optional fields selects top-level field names.'),
     'search_documents': (SearchArgs, 'Search original document text for a question; return source passages with citation numbers.'),
+    'search_knowledge': (KnowledgeArgs, 'Semantic discovery across authorized datasets, document content, saved extraction fields, prompt schemas, model metadata, workflow summaries and Aegis documentation. Use for meaning-based discovery when exact names are unknown. Results are ranked matches, not a complete list or count. Exact/live tools verify status, counts and complete saved fields. Empty source_types searches all types. Never infer skill or numeric equality from similarity alone.'),
     'get_workflow_status': (StatusArgs, 'Read progress/failures of this conversation workflow; empty ID means latest.'),
+    'prepare_dataset_onboarding': (OnboardingArgs, 'Prepare a SEPARATE new dataset onboarding form with model mappings, document upload, prompt setup and extraction. Only for an explicit request to create/onboard a dataset. Copy the requested name/description; otherwise leave empty. Does NOT execute anything; admin reviews actual registered models, files and prompt and confirms in the UI.'),
     'prepare_workflow': (WorkflowArgs, 'Propose requested upload/extract/reextract. Does NOT run it. The UI collects missing inputs, merge choice and confirmation.'),
     'prepare_recovery': (RecoveryArgs, 'Propose retry, continue_ready or cancel for a workflow in this conversation. Requires user confirmation; no immediate changes.'),
 }
@@ -108,6 +120,25 @@ class Tools:
     def __init__(self, owner, body, conversation_id, main):
         self.owner = owner; self.body = body; self.conversation_id = conversation_id; self.main = main
         self.sources = []; self.review_actions = []; self.recovery_actions = []; self.proposal = None; self.observed_results = False
+
+    def get_dataset_onboarding_status(self, name='', offset=0):
+        found=[]
+        for record in routing.rows(self.owner,'agent_onboarding'):
+            data=core.store.json(record.ref)
+            if name and name.casefold() not in data['name'].casefold():continue
+            found.append({'id':record.id,**{k:data[k] for k in ('name','dataset_id','status','steps','models')},'error':data.get('error'),
+                          'document_ids':data.get('document_ids',[]),'document_names':[d['name'] for d in (data.get('processing') or {}).get('documents',[])],
+                          'prompt_name':(data.get('processing') or {}).get('prompt_name'),'template_id':data.get('template_id'),
+                          'extraction_ids':data.get('extraction_ids',[]),'results':data.get('results',[])})
+        return {'scope':'personal dataset onboarding history across datasets','onboardings':found[offset:offset+10],
+                'total':len(found),'next_offset':offset+10 if offset+10<len(found) else None}
+
+    def prepare_dataset_onboarding(self, name='', description=''):
+        from .dataset_access import require_admin
+        require_admin(self.owner)
+        self.proposal = {'onboarding': {'name': name.strip(), 'description': description}, 'calls': []}
+        return {'proposed': self.proposal, 'executed': False, 'confirmation_required': True,
+                'message': 'Review the new dataset name and select registered Embedding, Chat and Extraction models before confirming onboarding.'}
 
     def dataset(self):
         if not self.body.dataset_id: raise HTTPException(422, 'Choose a dataset to use documents or saved results.')
@@ -179,6 +210,17 @@ class Tools:
             current=self.get_workflow_status(record.id)
             state['latest_workflow']={'id':record.id,'document_ids':data.get('document_ids',[]),
                 'calls':[{k:c[k] for k in ('tool','status','extraction_ids','error')} for c in current['calls']]}
+        # Routing needs a small verified receipt, not every timestamp, model
+        # revision and result ID. The status tool retains those exact details.
+        # Repeating full histories in classifier reference context can exhaust
+        # the mapped local model's context before a filename question runs.
+        state['recent_dataset_onboarding']=[{
+            **{k:item[k] for k in ('id','name','dataset_id','status')},
+            'current_step':next((s['label'] for s in item['steps'] if s['status'] in ('running','failed')),None),
+            'model_names':{k:v['name'] for k,v in item['models'].items()},
+            'prompt_name':item['prompt_name'],'document_count':len(item['document_names']),
+            'completed_result_count':len(item['results']),'error':item['error']
+        } for item in self.get_dataset_onboarding_status()['onboardings'][:3]]
         return state
 
     def run(self, name, arguments):
@@ -193,7 +235,11 @@ class Tools:
         prompts = [{'id': t.id, 'name': t.name, 'version': t.version} for t in routing.rows(self.owner, 'template') if t.parent_id in ('', dataset.id)]
         return {'dataset':{'id':dataset.id,'name':dataset.name},'scope':'selected_documents' if self.body.document_ids else 'dataset',
             'documents': documents[offset:offset+20], 'document_count': len(documents),
-            'next_offset':offset+20 if offset+20<len(documents) else None,'prompts': prompts[:20], 'prompt_count': len(prompts)}
+            'next_offset':offset+20 if offset+20<len(documents) else None,'prompts': prompts[:20], 'prompt_count': len(prompts),
+            'document_status_meaning':'Document status describes indexing, not extraction completion.',
+            'processing_summary':{k:v for k,v in self.get_dataset_status().items() if k in
+                ('scope','document_count','document_status_counts','extraction_status_counts','active_job_count')},
+            'processing_summary_scope':'The selected dataset/document scope, before the optional filename name filter.'}
 
     def list_datasets(self,name='',offset=0):
         datasets=[{'id':r.id,'name':r.name,'active':routing.dataset_config(r).get('active',True)}
@@ -215,7 +261,8 @@ class Tools:
                 model=routing.mapped_model(dataset,mapping['model_id']);data=routing.model_data(model)
             except HTTPException:continue
             models.append({'id':model.id,'name':model.name,'version':model.version,'provider_model':data['provider_model'],
-                'capabilities':data['capabilities'],'enabled':data.get('enabled',True),'mapping_enabled':mapping.get('enabled',True)})
+                'capabilities':data['capabilities'],'enabled':data.get('enabled',True),'mapping_enabled':mapping.get('enabled',True),
+                **{k:routing.model_public(model).get(k) for k in ('context_limit','max_output_tokens')}})
         return {'dataset':{'id':dataset.id,'name':dataset.name},'models':models,
             'default_roles':{role:cfg.get(key) for role,key in [('chat','default_chat_model_id'),('extraction','default_extraction_model_id'),('embedding','embedding_model_id')]},
             'index_generation':cfg.get('index_generation',0),'selected_agent_model_id':self.body.planner_model_id}
@@ -245,18 +292,20 @@ class Tools:
                 jobs.append(state)
         return {'dataset':{'id':dataset.id,'name':dataset.name,'active':routing.dataset_config(dataset).get('active',True)},
             'scope':'selected_documents' if self.body.document_ids else 'dataset','document_count':len(docs),
+            'document_names':[d.name for d in docs[:20]],'document_names_complete':len(docs)<=20,
+            'filename_list_notice':'These are saved original filenames; record/job/document IDs are not filenames. For more than 20 names, use list_documents and read all next_offset pages.',
             'document_status_counts':document_counts,'extraction_status_counts':extraction_counts,
             'active_job_count':sum(j['status'] not in ('completed','failed','cancelled') for j in jobs),'recent_jobs':jobs[:8]}
 
     def get_application_info(self,topic='overview',include_api=False):
         from .api_documentation import NOTES
         guide={
-            'datasets':'Home and Datasets organize files by dataset. Select a dataset in Aegis Agent to scope questions; Documents narrows the file selection.',
+            'datasets':'Administrators can onboard a dataset entirely in Aegis Agent: click Onboard dataset or ask to onboard a new dataset, review its name and registered Embedding, Chat and Extraction models, choose documents, upload or enter a strict JSON Schema prompt and choose independent or merged extraction. Confirm dataset onboarding saves the dataset and model mappings, saves the dataset prompt, uploads/indexes documents and runs extraction with Review links. Cloud connections require external-processing consent. This separate workflow supports durable resume/retry. Configuration-only setup remains optional. Select a dataset in Aegis Agent to scope questions; Documents narrows the file selection.',
             'documents':'Upload supported files in Datasets or attach them in Aegis Agent. Uploaded originals are retained and indexed for document questions.',
             'extractions':'Select a dataset, documents and saved prompt, then ask Aegis Agent to extract. Review the proposed workflow and confirm it. The live stepper shows actual job stages; completed replies link saved results.',
             'prompts':'Prompt templates stores JSON extraction schemas by filename and dataset. Uploading the same prompt filename updates its version. Saving a prompt does not itself run extraction.',
             'models':'Model Registration registers model capabilities. Model Mapping assigns chat, extraction and embedding roles per dataset. Agent Model selects the model answering the conversation.',
-            'agent':'Ask Aegis Agent about dataset filenames, counts, processing status, mapped models, original document content or saved extracted values. Replies show the actual answer workflow and result references when available.',
+            'agent':'Administrators can ask to onboard a new dataset with model mapping; a separate configuration workflow collects explicit confirmation. Ask Aegis Agent about dataset filenames, counts, processing status, mapped models, original document content or saved extracted values. Replies show the actual answer workflow and result references when available.',
             'review':'Open Extraction Review, select the dataset and open the saved extraction, or click Review result in an agent reply. Compare saved fields with the displayed original; source controls show available evidence. Edit incorrect values and use Save changes. Saved output is not automatically verified source evidence.',
             'workspace_access':'Only authorized datasets, documents and results are available. Manage workspace controls users and dataset access; chat cannot change permissions.'}
         groups={'datasets':('/api/datasets',),'documents':('/api/documents',),'extractions':('/api/extractions',),
@@ -274,7 +323,7 @@ class Tools:
             'upload_limits':{'files_per_request':20,'max_file_mb':core.settings()['max_upload_mb'],'formats':['PDF','DOCX','TXT','JSON']},
             'agent_rules':['Read workspace metadata/status and indexed document evidence using authorized tools.',
                 'Read saved extraction values and review state; extracted values require verification against originals.',
-                'Upload/extract/re-extract/recovery are proposals requiring confirmation; chat does not change settings or delete files.',
+                'Dataset onboarding is a separate admin workflow: review the name and registered Embedding, Chat and Extraction models, then confirm. Upload/extract/re-extract/recovery also require confirmation; chat never silently changes settings or deletes files.',
                 'No live web search tool is configured.']}
 
     def read_prompt(self,template_id=''):
@@ -380,6 +429,32 @@ class Tools:
             if source.get('ocr'):results[-1]['ocr_notice']='AI OCR transcription; verify names, numbers and tables against the original image.'
         return {'matches': results, 'scoped_document_count': len(docs)}
 
+    def search_knowledge(self,query,source_types=None,scope='selected_dataset'):
+        from . import knowledge
+        dataset_id=self.body.dataset_id;document_ids=self.body.document_ids
+        if scope=='accessible_datasets':
+            source_types=source_types or ['dataset','model','application']
+            if set(source_types)-{'dataset','model','application'}:
+                raise HTTPException(400,'Select a dataset before searching document content or extraction values. Cross-dataset discovery covers dataset/model metadata and application guidance.')
+            dataset_id='';document_ids=[]
+        result=knowledge.search(query,self.owner,dataset_id,document_ids,source_types,5)
+        matches=[]
+        for value in result['matches']:
+            existing=next((s for s in self.sources if s.get('knowledge_id')==value['knowledge_id']),None)
+            if existing is None:
+                existing=dict(value,index=len(self.sources)+1,document_name=value['title'],kind='knowledge')
+                if value['source_type']=='document_chunk':
+                    existing.update(kind='document',document_name=value['title'])
+                elif value['source_type']=='extraction':
+                    id=value.get('extraction_id') or value['entity_id'].split(':')[0]
+                    existing.update(kind='extraction',extraction_id=id,version=value['source_version'])
+                    if not any(a['extraction_id']==id for a in self.review_actions):
+                        self.review_actions.append({'extraction_id':id,'name':value['title'],'version':value['source_version'],'label':'Review result'})
+                self.sources.append(existing)
+            matches.append({k:existing[k] for k in ('index','source_type','entity_id','dataset_id','document_name','text','source_version','status','review_status') if k in existing})
+        return dict(candidates=matches,returned_candidates=len(matches),complete_catalog=False,
+            note='These are top-ranked candidates, not a verified match count or a complete catalog. Include only sources whose canonical text supports the requested topic; exact/live tools determine complete counts and status.')
+
     def get_workflow_status(self, workflow_id=''):
         workflows = self.workflows()
         found = next(((r,d) for r,d in workflows if r.id == workflow_id), None) if workflow_id else next(iter(workflows), None)
@@ -396,7 +471,7 @@ class Tools:
                     from .dataset_access import job_allowed
                     if job_allowed(job,self.owner,session): jobs.append(core.job_repr(job))
             status = call['status']
-            if jobs and all(j['status'] == 'completed' for j in jobs): status = 'completed'
+            if jobs and all(j['status'] == 'completed' for j in jobs) and not (call.get('publication_pending') or call.get('publication_error')): status = 'completed'
             elif jobs and all(j['status'] in ('completed','failed','cancelled') for j in jobs): status = 'failed'
             entries.append({'tool': call['tool'], 'status': status, 'jobs': jobs,
                 'extraction_ids': [e['extraction_id'] for e in call.get('result', {}).get('extractions', [])], 'error': call.get('error')})
@@ -429,11 +504,9 @@ class Tools:
                 if set(entry['document_ids'])==selected and entry.get('prompt_id')==template_id and entry['status'] in ('queued','processing','ready'):
                     return {'existing_extraction_id':entry['id'],'status':entry['status'],'executed':False,'message':'Follow this existing extraction. Explicit re-extract creates a new run.'}
         tools = {'upload':['upload'], 'extract':['extract'], 'reextract':['reextract'], 'upload_extract':['upload','extract']}[operation]
-        if self.body.attached_filenames and operation == 'extract': tools.insert(0,'upload')
+        if self.body.attached_filenames and operation in ('extract','reextract'): tools.insert(0,'upload')
         if self.body.submitted_prompt_id and not self.body.attached_filenames and operation == 'upload':
             return {'proposal': None, 'completed_event':'prompt_saved', 'message': 'The attached prompt is already validated and saved. It is a template, not a document upload.'}
-        if operation == 'reextract' and self.body.attached_filenames:
-            raise HTTPException(422, 'Re-extract targets saved documents; upload newly attached files in a separate workflow.')
         self.proposal = {'document_ids': document_ids or self.body.document_ids, 'template_id': template_id,
             'calls': [{'tool': t, 'title': {'upload':'Upload documents','extract':'Extract fields','reextract':'Re-extract fields'}[t]} for t in tools]}
         return {'proposed': self.proposal, 'executed': False, 'confirmation_required': True,

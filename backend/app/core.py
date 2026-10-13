@@ -12,7 +12,14 @@ DATA = Path(os.getenv('AEGIS_STORAGE_ROOT', os.getenv('DATA_DIR', './data'))).re
 DATA.mkdir(parents=True, exist_ok=True)
 URL = database_url(DATA)
 engine = create_engine(URL, hide_parameters=True, **engine_options(URL))
-Session = sessionmaker(engine, expire_on_commit=False)
+def current_engine():
+    from .database_control import active_engine
+    return active_engine()
+class DatabaseSessions(sessionmaker):
+    def __call__(self,**kwargs):
+        kwargs.setdefault('bind',current_engine())
+        return super().__call__(**kwargs)
+Session = DatabaseSessions(engine, expire_on_commit=False)
 class Base(DeclarativeBase): pass
 ORACLE_NAMES = URL.get_backend_name() == 'oracle'
 USER_TABLE = 'user_tbl' if ORACLE_NAMES else 'users'
@@ -91,16 +98,14 @@ class FileStorage:
 local_store=FileStorage()
 class RoutingStorage:
     def backend(self,key):
-        if key.startswith(('configuration/','secrets/','diagnostics/')):return local_store
-        try:cfg=local_store.json('configuration/settings.json')
-        except FileNotFoundError:cfg={}
-        provider=cfg.get('storage_provider',os.getenv('STORAGE_PROVIDER','local'))
-        if provider=='oci':
-            from .oci_adapters import OCIStorageAdapter
-            return oci_storage(cfg)
-        if provider!='local':raise ValueError('Unsupported storage provider')
-        return local_store
-    def put(self,key,data):return self.backend(key).put(key,data)
+        from .storage_config import backend
+        return backend(key)
+    def put(self,key,data):
+        from .storage_config import backend
+        from .workspace_reset import paused
+        if paused() and not key.startswith(('configuration/','secrets/','diagnostics/','model/')):
+            raise ValueError('Workspace archive operation is running')
+        return backend(key,create=True).put(key,data)
     def get(self,key):return self.backend(key).get(key)
     def json(self,key):return json.loads(self.get(key))
     def put_json(self,key,data):return self.put(key,json.dumps(data,ensure_ascii=False).encode())
@@ -112,6 +117,7 @@ def password_hash(value,salt=None):
     return salt+':'+hashlib.scrypt(value.encode(),salt=salt.encode(),n=16384,r=8,p=1).hex()
 def password_valid(value,hashed): return secrets.compare_digest(password_hash(value,hashed.split(':')[0]),hashed)
 def init():
+    engine=current_engine()
     if engine.dialect.name == 'postgresql':
         from sqlalchemy import text
         with engine.begin() as connection:
@@ -134,6 +140,7 @@ def secret_cipher():
     return Fernet(key.encode())
 DEFAULTS={'model_provider':os.getenv('MODEL_PROVIDER','openai'),'embedding_provider':os.getenv('EMBEDDING_PROVIDER','sentence_transformers'),'model':os.getenv('AEGIS_MODEL',os.getenv('OPENAI_MODEL','gpt-4.1-mini')),'embedding_model':os.getenv('EMBEDDING_MODEL','text-embedding-3-small'),'chunk_size':1200,'chunk_overlap':180,'top_k':5,'timeout':int(os.getenv('AEGIS_TIMEOUT','60')),'max_upload_mb':25,'search_provider':os.getenv('SEARCH_PROVIDER','qdrant'),'storage_provider':os.getenv('STORAGE_PROVIDER','local'),'oci_region':os.getenv('OCI_REGION',''),'oci_project_id':'','oci_auth_mode':'api_key','oci_profile':'DEFAULT','oci_model':'','oci_vector_store_id':'','oci_storage_namespace':os.getenv('OCI_NAMESPACE',''),'oci_storage_bucket':os.getenv('OCI_BUCKET',''),'oci_storage_prefix':os.getenv('OCI_OBJECT_PREFIX','aegis'),'oci_storage_region':os.getenv('OCI_REGION',''),'oci_storage_auth_mode':os.getenv('OCI_AUTH_MODE','config_file'),'oci_storage_profile':os.getenv('OCI_PROFILE','DEFAULT'),'queue_provider':os.getenv('QUEUE_PROVIDER','database')}
 _execution=ContextVar('aegis_execution',default=None)
+DEFAULTS.update(local_storage_path='',oci_storage_config_file='/run/oci/config',oci_storage_key_file='/run/oci/aegis_api_key.pem')
 @contextmanager
 def execution_context(snapshot):
     token=_execution.set(snapshot)
@@ -150,9 +157,13 @@ def enforce_local_only(cfg):
 
 def settings():
     active=_execution.get()
-    if active is not None:return enforce_local_only(active['settings'].copy())
-    try:cfg=DEFAULTS|store.json('configuration/settings.json')
-    except FileNotFoundError:cfg=DEFAULTS.copy()
+    if active is not None:cfg=active['settings'].copy()
+    else:
+        try:cfg=DEFAULTS|store.json('configuration/settings.json')
+        except FileNotFoundError:cfg=DEFAULTS.copy()
+    from .database_control import vector_backend
+    transport=vector_backend()
+    if transport:cfg['search_provider']=transport
     return enforce_local_only(cfg)
 def _provider_secret(key,environment):
     # Explicit clearing overrides bootstrap environment fallback, including profile activation.
@@ -186,7 +197,7 @@ def oci_api_key():
 def oci_storage(cfg=None):
     from .oci_adapters import OCIStorageAdapter
     cfg=cfg or settings()
-    return OCIStorageAdapter(namespace=cfg.get('oci_storage_namespace') or None,bucket=cfg.get('oci_storage_bucket') or None,prefix=cfg.get('oci_storage_prefix'),region=cfg.get('oci_storage_region') or None,auth_mode=cfg.get('oci_storage_auth_mode') or None,profile=cfg.get('oci_storage_profile') or None)
+    return OCIStorageAdapter(namespace=cfg.get('oci_storage_namespace') or None,bucket=cfg.get('oci_storage_bucket') or None,prefix=cfg.get('oci_storage_prefix'),region=cfg.get('oci_storage_region') or None,auth_mode=cfg.get('oci_storage_auth_mode') or None,profile=cfg.get('oci_storage_profile') or None,config_file=cfg.get('oci_storage_config_file') or None,key_file=cfg.get('oci_storage_key_file') or None)
 
 @contextmanager
 def document_lock(document_id):

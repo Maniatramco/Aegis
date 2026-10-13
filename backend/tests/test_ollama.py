@@ -1,10 +1,67 @@
 """Ollama contracts and opt-in real local inference; no paid provider calls."""
 import hashlib
+import json
 import os
 import httpx
 import pytest
 from app import core,providers,ollama_provider as ollama,worker
 from test_dataset_models import system,dataset,conversation,post
+
+
+def test_runner_crash_retries_same_inference_once_without_changing_scope(monkeypatch):
+    original=httpx.Client;seen=[]
+    payload={'model':'qwen3:4b','messages':[{'role':'user','content':'Synthetic question'}],'options':{'num_ctx':8192,'num_predict':256}}
+    def handle(request):
+        seen.append(json.loads(request.content))
+        if len(seen)==1:return httpx.Response(500,json={'error':'llama runner process has terminated: signal: aborted (core dumped)'})
+        return httpx.Response(200,json={'done':True,'message':{'content':'Synthetic answer'}})
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(handle),**kwargs))
+    assert ollama.request('/api/chat',payload,60)['done']
+    assert seen==[payload,payload]
+
+
+@pytest.mark.parametrize('status,detail',[(404,'model missing'),(400,'invalid model option'),(500,'unrelated service error')])
+def test_configuration_and_unknown_errors_do_not_retry_or_expose_provider_body(monkeypatch,status,detail):
+    original=httpx.Client;seen=[]
+    def handle(request):
+        seen.append(request)
+        return httpx.Response(status,json={'error':detail+' private document token'})
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(handle),**kwargs))
+    with pytest.raises(ollama.OllamaError) as caught:ollama.request('/api/chat',{'model':'qwen3:4b'},60)
+    assert len(seen)==1 and 'private' not in str(caught.value)
+    if status==500:assert 'install' not in str(caught.value)
+
+
+def test_repeated_runner_failure_is_bounded_and_error_is_safe(monkeypatch):
+    original=httpx.Client;seen=[]
+    def handle(request):
+        seen.append(request)
+        return httpx.Response(500,json={'error':'CUDA error: unknown error private provider details'})
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original(transport=httpx.MockTransport(handle),**kwargs))
+    with pytest.raises(ollama.OllamaRunnerError) as caught:ollama.request('/api/chat',{'model':'qwen3:4b'},60)
+    assert len(seen)==2
+    assert 'Saved files and extraction results' in str(caught.value) and 'private' not in str(caught.value)
+
+
+def test_runner_retry_keeps_original_deadline(monkeypatch):
+    clock=iter([0,0,40]);monkeypatch.setattr(ollama.time,'monotonic',lambda:next(clock))
+    seen=[]
+    def call(remaining):
+        seen.append(remaining)
+        if len(seen)==1:raise ollama.OllamaRunnerError('Synthetic runner stop')
+        return 'Recovered'
+    assert ollama.retry_runner(call,60)=='Recovered' and seen==[60,20]
+
+
+def test_laptop_batch_setting_keeps_complete_context_and_output_budget(monkeypatch):
+    monkeypatch.setenv('AEGIS_OLLAMA_BATCH_SIZE','128')
+    monkeypatch.setattr(core,'settings',lambda:{'context_limit':8192,'max_output_tokens':1024})
+    messages=[{'role':'user','content':'Synthetic complete evidence'}]
+    options=ollama.generation_options(messages,1024)
+    assert options['num_batch']==128 and options['num_ctx']==8192 and options['num_predict']==1024
+    assert messages[0]['content']=='Synthetic complete evidence'
+    monkeypatch.setenv('AEGIS_OLLAMA_BATCH_SIZE','0')
+    with pytest.raises(ollama.OllamaError,match='batch size'):ollama.generation_options(messages,1024)
 
 @pytest.mark.parametrize('name',['qwen3:4b-cloud','https://evil/model','host/model','../model','',None])
 def test_remote_model_names_rejected(name):

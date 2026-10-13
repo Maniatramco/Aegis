@@ -33,7 +33,7 @@ def test_owned_dataset_models_upload_extract_and_review_audits(system):
         assert ext.filename==doc['name']
         reviews=db.scalars(select(relational.Review).where(relational.Review.extract_id==e['id'])).all()
         assert len(reviews)==1 and reviews[0].extraction_version==1 and reviews[0].review_version==2
-        assert reviews[0].created_by=='alice' and reviews[0].reviewed_result_reference.endswith('/v2.json')
+        assert reviews[0].created_by=='alice' and reviews[0].reviewed_result_reference==saved.json()['output_reference']
         job=db.scalar(select(core.Job).where(core.Job.target_id==e['id']))
         assert job.extract_id==e['id'] and job.document_id is None and job.updated_via=='worker'
 
@@ -50,11 +50,12 @@ def test_review_history_survives_reextract_and_document_deletion(system):
     e=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':prompt['id']});assert worker.run_once()
     first=s.api.patch('/api/extractions/'+e['id'],json={'version':1,'result':{'owner':'First review'}}).json()
     assert first['version']==2
-    post(s,'/api/extractions/'+e['id']+'/reextract',{'version':2,'confirm_reviewed':True});assert worker.run_once()
-    second=s.api.patch('/api/extractions/'+e['id'],json={'version':3,'result':{'owner':'Second review'}})
+    assert s.api.post('/api/extractions/'+e['id']+'/reextract',json={'version':2,'confirm_reviewed':True}).status_code==409
+    rerun=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':prompt['id']});assert worker.run_once()
+    second=s.api.patch('/api/extractions/'+rerun['id'],json={'version':1,'result':{'owner':'Second review'}})
     assert second.status_code==200,second.text
     with s.session() as db:
-        assert len(db.scalars(select(relational.Review).where(relational.Review.extract_id==e['id'])).all())==2
+        assert len(db.scalars(select(relational.Review).where(relational.Review.extract_id.in_([e['id'],rerun['id']]))).all())==2
     assert s.api.delete('/api/documents/'+doc['id']).status_code==200
     with s.session() as db:
         assert db.get(relational.Document,doc['id']) is None

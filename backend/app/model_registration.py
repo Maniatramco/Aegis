@@ -104,6 +104,12 @@ def prepare(body, owner, existing=None):
 
 def save(body, owner, existing=None):
     cfg, secret, capabilities = prepare(body, owner, existing)
+    from .model_registry import equivalent
+    if existing and routing.model_data(existing).get('archived'):
+        raise HTTPException(409,'This registration is archived. Edit its replacement model instead.')
+    duplicate=equivalent(owner,cfg,body.provider_model.strip(),capabilities,existing.id if existing else None) if not secret else None
+    if duplicate:
+        raise HTTPException(409,'An equivalent model is already registered as '+duplicate.name+'. Use Model Mapping or edit that registration.')
     model_id = existing.id if existing else core.uid()
     profile = previous(existing)[1] if existing and previous(existing)[3] else None
     profile_id = profile.id if profile else core.uid()
