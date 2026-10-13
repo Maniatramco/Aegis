@@ -2,6 +2,10 @@
 import hashlib, math, json, re, os, uuid, time
 from functools import lru_cache
 import httpx
+# Finish the SDK's package initialization before worker/background threads can
+# import different model/client submodules concurrently. Otherwise a first-use
+# import can expose qdrant_client.http's partially initialized AsyncApiClient.
+from qdrant_client import QdrantClient
 from .core import settings, api_key, store, oci_api_key, execution_context
 
 class ProviderError(RuntimeError):pass
@@ -87,7 +91,6 @@ def client():
     return qdrant_client()
 
 def qdrant_client():
-    from qdrant_client import QdrantClient
     return QdrantClient(url=os.getenv('QDRANT_URL','http://qdrant:6333'),api_key=os.getenv('QDRANT_API_KEY') or None,timeout=20)
 def put_vectors(document_id,owner,kb_id,chunks,vectors):
     if settings()['search_provider']=='local':
