@@ -35,20 +35,29 @@ def scripted_complete(messages, tools, on_token=None):
 agent_model.complete=scripted_complete
 app=main.app
 
+# Only the guarded synthetic deployment prints complete diagnostics. Production
+# publication handlers continue to report sanitized, recoverable errors.
+import traceback
+from functools import wraps
+from app import agent_onboarding, knowledge
+def diagnostic(operation):
+    @wraps(operation)
+    def wrapped(*args,**kwargs):
+        try:return operation(*args,**kwargs)
+        except Exception:
+            traceback.print_exc()
+            raise
+    return wrapped
+agent_onboarding.publish_knowledge=diagnostic(agent_onboarding.publish_knowledge)
+knowledge.sync=diagnostic(knowledge.sync)
+
 if __name__=='__main__':
     import sys,time
     if sys.argv[1:]!=['--worker']:raise RuntimeError('Only the disposable worker entry point is supported.')
     from app import worker
     # Diagnostic traces are safe only in this synthetic, mock-only deployment.
     # Production worker logs continue to exclude provider bodies and credentials.
-    import traceback
-    original_process=worker.process
-    def diagnostic_process(*args):
-        try:return original_process(*args)
-        except Exception:
-            traceback.print_exc()
-            raise
-    worker.process=diagnostic_process
+    worker.process=diagnostic(worker.process)
     core.init()
     while True:
         if not worker.run_once():time.sleep(2)

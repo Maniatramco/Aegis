@@ -79,7 +79,8 @@ test('onboards models, prompt and document through the Agent and publishes a sav
  await page.getByLabel('Upload documents and run extraction').check();
  await page.getByLabel('Onboarding documents').setInputFiles({name:'onboard.txt',mimeType:'text/plain',buffer:Buffer.from(source)});
  await page.getByLabel('Onboarding prompt JSON file').setInputFiles({name:'onboard-prompt.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({schema}))});
- await page.getByRole('button',{name:'Confirm dataset onboarding',exact:true}).click();
+ const created=page.waitForResponse(r=>r.url().endsWith('/api/agent-v2/onboarding')&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirm dataset onboarding',exact:true}).click();const workflow=await checked(await created);
+ await expect.poll(async()=>{const saved=await checked(await page.request.get(`/api/agent-v2/onboarding/${workflow.id}`));if(saved.status==='failed')throw new Error('Synthetic onboarding failed: '+saved.error);return saved.status;},{timeout:90000}).toBe('completed');
  await expect(page.getByRole('button',{name:'Use dataset in Aegis Agent',exact:true})).toBeVisible({timeout:90000});
  await expect(flow.getByText(/Ready for review/).last()).toBeVisible();
  await page.getByRole('button',{name:'Use dataset in Aegis Agent',exact:true}).click();
@@ -102,7 +103,7 @@ test('confirmed upload and extraction save originals and Parquet; independent mo
  for(const run of runs){const saved=await extractionReady(page,run.id);expect(saved.output_reference).toMatch(/\.parquet$/);expect(saved.result.reference).toBe('MOCK TEST VALUE');}
  const docs=(await checked(await page.request.get('/api/documents'))).filter((item:any)=>(item.dataset_id||item.kb_id||item.parent_id)===w.dataset.id);expect(docs).toHaveLength(2);
  expect(await (await page.request.get(`/api/documents/${docs[0].id}/download`)).text()).toContain('SYN-2026');
- await expect.poll(async()=> (await checked(await page.request.get(`/api/agent-v2/plans/${plan.id}`))).goal.status,{timeout:90000}).toBe('completed');
+ await expect.poll(async()=>{const saved=await checked(await page.request.get(`/api/agent-v2/plans/${plan.id}`));if(saved.calls.some((c:any)=>c.publication_error))throw new Error('Synthetic publication failed: '+JSON.stringify(saved.calls.map((c:any)=>({status:c.status,error:c.error}))));return saved.goal.status;},{timeout:90000}).toBe('completed');
  await expect(page.getByText('Goal steps',{exact:true})).toHaveCount(0);await expect(page.getByText('Pause goal answer',{exact:true})).toHaveCount(0);
 });
 
