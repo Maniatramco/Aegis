@@ -52,7 +52,7 @@ def enqueue(owner,kind,target,allow_external=False,snapshot=None):
     return j
 
 def external_check(consent,embedding=False,cfg=None):
-    cfg=cfg or settings();external=(cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci') or cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci'
+    cfg=cfg or settings();external=(cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci' or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci','gcp') or cfg['embedding_provider']=='openai' or cfg['search_provider']=='oci'
     if external and not consent:raise HTTPException(409,'This action sends document text or your query to the configured external provider. Confirm external data transmission first.')
     if (cfg['model_provider']=='mock' or cfg['embedding_provider']=='mock') and os.getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true and are for tests only')
 
@@ -354,19 +354,21 @@ def get_settings(owner=Depends(auth)):
     except Exception:has_key=False
     try:has_oci_key=bool(oci_api_key())
     except Exception:has_oci_key=False
-    return settings()|{'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. Explicit consent is required per processing operation.'}
+    try:has_gcp_key=bool(gcp_api_key())
+    except Exception:has_gcp_key=False
+    return settings()|{'gcp_api_key_configured':has_gcp_key,'api_key_configured':has_key,'oci_api_key_configured':has_oci_key,'api_key':'********' if has_key else '', 'mock_allowed':os.getenv('AEGIS_ALLOW_MOCK')=='true','requires_reindex_on_embedding_change':True,'openai_endpoint':'https://api.openai.com/v1','external_data_notice':'Selected external providers receive data: OpenAI receives query/document text for its model or embeddings; OCI receives originals for Object Storage and query/document text for managed indexing or generation. The selected Google API receives query/document text for Gemini generation and extraction; Developer API free-tier data may be used to improve Google products. Explicit consent is required per processing operation.'}
 @app.patch('/api/settings')
 def save_settings(body:dict,owner=Depends(auth)):
     with document_lock('settings-config'):return _save_settings(body,owner)
 
 def _save_settings(body,owner):
     if any(lock.locked() for lock in _locks.values()):raise HTTPException(409,'Wait for active chat responses before changing settings')
-    permitted=set(DEFAULTS)|{'api_key','oci_api_key'}
+    permitted=set(DEFAULTS)|{'api_key','oci_api_key','gcp_api_key'}
     if set(body)-permitted:raise HTTPException(400,'Unknown setting or unsupported endpoint; provider endpoints are fixed for credential safety')
     with Session() as session:
         if session.scalar(select(Job).where(Job.status.in_(['queued','running'])).limit(1)):raise HTTPException(409,'Wait for or cancel active jobs before changing settings')
-    cfg=settings()|{k:v for k,v in body.items() if k not in ('api_key','oci_api_key')}
-    if cfg['model_provider'] not in ('mock','openai','oci') or cfg['embedding_provider'] not in ('mock','openai','sentence_transformers') or cfg['search_provider'] not in ('local','qdrant','oci') or cfg['storage_provider'] not in ('local','oci'):raise HTTPException(400,'Selected provider is not implemented; see capabilities')
+    cfg=settings()|{k:v for k,v in body.items() if k not in ('api_key','oci_api_key','gcp_api_key')}
+    if cfg['model_provider'] not in ('mock','openai','oci','gcp') or cfg['embedding_provider'] not in ('mock','openai','sentence_transformers') or cfg['search_provider'] not in ('local','qdrant','oci') or cfg['storage_provider'] not in ('local','oci'):raise HTTPException(400,'Selected provider is not implemented; see capabilities')
     if any(cfg[k]!=settings()[k] for k in ('oci_region','oci_project_id','oci_vector_store_id')):
         with Session() as session:known_docs=list(session.scalars(select(Record).where(Record.kind=='document')))
         for doc in known_docs:
@@ -376,6 +378,10 @@ def _save_settings(body,owner):
             # Legacy indexes have no such guarantee and must keep their original global destination.
             try:store.get('documents/'+doc.id+'/index-execution.json')
             except FileNotFoundError:raise HTTPException(409,'Legacy OCI indexes require cleanup under the original project/region/vector store before changing that destination. Delete or migrate indexed documents first.')
+    if cfg['model_provider']=='gcp':
+        from .gcp_models import validate_config
+        try:validate_config(cfg)
+        except providers.ProviderError as e:raise HTTPException(400,str(e))
     if cfg['queue_provider'] not in ('database','oci'):raise HTTPException(400,'Unsupported queue provider')
     if cfg['queue_provider']=='oci' and cfg['queue_provider']!=settings()['queue_provider']:
         from .queue_transport import get_transport
@@ -395,6 +401,12 @@ def _save_settings(body,owner):
     if cfg['storage_provider']=='oci' and any(cfg[k]!=settings()[k] for k in ('oci_storage_auth_mode','oci_storage_profile')):
         try:oci_storage(cfg).test_connection()
         except Exception:raise HTTPException(400,'OCI storage authentication check failed')
+    if 'gcp_api_key' in body and body['gcp_api_key']!='********':
+        if body['gcp_api_key']:
+            try:store.put('secrets/gcp-provider.enc',secret_cipher().encrypt(body['gcp_api_key'].encode()));store.delete('secrets/gcp-provider.enc.disabled')
+            except ValueError as e:raise HTTPException(400,str(e))
+        else:
+            store.put('secrets/gcp-provider.enc.disabled',b'cleared');store.delete('secrets/gcp-provider.enc')
     if 'oci_api_key' in body and body['oci_api_key']!='********':
         if body['oci_api_key']:
             store.put('secrets/oci-provider.enc',secret_cipher().encrypt(body['oci_api_key'].encode()));store.delete('secrets/oci-provider.enc.disabled')
@@ -430,12 +442,14 @@ def test_settings(owner=Depends(auth)):
     except Exception:pass
     try:status['openai_key_configured']=bool(api_key())
     except Exception:pass
-    return {'ok':all(status[k] for k in ('storage','database','vector_store','queue')),'checks':status,'note':'Storage, database, vector and queue checks may contact configured services. OpenAI key presence is not live authentication. No model inference was requested; OCI storage check is read-only bucket access, not a full write/delete validation.'}
+    try:status['gcp_key_configured']=bool(gcp_api_key())
+    except Exception:status['gcp_key_configured']=False
+    return {'ok':all(status[k] for k in ('storage','database','vector_store','queue')),'checks':status,'note':'Storage, database, vector and queue checks may contact configured services. OpenAI and Google Cloud key presence is not live authentication. No model inference was requested; OCI storage check is read-only bucket access, not a full write/delete validation.'}
 @app.get('/api/capabilities')
 def capabilities(owner=Depends(auth)):
     from .oci_adapters import capability_report
     from .queue_transport import get_transport
-    return {'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'openai_responses':True,'sentence_transformers':True,'ocr':False,'streaming':True},'oci':capability_report(),'active':settings()}
+    return {'queue':get_transport(settings()['queue_provider']).status(),'local':{'storage':True,'qdrant':True,'postgresql':True,'gcp_gemini':True,'openai_responses':True,'sentence_transformers':True,'ocr':False,'streaming':True},'oci':capability_report(),'active':settings()}
 
 @app.post('/api/conversations/{id}/messages/stream')
 async def stream_message(id:str,body:MessageInput,request:Request,owner=Depends(auth)):
@@ -489,7 +503,7 @@ class ProfileInput(BaseModel):
 
 def profile_public(record):
     data=local_store.json(record.ref)
-    return representation(record)|{'api_key_configured':data.get('api_key_configured',False),'oci_api_key_configured':data.get('oci_api_key_configured',False)}
+    return representation(record)|{'api_key_configured':data.get('api_key_configured',False),'oci_api_key_configured':data.get('oci_api_key_configured',False),'gcp_api_key_configured':data.get('gcp_api_key_configured',False)}
 
 def write_profile(owner,name,id=None):
     with document_lock('settings-config'):
@@ -498,11 +512,11 @@ def write_profile(owner,name,id=None):
 def _write_profile(owner,name,id=None):
     existing=get_record(id,owner,'config_profile') if id else None
     id=id or uid();version=(existing.version+1) if existing else 1;ref=f'configuration/profiles/{id}/v{version}.json'
-    data={'settings':settings(),'api_key_configured':False,'oci_api_key_configured':False,'saved_at':time.time()}
-    for source,target,key in [('secrets/provider.enc','openai.enc','api_key_configured'),('secrets/oci-provider.enc','oci.enc','oci_api_key_configured')]:
+    data={'settings':settings(),'api_key_configured':False,'oci_api_key_configured':False,'gcp_api_key_configured':False,'saved_at':time.time()}
+    for source,target,key in [('secrets/provider.enc','openai.enc','api_key_configured'),('secrets/oci-provider.enc','oci.enc','oci_api_key_configured'),('secrets/gcp-provider.enc','gcp.enc','gcp_api_key_configured')]:
         try:value=local_store.get(source)
         except FileNotFoundError:
-            raw=api_key() if key=='api_key_configured' else oci_api_key()
+            raw={'api_key_configured':api_key,'oci_api_key_configured':oci_api_key,'gcp_api_key_configured':gcp_api_key}[key]()
             if not raw:continue
             try:value=secret_cipher().encrypt(raw.encode())
             except ValueError as e:raise HTTPException(400,str(e))
@@ -522,7 +536,7 @@ def revise_profile(id:str,body:ProfileInput,owner=Depends(auth)):return write_pr
 @app.post('/api/settings/profiles/{id}/activate')
 def activate_profile(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'config_profile');data=local_store.json(r.ref);cfg=data['settings'].copy()
-    for target,key in [('openai.enc','api_key'),('oci.enc','oci_api_key')]:
+    for target,key in [('openai.enc','api_key'),('oci.enc','oci_api_key'),('gcp.enc','gcp_api_key')]:
         try:
             encrypted=local_store.get(f'secrets/profiles/{id}/v{r.version}/{target}');cfg[key]=secret_cipher().decrypt(encrypted).decode()
         except FileNotFoundError:cfg[key]=''

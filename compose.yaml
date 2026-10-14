@@ -16,6 +16,9 @@ x-backend: &backend
     SEARCH_PROVIDER: ${SEARCH_PROVIDER:-qdrant}
     AEGIS_ALLOW_MOCK: ${AEGIS_ALLOW_MOCK:-false}
     HF_HOME: /data/model-cache
+    GCP_API_MODE: ${GCP_API_MODE:-developer}
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+    GCP_LOCATION: ${GCP_LOCATION:-global}
     OCI_REGION: ${OCI_REGION:-}
     OCI_NAMESPACE: ${OCI_NAMESPACE:-}
     OCI_BUCKET: ${OCI_BUCKET:-}

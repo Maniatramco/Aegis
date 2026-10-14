@@ -297,6 +297,7 @@ export default function App() {
   const [settingsForm, setSettingsForm] = useState<Entity>({});
   const [apiKey, setApiKey] = useState("");
   const [ociApiKey, setOciApiKey] = useState("");
+  const [gcpApiKey, setGcpApiKey] = useState("");
   const [testResult, setTestResult] = useState<Entity | null>(null);
   const [profiles, setProfiles] = useState<Entity[]>([]);
   const [profileName, setProfileName] = useState("");
@@ -2138,7 +2139,7 @@ export default function App() {
                         <h3>{p.name}</h3>
                         <span className="muted small">
                           Version {p.version} · {date(p.created_at)} ·{" "}
-                          {p.api_key_configured || p.oci_api_key_configured
+                          {p.api_key_configured || p.oci_api_key_configured || p.gcp_api_key_configured
                             ? "Encrypted credentials saved"
                             : "No provider key saved"}
                         </span>
@@ -2216,10 +2217,12 @@ export default function App() {
                         setSettingsForm({
                           ...settingsForm,
                           model_provider: e.target.value,
+                          ...(e.target.value === "gcp" ? { model: "gemini-3.5-flash-lite" } : {}),
                         })
                       }
                     >
                       <option value="openai">OpenAI</option>
+                      <option value="gcp">Google · Gemini</option>
                       <option value="oci">
                         OCI Generative AI · requires validation
                       </option>
@@ -2238,7 +2241,7 @@ export default function App() {
                           model: e.target.value,
                         })
                       }
-                      placeholder="gpt-4.1-mini"
+                      placeholder={settingsForm.model_provider === "gcp" ? "gemini-3.5-flash-lite" : "gpt-4.1-mini"}
                     />
                   </Field>
                   <Field label="Embedding provider">
@@ -2297,6 +2300,34 @@ export default function App() {
                       onChange={(e) => setApiKey(e.target.value)}
                     />
                   </Field>
+                  {settingsForm.model_provider === "gcp" && (
+                    <>
+                      <Field label="Google API" help="Choose the API that issued your key. Cloud trial credits and AI Studio free quota are separate.">
+                        <select aria-label="Google API" value={settingsForm.gcp_api_mode || "developer"} onChange={e => setSettingsForm({...settingsForm, gcp_api_mode: e.target.value})}>
+                          <option value="developer">Gemini API · AI Studio free tier available</option>
+                          <option value="cloud">Google Cloud · eligible trial credits</option>
+                        </select>
+                      </Field>
+                      {settingsForm.gcp_api_mode !== "developer" && <>
+                      <Field label="Google Cloud project ID">
+                        <input aria-label="Google Cloud project ID" value={settingsForm.gcp_project_id || ""} onChange={e => setSettingsForm({...settingsForm, gcp_project_id: e.target.value})} />
+                      </Field>
+                      <Field label="Google Cloud location" help="Use global for the initial Gemini Flash-Lite test.">
+                        <input aria-label="Google Cloud location" value={settingsForm.gcp_location || "global"} onChange={e => setSettingsForm({...settingsForm, gcp_location: e.target.value})} />
+                      </Field>
+                      </>}
+                      <Field label="Google API key" help={settings.gcp_api_key_configured ? "An encrypted key is configured. Leave blank to keep it." : "Enter the key from the selected Google API. It is encrypted on the server."}>
+                        <input aria-label="Google API key" type="password" autoComplete="off" value={gcpApiKey} onChange={e => setGcpApiKey(e.target.value)} />
+                      </Field>
+                      <Field label="Chat output token limit">
+                        <input aria-label="Google Cloud chat output tokens" type="number" min={64} max={4096} value={settingsForm.gcp_output_tokens ?? 512} onChange={e => setSettingsForm({...settingsForm, gcp_output_tokens: Number(e.target.value)})} />
+                      </Field>
+                      <Field label="Extraction output token limit">
+                        <input aria-label="Google Cloud extraction output tokens" type="number" min={64} max={8192} value={settingsForm.gcp_extraction_tokens ?? 2048} onChange={e => setSettingsForm({...settingsForm, gcp_extraction_tokens: Number(e.target.value)})} />
+                      </Field>
+                      <Notice>Gemini sends selected excerpts to the selected Google API. Keep local embeddings for indexing. {settingsForm.gcp_api_mode === "developer" ? "Choose a free-tier project and use sample documents: free-tier content may be used to improve Google products. Cloud welcome credits do not cover this API." : "Model requests consume eligible Cloud credits or incur provider charges."}</Notice>
+                    </>
+                  )}
                   {settingsForm.model_provider === "mock" && (
                     <Notice tone="warn">
                       Mock mode generates synthetic test output. It is not model
@@ -2537,6 +2568,11 @@ export default function App() {
                             "storage_provider",
                             "search_provider",
                             "queue_provider",
+                            "gcp_api_mode",
+                            "gcp_project_id",
+                            "gcp_location",
+                            "gcp_output_tokens",
+                            "gcp_extraction_tokens",
                             "model_provider",
                             "embedding_provider",
                             "model",
@@ -2566,11 +2602,13 @@ export default function App() {
                           );
                           if (apiKey) payload.api_key = apiKey;
                           if (ociApiKey) payload.oci_api_key = ociApiKey;
+                          if (gcpApiKey) payload.gcp_api_key = gcpApiKey;
                           const s = await api("/settings", "PATCH", payload);
                           setSettings(s);
                           setSettingsForm(s);
                           setApiKey("");
                           setOciApiKey("");
+                          setGcpApiKey("");
                           notify(
                             "Settings saved securely. Reindex documents if embedding settings changed.",
                           );
