@@ -63,6 +63,10 @@ GitHub Actions runs backend tests, frontend type checking/build, and a Compose-b
 
 See [the verification record](docs/VERIFICATION.md) for passed checks and explicit unrun stages.
 
+## Google Cloud Gemini
+
+Google Cloud generation supports document answers, streaming, and schema-validated extraction while retaining local embeddings and existing storage. See [Google Cloud setup](docs/GCP_SETUP.md) for Gemini Flash-Lite configuration and credit limitations.
+
 ## OCI migration status
 
 This release's supported deployment is local Compose. OCI migration is **not an endpoint-only switch**. It requires provisioned services, service-specific adapters, identity policies, migration validation and reindexing. Implemented adapters cover OCI Object Storage, Queue, and Enterprise AI Responses and managed vector stores. Settings expose provider and destination configuration; credential-free SDK/HTTP contracts are tested. Existing content is moved with a checksum-verified, writer-stopped migration tool before activation. OCI PostgreSQL uses the configured SQLAlchemy database URL; OKE deployment still needs operator-provisioned infrastructure and secrets. No live OCI tenancy or OpenAI API account is claimed as tested. See [migration steps](docs/OCI_MIGRATION.md).

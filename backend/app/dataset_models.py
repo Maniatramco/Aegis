@@ -8,7 +8,7 @@ from . import core, providers
 
 CAPABILITIES={'chat','extraction','embedding'}
 ROUTING_DEFAULTS={'mappings':[], 'default_chat_model_id':None, 'default_extraction_model_id':None, 'embedding_model_id':None, 'index_generation':0}
-MODEL_KEYS=('model_provider','model','timeout','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_model')
+MODEL_KEYS=('model_provider','model','timeout','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_model','gcp_api_mode','gcp_project_id','gcp_location','gcp_output_tokens','gcp_extraction_tokens')
 EMBED_KEYS=('embedding_provider','embedding_model','search_provider','oci_region','oci_project_id','oci_auth_mode','oci_profile','oci_vector_store_id','timeout','chunk_size','chunk_overlap','top_k')
 
 def owned(id,owner,kind):
@@ -35,7 +35,7 @@ def create(kind,owner,name,data,parent=''):
 def profile_snapshot(profile):
     data=core.local_store.json(profile.ref);cfg=data['settings']
     refs={}
-    for provider,key,filename in [('openai','api_key_configured','openai.enc'),('oci','oci_api_key_configured','oci.enc')]:
+    for provider,key,filename in [('openai','api_key_configured','openai.enc'),('oci','oci_api_key_configured','oci.enc'),('gcp','gcp_api_key_configured','gcp.enc')]:
         refs[provider]=f'secrets/profiles/{profile.id}/v{profile.version}/{filename}' if data.get(key) else None
     return {'settings':copy.deepcopy(cfg),'secret_refs':refs,'connection_profile_id':profile.id,'connection_profile_version':profile.version}
 
@@ -44,7 +44,7 @@ def model_public(r):
     data=model_data(r);profile=owned(data['connection_profile_id'],r.owner,'config_profile');snap=profile_snapshot(profile)
     p=snap['settings']['embedding_provider'] if data['capabilities']==['embedding'] else snap['settings']['model_provider']
     if data['capabilities']==['embedding'] and snap['settings']['search_provider']=='oci':p='oci'
-    return core.representation(r)|data|{'provider':p,'connection_profile_version':profile.version,'credential_configured':p not in ('openai','oci') or bool(snap['secret_refs'].get(p)) or (p=='oci' and snap['settings'].get('oci_auth_mode')!='api_key')}
+    return core.representation(r)|data|{'provider':p,'connection_profile_version':profile.version,'credential_configured':p not in ('openai','oci','gcp') or bool(snap['secret_refs'].get(p)) or (p=='oci' and snap['settings'].get('oci_auth_mode')!='api_key')}
 
 def dataset_config(r):return core.store.json(r.ref)
 def routing_public(r):
@@ -170,6 +170,10 @@ def validate_model(body,owner):
     p=cfg['embedding_provider'] if data['capabilities']==['embedding'] else cfg['model_provider']
     if p=='mock' and __import__('os').getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true')
     if p=='sentence_transformers' and body.provider_model!='sentence-transformers/all-MiniLM-L6-v2':raise HTTPException(400,'Local embeddings currently support sentence-transformers/all-MiniLM-L6-v2 only.')
+    if p=='gcp':
+        from .gcp_models import validate_config
+        try:validate_config(cfg|{'model':body.provider_model})
+        except providers.ProviderError as e:raise HTTPException(400,str(e))
     return data
 
 def save_mappings(r,body):

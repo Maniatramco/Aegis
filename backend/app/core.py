@@ -100,6 +100,7 @@ def secret_cipher():
     if not key: raise ValueError('MASTER_KEY is required to save provider credentials (generate a Fernet key)')
     return Fernet(key.encode())
 DEFAULTS={'model_provider':os.getenv('MODEL_PROVIDER','openai'),'embedding_provider':os.getenv('EMBEDDING_PROVIDER','sentence_transformers'),'model':os.getenv('OPENAI_MODEL','gpt-4.1-mini'),'embedding_model':os.getenv('EMBEDDING_MODEL','text-embedding-3-small'),'chunk_size':1200,'chunk_overlap':180,'top_k':5,'timeout':60,'max_upload_mb':25,'search_provider':os.getenv('SEARCH_PROVIDER','qdrant'),'storage_provider':os.getenv('STORAGE_PROVIDER','local'),'oci_region':os.getenv('OCI_REGION',''),'oci_project_id':'','oci_auth_mode':'api_key','oci_profile':'DEFAULT','oci_model':'','oci_vector_store_id':'','oci_storage_namespace':os.getenv('OCI_NAMESPACE',''),'oci_storage_bucket':os.getenv('OCI_BUCKET',''),'oci_storage_prefix':os.getenv('OCI_OBJECT_PREFIX','aegis'),'oci_storage_region':os.getenv('OCI_REGION',''),'oci_storage_auth_mode':os.getenv('OCI_AUTH_MODE','config_file'),'oci_storage_profile':os.getenv('OCI_PROFILE','DEFAULT'),'queue_provider':os.getenv('QUEUE_PROVIDER','database')}
+DEFAULTS.update(gcp_api_mode=os.getenv('GCP_API_MODE','developer'), gcp_project_id=os.getenv('GCP_PROJECT_ID',''), gcp_location=os.getenv('GCP_LOCATION','global'), gcp_output_tokens=512, gcp_extraction_tokens=2048)
 _execution=ContextVar('aegis_execution',default=None)
 @contextmanager
 def execution_context(snapshot):
@@ -136,6 +137,10 @@ def job_repr(j):
 def oci_api_key():
     value=execution_secret('oci')
     return value if value is not None else _provider_secret('secrets/oci-provider.enc','OCI_GENAI_API_KEY')
+
+def gcp_api_key():
+    value=execution_secret('gcp')
+    return value if value is not None else _provider_secret('secrets/gcp-provider.enc','GCP_API_KEY')
 
 def oci_storage(cfg=None):
     from .oci_adapters import OCIStorageAdapter
