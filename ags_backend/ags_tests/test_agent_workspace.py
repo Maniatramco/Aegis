@@ -110,13 +110,18 @@ def test_unknown_tools_and_out_of_scope_requests_cannot_mutate(system, monkeypat
     assert plan(s, d)['calls'] == []
     assert s.api.get('/api/jobs').json() == []
 
-def test_planner_consent_is_checked_before_calling_external_model(system, monkeypatch):
+def test_external_planning_is_allowed_but_only_proposes_processing(system, monkeypatch):
     s = system; d = dataset(s); seen = []
-    monkeypatch.setattr(agent, 'chat_snapshot', lambda *args: {'settings': core.settings() | {'model_provider': 'openai'}})
-    monkeypatch.setattr(providers, 'plan', lambda *args: seen.append(args))
+    original=agent.chat_snapshot
+    def snapshot(*args):
+        value=original(*args);value['settings']={**value['settings'],'model_provider':'openai'};return value
+    monkeypatch.setattr(agent,'chat_snapshot',snapshot)
+    monkeypatch.setattr(providers, 'plan', lambda *args: seen.append(args) or proposal(('upload',)))
     model = next(m for m in d['models'] if 'chat' in m['capabilities'])
     r = s.api.post('/api/agent-v2/plans', json={'text': 'Upload a document', 'planner_model_id': model['id'], 'dataset_id': d['id']})
-    assert r.status_code == 409 and seen == []
+    assert r.status_code == 200 and len(seen)==1
+    assert r.json()['calls'][0]['status']=='pending'
+    assert s.api.get('/api/jobs').json()==[]
 
 def test_expired_plan_does_not_start_a_tool(system, monkeypatch):
     s = system; d = dataset(s); planner(monkeypatch, proposal(('upload',))); p = plan(s, d)

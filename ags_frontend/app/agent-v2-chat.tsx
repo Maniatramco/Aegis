@@ -4,6 +4,7 @@ import {Copy,FileText} from 'lucide-react';
 import {attachmentSize} from './agent-attachments';
 import {CitationPanel} from './citation-panel';
 import {extractionCitationId} from './citation-source';
+import {agentTokenUsage} from './agent-token-usage';
 type Entity=Record<string,any>;
 export function AgentRequest({text,attachments=[],pending=false}:{text:string;attachments:{name:string;size?:number}[];pending?:boolean}){
  return <div className={`agent-v2-request${pending?' agent-v2-pending':''}`}>
@@ -33,11 +34,13 @@ export function AgentAnswerText({text,...links}:{text:string}&AnswerLinks){
 }
 export function AgentChatAnswer({message,api,onError,onReview,onRecovery}:{message:Entity;api:(path:string,method?:string,body?:unknown,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;onError:(error:string)=>void;onReview?:(id:string)=>void;onRecovery?:(action:Entity)=>void}){
  const [citation,setCitation]=useState<Entity|null>(null);
+ const usage=agentTokenUsage(message.token_usage,message.status);
  const openCitation=(source:Entity)=>setCitation({...source,requested_fields:message.review_actions?.find((action:Entity)=>action.extraction_id===extractionCitationId(source))?.fields||[]});
  // Only result IDs recorded in the answer's sources/actions become Review links.
  const extractionIds=Array.from(new Set<string>([...(message.review_actions||[]).map((action:Entity)=>action.extraction_id),...(message.citations||[]).map(extractionCitationId)].filter((id:unknown):id is string=>typeof id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))));
  return <div className="agent-v2-chat-answer" data-streaming={message.status==='streaming'}>
   <AgentAnswerText text={message.text||''} citations={message.citations||[]} onCitation={openCitation} extractionIds={extractionIds} onReview={onReview}/>
+  <p className="small muted agent-token-usage" aria-label="Answer token usage" title={usage.title}>{usage.text}</p>
   {message.citations?.some((source:Entity)=>source.ocr)&&<p className="small muted" role="status">Some sources use AI OCR. Verify names, numbers and tables against the originals.</p>}
   {message.recovery_actions?.length>0&&<div className="agent-v2-result-actions">{message.recovery_actions.map((action:Entity,index:number)=><button className="btn" key={index} onClick={()=>onRecovery?.(action)}>{action.label}</button>)}</div>}
   {message.review_actions?.some((action:Entity)=>action.fields?.length>0)&&<p className="muted small">This answer uses selected fields. Review opens the complete saved results.</p>}

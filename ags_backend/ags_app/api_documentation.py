@@ -64,6 +64,7 @@ NOTES = {
     'POST /api/datasets/{id}/assign-documents': 'Assign unassigned legacy documents to a dataset. Existing dataset documents cannot be moved; assigned documents need reindexing.',
     'POST /api/datasets/{id}/local-models': 'Map already-installed local Ollama models without downloading models. Existing embedding selections are preserved.',
     'GET /api/models': 'List registered models, capabilities, and public connection information. Credential values are not returned.',
+    'GET /api/model-providers': 'List supported model provider choices, protocol, endpoint defaults, categories and authentication modes. No credential values are returned.',
     'POST /api/models': 'Register a model against an existing connection profile. For a complete generic connection registration, use /api/model-registrations.',
     'PUT /api/models/{id}': 'Update a catalog model against an existing profile. Dataset mappings validate its capabilities and enabled state.',
     'POST /api/model-registrations': 'Register a model together with protocol, endpoint, authentication, category, and timeout. Connection credentials are stored encrypted and omitted from public responses.',
@@ -137,7 +138,7 @@ NOTES = {
 
 GROUPS = {
     'auth': 'Authentication', 'datasets': 'Datasets', 'knowledge-bases': 'Datasets',
-    'models': 'Models', 'model-registrations': 'Models', 'local-models': 'Models',
+    'models': 'Models', 'model-registrations': 'Models', 'model-providers': 'Models', 'local-models': 'Models',
     'documents': 'Documents', 'conversations': 'Chat', 'messages': 'Chat',
     'temporary-chat': 'Temporary chat', 'templates': 'Prompt templates',
     'extractions': 'Extraction & review', 'jobs': 'Jobs & workflow',

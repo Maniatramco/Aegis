@@ -1,16 +1,16 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Layers, Plus, Search, X, Pencil } from "lucide-react";
 import "./model-configuration.css";
 import { parseModelParameters, supportedModelParameters } from "./model-parameters";
 
 type Entity = Record<string, any>;
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
-const protocols = [
-  ["ollama", "Ollama"], ["openai-compatible", "OpenAI-compatible API"],
-  ["azure-openai", "Azure OpenAI v1"], ["bedrock", "Amazon Bedrock"],
-  ["vertex", "Google Vertex AI"], ["oci", "OCI Generative AI"],
-];
+type ProviderChoice = {id: string; name: string; protocol: string; endpoint: string; region: string; auth_modes: string[]; categories: string[]};
+function providerId(connection: Entity) {
+  if (connection.protocol !== "openai-compatible") return connection.protocol;
+  try { const host = new URL(connection.endpoint).hostname; return host === "generativelanguage.googleapis.com" ? "gemini" : host === "api.openai.com" ? "openai" : "openai-compatible"; } catch { return "openai-compatible"; }
+}
 const authOptions: Record<string, [string, string][]> = {
   ollama: [["none", "No credentials · local service"]],
   "openai-compatible": [["api_key", "API key"], ["bearer_token", "Bearer token"]],
@@ -45,6 +45,10 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   const [search, setSearch] = useState("");
   const [test, setTest] = useState<Entity | null>(null);
   const [testing, setTesting] = useState(false);
+  const [providerChoices, setProviderChoices] = useState<ProviderChoice[]>([]);
+  const [providerChoice, setProviderChoice] = useState("ollama");
+  const [providerError, setProviderError] = useState("");
+  useEffect(() => { let active = true; api("/model-providers").then(value => { if (active) setProviderChoices(value); }).catch(() => { if (active) setProviderError("Provider choices could not load. Reload this screen to retry."); }); return () => { active = false; }; }, [api]);
   const [extraText, setExtraText] = useState("{}");
   const [extraOpen, setExtraOpen] = useState(false);
   const change = (key: string, value: any) => { setForm(current => ({ ...current, [key]: value, ...(key === "category" ? { context_limit: value === "embedding" ? 8192 : 32768 } : {}) })); if (key === "category") setExtraText("{}"); setTest(null); };
@@ -65,6 +69,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
       }
     }
     setEditing(model || null); setForm(initial); setExtraText(JSON.stringify(model?.extra_parameters || {}, null, 2)); setExtraOpen(!!Object.keys(model?.extra_parameters || {}).length); setTest(null); setOpen(true);
+    setProviderChoice(providerId(initial.connection));
   };
   const close = () => { setOpen(false); setEditing(null); setForm(blank()); setTest(null); };
   const native = ["bedrock", "vertex", "oci"].includes(form.connection.protocol);
@@ -86,7 +91,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
           <tbody>{visible.map(m=><tr key={m.id}>
             <th scope="row"><div className="registration-model-cell"><Layers size={16} aria-hidden="true"/><div><strong>{m.name}</strong><small>{m.provider_model}</small>{!!Object.keys(m.extra_parameters||{}).length&&<small>{Object.keys(m.extra_parameters).length} extra parameters</small>}</div></div></th>
             <td><div className="model-chips">{m.capabilities.map((cap:string)=><span className="model-chip" key={cap}>{cap==='extraction'?'Extraction':cap==='embedding'?'Embedding':'Chat'}</span>)}</div></td>
-            <td>{protocols.find(([value])=>value===(m.connection?.protocol||m.provider))?.[1]||m.provider}</td>
+            <td>{providerChoices.find(p=>p.id===providerId(m.connection||{protocol:m.provider}))?.name||m.provider}</td>
             <td><span className="registration-endpoint" title={m.connection?.endpoint||'No endpoint configured'}>{m.connection?.endpoint||'—'}</span></td>
             <td className="registration-tokens" title={m.capabilities[0]==='embedding'?'Input tokens':'Context tokens'}>{m.context_limit?.toLocaleString()||'—'}</td>
             <td className="registration-tokens" title={m.capabilities[0]==='embedding'?'Not applicable to embeddings':'Maximum output tokens'}>{m.capabilities[0]==='embedding'?'—':m.max_output_tokens?.toLocaleString()||'—'}</td>
@@ -98,13 +103,13 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
       {!models.length && <div className="empty"><Layers size={30} /><h3>Start with your models</h3><p>Register an Embedding, Chat, and Extraction model. Each dataset needs all three categories.</p></div>}
       <div className="registration-footer"><button className="btn" onClick={onMapping}>Open Model Mapping</button></div>
     </section> : <section className="panel registration-form-panel">
-      <form onSubmit={e => { e.preventDefault(); run(async () => { const saved = await api(`/model-registrations${editing ? "/" + editing.id : ""}`, editing ? "PUT" : "POST", payload()); onSaved(saved); close(); }); }}>
+      <form onSubmit={e => { e.preventDefault(); if (!test) return; run(async () => { const saved = await api(`/model-registrations${editing ? "/" + editing.id : ""}`, editing ? "PUT" : "POST", payload()); onSaved(saved); close(); }); }}>
         <div className="panel-head"><div><h2>{editing ? "Edit model" : "Register model"}</h2><p className="muted small">Connection details stay with this model. Credentials are encrypted on the server.</p></div><button className="btn icon" type="button" aria-label="Cancel model registration" disabled={busy} onClick={close}><X size={16} /></button></div>
         <fieldset disabled={busy}>
           <div className="registration-fields">
             <div className="field"><label htmlFor="registration-name">Name</label><input id="registration-name" autoFocus value={form.name} onChange={e => change("name", e.target.value)} required maxLength={120} placeholder="e.g. Document extraction" /></div>
             <div className="field"><label htmlFor="registration-category">Category</label><select id="registration-category" value={form.category} disabled={!!editing} onChange={e => change("category", e.target.value)}>{[["embedding", "Embedding"], ["chat", "Chat"], ["extraction", "Extraction"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-            <div className="field"><label htmlFor="registration-protocol">Connection protocol</label><select id="registration-protocol" value={form.connection.protocol} onChange={e => { const protocol = e.target.value; setForm(current => ({ ...current, credentials: {}, clear_credentials: false, allow_external: false, connection: { ...blank().connection, protocol, endpoint: protocol === "ollama" ? settings.ollama_endpoint || endpointHints.ollama : "", auth_mode: authOptions[protocol][0][0] } })); setTest(null); }}>{protocols.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+            <div className="field"><label htmlFor="registration-protocol">Provider</label><select id="registration-protocol" value={providerChoice} disabled={!providerChoices.length} onChange={e => { const choice = providerChoices.find(p => p.id === e.target.value); if (!choice) return; setProviderChoice(choice.id); const protocol = choice.protocol; setForm(current => ({ ...current, provider_model: "", credentials: {}, clear_credentials: false, allow_external: false, connection: { ...blank().connection, protocol, region: choice.region, endpoint: protocol === "ollama" ? settings.ollama_endpoint || choice.endpoint : choice.endpoint, auth_mode: choice.auth_modes[0] } })); setExtraText("{}"); setTest(null); }}>{providerChoices.length ? providerChoices.map(p => <option key={p.id} value={p.id}>{p.name}</option>) : <option value="ollama">Loading providers…</option>}</select>{providerError && <small role="alert">{providerError}</small>}</div>
             <div className="field"><label htmlFor="registration-model">Model / deployment ID</label><input id="registration-model" value={form.provider_model} onChange={e => change("provider_model", e.target.value)} required maxLength={200} placeholder={form.connection.protocol === "azure-openai" ? "Deployment name" : "Model ID"} /></div>
             <div className="field registration-full"><label htmlFor="registration-endpoint">Endpoint</label><input id="registration-endpoint" type="url" value={form.connection.endpoint} onChange={e => connectionChange("endpoint", e.target.value)} required maxLength={500} placeholder={endpointHints[form.connection.protocol]} /><small>Use the service base URL. Custom gateway hosts must be approved in the deployment.</small></div>
             {native && <div className="field"><label htmlFor="registration-region">Region / location</label><input id="registration-region" value={form.connection.region} onChange={e => connectionChange("region", e.target.value)} required placeholder="e.g. us-east-1" /></div>}
@@ -130,9 +135,9 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
           <div className="registration-options"><label className="check"><input type="checkbox" checked={form.enabled} onChange={e => change("enabled", e.target.checked)} />Enabled for dataset mapping</label></div>
           {remote && <label className="check registration-test-consent"><input type="checkbox" checked={form.allow_external} onChange={e => change("allow_external", e.target.checked)} />Allow a small synthetic test request to this external model. Provider usage may be billed.</label>}
         </fieldset>
-        {test && <div className="notice" role="status"><Check size={17} /><div>Connection passed in {(test.elapsed_ms / 1000).toFixed(2)}s.{test.dimensions && ` Embedding dimensions: ${test.dimensions}.`}{test.schema_validated && " Extraction schema validated."}</div></div>}
-        <div className="registration-actions"><button className="btn" type="button" disabled={busy || !!parameterError || !form.name.trim() || !form.provider_model.trim() || !form.connection.endpoint || remote && (!form.allow_external || settings.local_only)} onClick={e => { if (!e.currentTarget.form?.reportValidity()) return; setTest(null); setTesting(true); run(async () => { try { setTest(await api("/model-registrations/test", "POST", payload())); } finally { setTesting(false); } }); }}>{testing ? "Testing connection…" : "Test Connection"}</button><div className="row wrap"><button className="btn" type="button" disabled={busy} onClick={close}>Cancel</button><button className="btn primary" disabled={busy || !!parameterError}><Check size={15} />Save Model</button></div></div>
-        <p className="muted small">New chat and extraction runs use the latest saved connection. Embedding changes require applying the dataset mapping and reindexing its documents. Work already queued keeps its saved version.</p>
+        {test && <div className="notice" role="status"><Check size={17} /><div>Connection passed in {(test.elapsed_ms / 1000).toFixed(2)}s.{test.dimensions && ` Embedding dimensions: ${test.dimensions}.`}{test.schema_validated && " Extraction schema validated."}{test.agent_tool_call_validated && " Agent function calling validated."}</div></div>}
+        <div className="registration-actions"><button className="btn" type="button" disabled={busy || !!parameterError || !form.name.trim() || !form.provider_model.trim() || !form.connection.endpoint || remote && (!form.allow_external || settings.local_only)} onClick={e => { if (!e.currentTarget.form?.reportValidity()) return; setTest(null); setTesting(true); run(async () => { try { setTest(await api("/model-registrations/test", "POST", payload())); } finally { setTesting(false); } }); }}>{testing ? "Testing connection…" : "Test Connection"}</button><div className="row wrap"><button className="btn" type="button" disabled={busy} onClick={close}>Cancel</button><button className="btn primary" disabled={busy || !!parameterError || !test}><Check size={15} />Save Model</button></div></div>
+        <p className="muted small">Test the connection before saving. Chat tests verify Agent function calling. New chat and extraction runs use the latest saved connection. Embedding changes require applying the dataset mapping and reindexing its documents. Work already queued keeps its saved version.</p>
       </form>
     </section>}
   </div>;

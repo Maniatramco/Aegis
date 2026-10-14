@@ -20,7 +20,7 @@ SCHEMA_VERSION = 1
 PUBLICATION_VERSION = 3
 TEXT_BYTES = 2400
 GUIDE = {
-    'datasets': 'Create a dataset with a name and description. Aegis Agent onboarding collects embedding, chat and extraction model mappings, documents and a JSON Schema prompt. Confirm setup before creating it. Dataset access governs shared documents and results.',
+    'datasets': 'Create a dataset with a name, optional description and embedding, chat and extraction model mappings in New dataset. Mapped defaults are preselected. Dataset onboarding alone does not upload documents, save a prompt or run extraction. Aegis Agent can collect these separately when explicitly requested. Dataset access governs shared documents and results.',
     'documents': 'Upload PDF, DOCX, TXT or JSON. Originals stay in persistent file storage. Parsing or OCR creates text chunks. Nomic embeddings and the configured vector backend (Qdrant or Oracle AI Vector Search) enable semantic document search. Ready indexing does not mean field extraction has run.',
     'extraction': 'Confirm extraction with selected documents and a saved prompt. LangGraph retrieves and reranks evidence, extracts fields, validates JSON Schema and saves versioned JSON/Parquet results. Re-extraction preserves earlier results.',
     'review': 'Review lists saved runs and opens fields and the original side by side, filtered by dataset, prompt template and extraction name. Clicking Reviewed saves the checked values and locks that extraction against further changes. Re-extract creates a separate result. Extract Data exports saved results for one prompt at a time. Citations open a source panel with recorded evidence and page information; unavailable field locations are never guessed.',
@@ -204,13 +204,13 @@ def entity_stamp(record):
     return digest([PUBLICATION_VERSION,record.kind,record.name,record.status,record.version,record.ref,record.updated_at,record.size])
 
 
-def sync(actor, dataset_id='', max_points=None):
+def sync(actor, dataset_id='', max_points=None, application_only=False):
     """Durable digest ledger; retries repeat deterministic IDs, not new records."""
     from .workspace_reset import paused
     if paused():raise HTTPException(503,'Workspace archive operation is running.')
     snapshot = embedding_snapshot(actor, dataset_id)
     name = snapshot['knowledge_collection']; ref = _manifest_ref(snapshot)
-    records = eligible(actor, dataset_id)
+    records = [] if application_only else eligible(actor, dataset_id)
     with core.document_lock('unified-knowledge-'+name):
         if paused():raise HTTPException(503,'Workspace archive operation is running.')
         try: manifest = core.local_store.json(ref)
@@ -257,7 +257,7 @@ def sync(actor, dataset_id='', max_points=None):
                 entities[key] = {'stamp': stamp, 'ids': ids,'revision_stamp':entity_stamp(current_record) if current_record else None}; upserted += len(sources)
             # Purge deleted or newly inaccessible records only inside this actor's
             # scope. Another user's entries must never be removed by a query.
-            for key, entity in list(entities.items()):
+            for key, entity in ([] if application_only else list(entities.items())):
                 if key == 'application' or key in alive: continue
                 with core.Session() as session: current = session.get(core.Record, key)
                 if current is None:

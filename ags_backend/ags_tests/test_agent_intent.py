@@ -47,10 +47,15 @@ def test_ordinary_document_spelling_errors_still_get_exact_filenames(system,monk
     from ags_app import knowledge
     knowledge.sync(s.owner,d['id'])
     monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph');monkeypatch.setenv('AEGIS_CHAT_AGENT_VECTOR_ONLY','true')
+    from test_chat_agent import install_chat_models
+    install_chat_models(monkeypatch)
+    answer = agent_model.complete
     calls=[]
     def choose(messages,tools,**kw):
+        if not tools:
+            return answer(messages,tools,**kw)
         calls.append(tools);return {'calls':[{'name':'route_aegis','arguments':{'agent':'chat','query':'documents','request_evidence':request}}]}
-    monkeypatch.setattr(agent_model,'complete',choose);monkeypatch.setattr(providers,'embed',forbidden)
+    monkeypatch.setattr(agent_model,'complete',choose)
     p=plan(s,d,text=request)
     assert 'invoice.txt' in p['explanation'] and 'Extraction status:' not in p['explanation']
     assert len(calls)==1 and not p['calls']

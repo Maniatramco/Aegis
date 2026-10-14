@@ -15,18 +15,32 @@ def prepared(s):
     assert worker.run_once();knowledge.sync(s.owner,d['id'])
     return d,doc,t,ex
 
+def install_chat_models(monkeypatch):
+    from ags_app import reranker
+    monkeypatch.setenv('AEGIS_RERANKER','local')
+    monkeypatch.setattr(reranker,'rank',lambda query,items,limit:items[:limit])
+    def answer(messages,tools,**kw):
+        current=next(m['content'] for m in messages if m['role']=='user' and 'Published vector evidence:' in m['content'])
+        evidence=json.loads(current.split('Published vector evidence:\n',1)[1])
+        text=evidence.get('verified_catalog_facts') or 'Indexed evidence was read.'
+        if not __import__('re').search(r'\[\d+\]',text):text+=' ['+str(evidence['records'][0]['citation_index'])+']'
+        return {'text':text,'calls':[]}
+    monkeypatch.setattr(agent_model,'complete',answer)
+
+
 def activate(monkeypatch,frame):
     monkeypatch.setenv('AEGIS_AGENT_ENGINE','langgraph');monkeypatch.setenv('AEGIS_CHAT_AGENT_VECTOR_ONLY','true')
+    install_chat_models(monkeypatch)
     monkeypatch.setattr(agent_model,'classify',lambda messages:dict(intent='answer',operation='none',**frame))
 
 def forbid(*a,**kw):pytest.fail('Chat must use published vectors without canonical reads or index writes.')
 
-def test_exact_filename_count_uses_no_query_embeddings_or_answer_model(system,monkeypatch):
+def test_exact_filename_count_uses_hybrid_and_model_with_complete_catalog(system,monkeypatch):
     s=system;d,doc,t,ex=prepared(s)
     activate(monkeypatch,dict(source='metadata',initial_reads=['list_documents'],metadata_answer='document_count',answer_kind='count'))
-    for module,name in ((knowledge,'sync'),(knowledge,'hydrate'),(providers,'embed'),(agent_model,'complete'),(Tools,'snapshot'),(Tools,'list_documents')):monkeypatch.setattr(module,name,forbid)
+    for module,name in ((knowledge,'sync'),(knowledge,'hydrate'),(Tools,'snapshot'),(Tools,'list_documents')):monkeypatch.setattr(module,name,forbid)
     p=plan(s,d,text='How many documents are in this dataset?')
-    assert p['agent']=='chat' and p['model_calls']==1 and '1 document' in p['explanation']
+    assert p['agent']=='chat' and p['model_calls']==2 and '1 document' in p['explanation']
     thread=core.store.json(main.get_record(p['conversation_id'],s.owner,'conversation').ref)
     assert [x['tool'] for x in thread['messages'][-1]['tool_trace']]==['query_unified_knowledge']
 
@@ -40,10 +54,11 @@ def test_extracted_answer_only_reads_complete_vector_payloads_and_exposes_review
     def answer(messages,tools,**kw):
         seen.append(messages);assert tools==[]
         assert expected in messages[-1]['content']
-        return {'text':'The saved owner is '+expected+' [2].','calls':[]}
+        return {'text':'The saved owner is '+expected+' [1].','calls':[]}
     monkeypatch.setattr(agent_model,'complete',answer)
     p=plan(s,d,text='What owner was extracted?',document_ids=[doc['id']])
     assert p['agent']=='chat' and p['model_calls']==2 and len(seen)==1
+    assert expected in p['explanation']
     m=core.store.json(main.get_record(p['conversation_id'],s.owner,'conversation').ref)['messages'][-1]
     assert m['review_actions'][0]['extraction_id']==ex['id']
     assert any(c.get('extraction_id')==ex['id'] for c in m['citations'])
@@ -53,7 +68,7 @@ def test_catalog_has_no_top_k_truncation(system,monkeypatch):
     for i in range(30):routing.create('document',s.owner,f'file-{i}.txt',{},parent=d['id'])
     knowledge.sync(s.owner,d['id'])
     activate(monkeypatch,dict(source='metadata',initial_reads=['list_documents'],answer_kind='list'))
-    monkeypatch.setattr(providers,'embed',forbid);monkeypatch.setattr(agent_model,'complete',forbid)
+    monkeypatch.setattr(knowledge,'hydrate',forbid)
     p=plan(s,d,text='List every filename and count them.')
     assert '30 indexed documents' in p['explanation'] and all(f'file-{i}.txt' in p['explanation'] for i in range(30))
 
@@ -106,7 +121,7 @@ def test_archive_never_enters_routing_or_answer_and_chat_has_no_mutation_contrac
     monkeypatch.setattr(agent_model,'classify',classify)
     def answer(messages,tools,**kw):
         seen.extend(messages);assert tools==[]
-        return {'text':'Saved owner [2].','calls':[]}
+        return {'text':'Saved owner [1].','calls':[]}
     monkeypatch.setattr(agent_model,'complete',answer)
     p=plan(s,d,text='Show the saved owner.',conversation_id=old.id)
     assert 'OLD_CHAT_SENTINEL' not in json.dumps(seen) and p['model_calls']==2
@@ -125,7 +140,7 @@ def test_exact_predicate_count_does_not_use_similarity_as_a_filter(system,monkey
     s=system;d,doc,t,ex=prepared(s)
     value=parquet_results.load(core.store.json(routing.owned(ex['id'],s.owner,'extraction').ref))['result']['owner']
     activate(monkeypatch,dict(source='results',answer_kind='count',filters=[{'field':'owner','operator':'equals','value':value}]))
-    monkeypatch.setattr(providers,'embed',forbid);monkeypatch.setattr(agent_model,'complete',forbid)
+    monkeypatch.setattr(knowledge,'hydrate',forbid)
     p=plan(s,d,text='Count extracted owners with the exact specified value.')
     assert '1 indexed extracted records' in p['explanation']
 
@@ -138,10 +153,10 @@ def test_published_source_preview_does_not_hydrate_files_and_requires_access(sys
     assert response.json()['text']==record['text']
     s.owner='bob';assert s.api.get(url).status_code==404
 
-def test_small_selected_original_reads_indexed_chunks_without_embedding_switch(system,monkeypatch):
+def test_small_selected_original_also_uses_hybrid_and_reranking(system,monkeypatch):
     s=system;d,doc,t,ex=prepared(s)
     activate(monkeypatch,dict(source='documents'))
-    monkeypatch.setattr(providers,'embed',forbid);monkeypatch.setattr(providers,'search',forbid);monkeypatch.setattr(knowledge,'hydrate',forbid)
+    monkeypatch.setattr(providers,'search',forbid);monkeypatch.setattr(knowledge,'hydrate',forbid)
     def answer(messages,tools,**kw):
         assert tools==[] and 'Invoice total 42.' in messages[-1]['content']
         return {'text':'The original says invoice total 42 [1].','calls':[]}
@@ -152,17 +167,17 @@ def test_small_selected_original_reads_indexed_chunks_without_embedding_switch(s
 def test_global_model_catalog_does_not_claim_a_dataset_mapping(system,monkeypatch):
     s=system;d=dataset(s);knowledge.sync(s.owner,d['id'])
     activate(monkeypatch,dict(source='metadata',initial_reads=['get_model_configuration']))
-    monkeypatch.setattr(providers,'embed',forbid);monkeypatch.setattr(agent_model,'complete',forbid)
+    monkeypatch.setattr(knowledge,'hydrate',forbid)
     p=plan(s,d,text='List the registered models.',dataset_id='')
     assert 'indexed models' in p['explanation'] and '- Embedding:' not in p['explanation']
-    assert p['agent']=='chat' and p['model_calls']==1
+    assert p['agent']=='chat' and p['model_calls']==2
 
 def test_named_updated_extraction_does_not_mix_earlier_results_for_the_same_document(system,monkeypatch):
     s=system;d,doc,t,old=prepared(s)
     updated=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':t['id'],'display_name':'Updated invoice'})
     assert worker.run_once();knowledge.sync(s.owner,d['id'])
     activate(monkeypatch,dict(source='results',document_names=['Updated invoice'],fields=['owner']))
-    monkeypatch.setattr(agent_model,'complete',lambda *a,**kw:{'text':'The updated owner [2].','calls':[]})
+    monkeypatch.setattr(agent_model,'complete',lambda *a,**kw:{'text':'The updated owner [1].','calls':[]})
     p=plan(s,d,text='Show saved owner in Updated invoice.')
     message=core.store.json(main.get_record(p['conversation_id'],s.owner,'conversation').ref)['messages'][-1]
     assert {r['extraction_id'] for r in message['review_actions']}=={updated['id']}
@@ -175,7 +190,7 @@ def test_extraction_name_predicate_filters_vector_metadata_not_saved_field_value
     updated=post(s,'/api/extractions',{'dataset_id':d['id'],'document_ids':[doc['id']],'template_id':t['id'],'display_name':'Updated invoice'})
     assert worker.run_once();knowledge.sync(s.owner,d['id'])
     activate(monkeypatch,dict(source='results',fields=['owner_alias'],filters=[{'field':scope_field,'operator':'equals','value':'Updated invoice'}]))
-    monkeypatch.setattr(agent_model,'complete',lambda *a,**kw:{'text':'The updated owner [2].','calls':[]})
+    monkeypatch.setattr(agent_model,'complete',lambda *a,**kw:{'text':'The updated owner [1].','calls':[]})
     p=plan(s,d,text='Show saved owner in extraction named Updated invoice.')
     message=core.store.json(main.get_record(p['conversation_id'],s.owner,'conversation').ref)['messages'][-1]
     assert {r['extraction_id'] for r in message['review_actions']}=={updated['id']}
