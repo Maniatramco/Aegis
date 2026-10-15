@@ -76,8 +76,12 @@ compatibility and active-job checks. Frontend-only with N makes no Oracle querie
 Older boolean flags/DatabaseAction still work when DB_Object is absent; do not mix
 them. All N is an empty selection. The legacy verify/install procedures below
 remain available for earlier input files and the fresh empty-owner SQLcl method.
-It records operator regression/backup references, and does not run regression,
-inference or write-workflow tests. An AI using it must still complete the evidence
+It records operator regression evidence and an optional BackupReference, and does
+not run regression, inference or write-workflow tests. This code/object-only
+workflow does not import application data or alter existing object definitions.
+The user does not require a backup for this workflow: do not prompt for one or
+block publication when no backup reference is supplied. Never claim that a backup
+was created or verified. An AI using it must still complete the evidence
 and detailed target review required here; never supply approval tokens without
 the user's approval for that exact scope/plan. Direct operator use is documented
 in the root README; use the manual helper workflow below when interactive CLI
@@ -127,7 +131,7 @@ asking for publication approval. Present one concrete, readable plan containing:
 | Database | Verified owner, full service and wallet alias; verify-only or explicitly scoped fresh-table installation; schema comparison and data-preservation result |
 | Current application | Existing Deployments and images, public endpoint, routing/HTTPS status, and all required resource/configuration checks |
 | Preserved settings | ConfigMap/Secret fingerprints, runtime configuration, saved database/storage settings, volumes, replica/strategy settings, sidecars/init images and model mappings |
-| Operational readiness | Active-job status, existing backup/restore point, reranker/provider checks, local Ollama/relay availability and any checks not run |
+| Operational readiness | Active-job status, optional backup reference if supplied, reranker/provider checks, local Ollama/relay availability and any checks not run |
 | Planned actions | Exact order, frontend/API/worker image updates, any approved fresh-schema DDL, expected restart window, receipt location and recovery scope |
 
 Clearly distinguish verified facts, optional unavailable providers and blocked
@@ -244,9 +248,10 @@ reviewed plan. After approval, recheck those IDs and use `-SkipBuild` so the hel
 publishes those reviewed artifacts instead of rebuilding a different image.
 
 Check existing authenticated read access, registry login/pull access, node
-architecture, schema, persistent state and reranker assets. Let active jobs finish
-and confirm the existing backup/restore point. Do not cancel jobs or overwrite
-backups. The pilot uses one replica and `Recreate`, so image updates restart pods
+architecture, schema, persistent state and reranker assets. Let active jobs finish.
+Do not cancel jobs, create backups or make a backup reference a release prerequisite.
+Keep existing backups untouched; record a reference only if the user supplies one.
+The pilot uses one replica and `Recreate`, so image updates restart pods
 and can cause a brief service interruption. Do not change that strategy or promise
 zero downtime. Check model reachability using read-only metadata endpoints; require
 the laptop/relay only for operations actually mapped to laptop Ollama. Retain an

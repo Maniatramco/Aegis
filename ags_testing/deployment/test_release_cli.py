@@ -175,6 +175,22 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn('install', self.runner.events)
         self.assertEqual(json.loads(Path(result['receipt']).read_text()), self.runner.receipt)
         self.assertEqual(self.runner.before['resources'], self.runner.after['resources'])
+        self.assertEqual(result['backup_reference'], 'existing restore point')
+
+    def test_release_without_backup_reference_still_requires_publication_approval(self):
+        self.workflow.values.pop('BackupReference')
+        result = self.run_quietly()
+        self.assertEqual(result['state'], 'complete')
+        self.assertIsNone(result['backup_reference'])
+        self.assertEqual(self.responses, [])
+        self.assertLess(self.runner.events.index('approval'), self.runner.events.index('publish'))
+
+    def test_blank_backup_reference_does_not_prompt_or_claim_a_backup(self):
+        self.workflow.values['BackupReference'] = '   '
+        result = self.run_quietly()
+        self.assertEqual(result['state'], 'complete')
+        self.assertIsNone(result['backup_reference'])
+        self.assertEqual(self.responses, [])
 
     def select(self, frontend, backend, action):
         self.workflow.frontend = frontend
@@ -324,6 +340,24 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.run_quietly()['state'],'verified-only')
         self.assertEqual(database.writes,[])
 
+    def test_existing_schema_missing_index_release_needs_no_backup_reference(self):
+        self.select(False, False, 'release')
+        self.workflow.values.pop('BackupReference')
+        database = self.release_file_manager(populated=True)
+        table = next(item for item in database.tables if item['name'] == 'AEGIS_ITEMS')
+        index = next(item['name'] for item in table['indexes'] if item['name'].startswith('IX_'))
+        table['indexes'] = [item for item in table['indexes'] if item['name'] != index]
+        table['index_columns'] = [item for item in table['index_columns'] if item['index'] != index]
+        existing_data = copy.deepcopy(database.data)
+        result = self.run_quietly()
+        self.assertEqual(result['state'], 'complete')
+        self.assertIsNone(result['backup_reference'])
+        self.assertEqual(len(database.writes), 1)
+        self.assertTrue(database.writes[0].startswith('CREATE INDEX'))
+        self.assertEqual(database.data, existing_data)
+        self.assertEqual(self.responses, [])
+        self.assertFalse(self.runner.calls)
+
     def test_release_file_applies_objects_then_releases_selected_backend(self):
         self.select(False,True,'release')
         database = self.release_file_manager()
@@ -355,6 +389,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertFalse({'build', 'install', 'publish', 'approval'} & set(self.runner.events))
 
     def test_publication_denial_stops_before_any_mutation(self):
+        self.workflow.values.pop('BackupReference')
         self.responses = ['CONNECT', 'no']
         with self.assertRaises(cli.DeploymentStopped):
             self.run_quietly()

@@ -601,8 +601,7 @@ class Workflow:
                                             ['Install thirteen tables in the verified empty owner using the guarded installer',
                                              'Require the installer completed-schema success marker; no image build, push or Kubernetes commands']),
                            validation_reference=self.value('ValidationReference', 'Schema script validation/CI evidence for this source (operator reference)'),
-                           backup_reference=(self.value('BackupReference', 'Existing backup/restore point reference')
-                               if self.action == 'release' and self.db_plan['snapshot']['metadata']['present_tables'] else 'New verified empty owner; no existing database data'))
+                           backup_reference=self.values.get('BackupReference', '').strip() or None)
         self.present_plan()
         if source_fingerprint(self.source) != self.source_hash:
             raise DeploymentStopped('Approved source changed; approval is no longer valid')
@@ -653,7 +652,7 @@ class Workflow:
                 self.save('Database verification completed; no application release selected')
                 print(json.dumps(self.record, indent=2))
                 return self.record
-            self.backup = self.values.get('BackupReference') or ('New verified empty owner; no existing database data' if self.action == 'install' else self.value('BackupReference', 'Existing backup/restore point reference (not created by this command)'))
+            self.backup = self.values.get('BackupReference', '').strip() or None
             self.validation = self.values.get('ValidationReference') or self.value('ValidationReference', 'Regression/CI evidence for this source (operator reference; tests are not run here)')
             self.save('Building local release images; nothing is published')
             self.build()
