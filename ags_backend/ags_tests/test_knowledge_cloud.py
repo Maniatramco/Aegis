@@ -1,7 +1,7 @@
 """Cloud-only knowledge retrieval must use the selected dataset's embedding space."""
 import copy
 import pytest
-from ags_app import core, knowledge, dataset_models as routing
+from ags_app import core, knowledge, relational, dataset_models as routing
 from test_dataset_models import system, dataset
 
 
@@ -48,3 +48,36 @@ def test_managed_retrieval_is_not_silently_treated_as_client_embeddings(system, 
     with pytest.raises(knowledge.HTTPException) as error:
         knowledge.embedding_snapshot(s.owner, selected['id'])
     assert error.value.status_code == 409
+
+
+def test_background_publication_uses_each_dataset_mapping_and_isolates_failures(system, monkeypatch):
+    s = system
+    one, two = dataset(s, 'Unavailable local'), dataset(s, 'Available cloud')
+    with core.Session.begin() as db:
+        if not db.get(core.User, s.owner):
+            db.add(core.User(id=s.owner, username='test-owner', password_hash='unused'))
+        for item in (one, two):
+            db.add(relational.UserDataset(user_id=s.owner, dataset_id=item['id'], enabled=True))
+    calls = []
+    def sync(actor, dataset_id='', **kwargs):
+        assert actor == s.owner and dataset_id
+        calls.append(dataset_id)
+        if dataset_id == one['id']:
+            raise knowledge.providers.ProviderError('Local model unavailable')
+    monkeypatch.setattr(knowledge, 'sync', sync)
+    knowledge.reconcile()
+    assert set(calls) == {one['id'], two['id']}
+
+
+def test_unavailable_selected_embedding_never_borrows_another_dataset_provider(system, monkeypatch):
+    s = system
+    selected = dataset(s, 'Unavailable model')
+    dataset(s, 'Other cloud provider')
+    calls = []
+    def snapshot(record):
+        calls.append(record.id)
+        raise knowledge.HTTPException(409, 'Selected model unavailable')
+    monkeypatch.setattr(routing, 'embedding_snapshot', snapshot)
+    with pytest.raises(knowledge.HTTPException):
+        knowledge.embedding_snapshot(s.owner, selected['id'])
+    assert calls == [selected['id']]

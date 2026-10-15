@@ -181,8 +181,7 @@ def eligible(actor, dataset_id='', document_ids=None):
 
 
 def embedding_snapshot(actor, dataset_id=''):
-    candidates = routing.rows(actor, 'knowledge_base')
-    if dataset_id: candidates.sort(key=lambda d: d.id != dataset_id)
+    candidates = [routing.owned(dataset_id, actor, 'knowledge_base')] if dataset_id else routing.rows(actor, 'knowledge_base')
     for dataset in candidates:
         try: snapshot = routing.embedding_snapshot(dataset)
         except HTTPException: continue
@@ -328,7 +327,13 @@ def reconcile():
     with core.Session() as session: users = session.scalars(select(core.User)).all()
     for user in users:
         token = access.request_actor.set(user.id)
-        try: sync(user.id, max_points=256)
+        try:
+            # Publish each dataset through its own mapped embedding provider.
+            # A cloud mapping must not send another dataset's document text to
+            # that provider merely because it is first in the actor's catalog.
+            for dataset in routing.rows(user.id, 'knowledge_base'):
+                try: sync(user.id, dataset.id, max_points=256)
+                except Exception: pass  # A failed provider cannot block other datasets.
         except Exception: pass  # No provider bodies/secrets in background logs.
         finally: access.request_actor.reset(token)
 
