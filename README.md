@@ -16,6 +16,8 @@ The live inspection on 15 October 2026 at 22:26 IST confirmed OKE hosting the we
 
 Application source is under `ags_backend/` and `ags_frontend/`; Oracle scripts under `ags_database/`; OCI release tooling under `ags_deploy/`. Local launchers, runtime Compose profiles and alternative Kubernetes manifests are grouped under [ags_local_use](ags_local_use/README.md). Tests, fixtures, manual QA tools and test containers are centralized under [ags_testing](ags_testing/README.md).
 
+Retired files are retained for review under the root `delete/` folder with their original relative paths. This archive stays outside application build contexts and active test discovery; generated reports remain ignored by Git.
+
 Normal code updates use `ags_deploy/deploy-aegis-code.ps1`. For a fresh schema on another OCI Autonomous Database, follow the [database installation instructions](ags_database/README.md#deploy-the-schema-to-another-oci-database); the installer checks the explicit owner/service and requires an empty schema. Historical resource provisioning and pilot registry setup are consolidated in `ags_deploy/ags_oke/ags_legacy_provisioning.py`.
 
 The reusable [release skill](.agents/skills/aegis-release/SKILL.md) remains discoverable by AI tools. It requires a prepared destination and explicit deployment instructions. Preserve the [Unified Chat workflow](AGENTS.md).

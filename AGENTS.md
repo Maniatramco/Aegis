@@ -15,3 +15,7 @@ This applies to every question, including General chat, Aegis capabilities/help,
 Preserve dataset/access filters throughout retrieval and reranking. Exact counts and complete lists must use complete authorized catalog data as supplementary evidence; a ranked subset must never be presented as a complete count or list. Routing/access checks happen before retrieval, while answer validation happens after model generation. Report actual stages and failures; never fabricate successful retrieval or reranking.
 
 Implemented and verified for the production Unified Chat path on 14 October 2026. Keep the other processing agents (Onboarding, Upload, Extract and Re-extract) unchanged when maintaining this chat workflow. Chat-only citation formatting and validation must not alter their shared model contracts. Preserve failure guards when retrieval, reranking or evidence is unavailable; never claim successful stages that did not run.
+
+## Repository cleanup
+
+Move retired files into the repository-root `delete/` folder, preserving their original relative paths, instead of permanently deleting them. Keep this archive outside application builds and active test discovery. Private state and generated artifacts must remain ignored by Git when moved there.
