@@ -31,7 +31,7 @@ seconds. The query file intentionally does not select password hashes or login
 tokens from the `USER_TBL` / `SESSIONS_TBL` tables.
 
 For table responsibilities, columns, relationships, statuses and storage layout,
-see [the Aegis data model](../ags_database/ags_docs/DATA-MODEL.md). The current AGS_OWNER schema
+see [the Aegis data model](../../ags_database/ags_docs/DATA-MODEL.md). The current AGS_OWNER schema
 has eleven custom tables, including categorized model configuration and dataset
 mappings. Table scripts and migration details are under `ags_database/`.
 

@@ -1,5 +1,7 @@
 # Local Qwen OCR
 
+This guide covers the optional local Ollama configuration. The three active datasets inspected on 15 October 2026 use their Gemini extraction registration for OCR. See [current model placement](../ags_architecture/TECH-STACK.md); do not apply this local setup to the live deployment as part of reading the handover.
+
 Aegis uses `qwen2.5vl:3b` through the existing Ollama container for scanned PDF
 pages and embedded raster images in DOCX. This is separate from dataset chat,
 extraction and embedding model mappings. JSON prompts are validated as schemas

@@ -58,7 +58,7 @@ Do not apply deployment manifests while paused: the current renderer preserves t
 
 ## Start the next day
 
-Open Docker Desktop and wait until its engine is running. Copy this entire block into PowerShell. Keep the laptop online while using AI features.
+The inspected live datasets use Gemini; Docker Desktop and laptop Ollama are not required for those mappings. Run from the configured operator laptop with its existing kubeconfig. Copy the block below into PowerShell.
 
 ```powershell
 Set-Location -LiteralPath 'C:\Users\Laya\Documents\Codex\2026-10-09\new-chat\Aegis'
@@ -66,14 +66,6 @@ $ErrorActionPreference = 'Stop'
 $taskRoot = (Get-Location).Path
 $taskRuntime = Join-Path $taskRoot 'ags_runtime/ags_oke'
 $taskKube = Join-Path $taskRuntime 'kubeconfig.yaml'
-
-& docker start aegis-oracle-ollama-1
-if ($LASTEXITCODE -ne 0) { throw 'Start Docker Desktop first, then retry.' }
-
-$taskStopFlag = Join-Path $taskRuntime 'stop-model-relay'
-if (Test-Path -LiteralPath $taskStopFlag) {
-    Remove-Item -LiteralPath $taskStopFlag
-}
 
 $taskStatePath = Join-Path $taskRuntime 'provision-state.json'
 $taskState = Get-Content -LiteralPath $taskStatePath -Raw | ConvertFrom-Json
@@ -85,20 +77,6 @@ if ($LASTEXITCODE -ne 0) { throw 'API/worker start failed. Check kubectl output.
 & kubectl --kubeconfig $taskKube -n aegis-oci scale deployment/aegis-web --replicas=1
 if ($LASTEXITCODE -ne 0) { throw 'WebUI start failed. Check kubectl output.' }
 
-# Start the existing tunnel in the background, without a duplicate launcher.
-$taskRelayRecord = Join-Path $taskRuntime 'relay-process.json'
-$taskExistingRelay = $null
-if (Test-Path -LiteralPath $taskRelayRecord) {
-    $taskRelayId = (Get-Content -LiteralPath $taskRelayRecord -Raw | ConvertFrom-Json).pid
-    $taskExistingRelay = Get-CimInstance Win32_Process -Filter "ProcessId = $taskRelayId" |
-        Where-Object { $_.CommandLine -like '*start-oke-model-relay.ps1*' }
-}
-if (-not $taskExistingRelay) {
-    $taskScript = Join-Path $taskRoot 'local/ags_scripts/start-oke-model-relay.ps1'
-    $taskRelayProcess = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-File', ('"' + $taskScript + '"')) -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $taskRuntime 'manual-relay.out.log') -RedirectStandardError (Join-Path $taskRuntime 'manual-relay.err.log')
-    [System.IO.File]::WriteAllText($taskRelayRecord, (@{pid=$taskRelayProcess.Id; started=(Get-Date -Format o)} | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
-}
-
 & kubectl --kubeconfig $taskKube -n aegis-oci rollout status deployment/aegis-api-worker --timeout=300s
 if ($LASTEXITCODE -ne 0) { throw 'API is still starting or has failed. Check status and logs below.' }
 & kubectl --kubeconfig $taskKube -n aegis-oci rollout status deployment/aegis-web --timeout=180s
@@ -106,7 +84,7 @@ if ($LASTEXITCODE -ne 0) { throw 'WebUI is still starting or has failed. Check s
 & kubectl --kubeconfig $taskKube -n aegis-oci get deployments,pods
 ```
 
-Startup normally takes about two minutes. Initial tunnel connection timeouts during API startup can recover automatically. Success means `aegis-api-worker` is **3/3 Running**, `aegis-web` is **2/2 Running**, and both Deployments are **1/1 Ready**. Open the application URL and sign in.
+Allow time for both deployments to become ready. Success means `aegis-api-worker` is **3/3 Running**, `aegis-web` is **2/2 Running**, and both Deployments are **1/1 Ready**. Open the application URL and sign in.
 
 ## Check status or troubleshoot
 
@@ -115,10 +93,9 @@ Run from the same project folder:
 ```powershell
 kubectl --kubeconfig ags_runtime/ags_oke/kubeconfig.yaml -n aegis-oci get deployments,pods
 kubectl --kubeconfig ags_runtime/ags_oke/kubeconfig.yaml -n aegis-oci logs deployment/aegis-api-worker -c api --tail=30
-kubectl --kubeconfig ags_runtime/ags_oke/kubeconfig.yaml -n aegis-oci exec deployment/aegis-api-worker -c api -- python -c "import urllib.request,json; print('Laptop models:',len(json.load(urllib.request.urlopen('http://ollama:11434/api/tags',timeout=10))['models']))"
 ```
 
-The model check should show **Laptop models: 3**. If it fails, check Docker/Ollama and `ags_runtime/ags_oke/manual-relay.err.log` (or `chat-consent-relay.err.log` for the currently running launcher). A changed laptop public IP can prevent SSH access; do not broaden the allowlist to all IPs.
+The retained laptop Ollama option needs its container and [existing relay launcher](../../local/ags_scripts/start-oke-model-relay.ps1) only when a dataset is deliberately mapped to it. Restore that optional relay separately if needed. The three active datasets inspected on 15 October 2026 use Gemini and the laptop container is stopped; see [live resources](../ags_architecture/OCI-LIVE-RESOURCES.md).
 
 ## What stopping saves
 
@@ -128,4 +105,4 @@ Stopping a Standard Compute VM through the OCI Console/API is a separate operati
 
 Your SGD 400 promotion is trial credit, not a permanent monthly allowance. Its recorded end is **11 November 2026 at approximately 05:30 IST**. No account upgrade is included in these instructions.
 
-Prepared 14 October 2026. Commands were checked against the existing deployment names, tunnel script and runtime paths. Their PowerShell syntax was validated without executing a shutdown; services remain running.
+Prepared 14 October 2026; laptop prerequisites clarified against the 15 October live snapshot. Commands were checked against the existing deployment names, tunnel script and runtime paths. Their PowerShell syntax was validated without executing a shutdown; services remain running.

@@ -47,4 +47,4 @@ Final observed browser answer times: saved invoice 22 seconds, dataset discovery
 - Browser answers: [browser-answers.txt](../../docs/testing/results/unified-knowledge-2026-10-12/browser-answers.txt)
 - Screenshots: [Review revision 2](../../docs/testing/results/unified-knowledge-2026-10-12/review-v2.png), [saved result answer](../../docs/testing/results/unified-knowledge-2026-10-12/agent-reviewed-result.png), [exact catalog](../../docs/testing/results/unified-knowledge-2026-10-12/agent-catalog.png), [skills regression](../../docs/testing/results/unified-knowledge-2026-10-12/agent-skills.png).
 
-The fixture was intentionally left with its reviewed 1650 edit to demonstrate the distinction from original content; no user originals were edited or deleted. See [implementation and operational limits](../UNIFIED-KNOWLEDGE.md).
+The fixture was intentionally left with its reviewed 1650 edit to demonstrate the distinction from original content; no user originals were edited or deleted. See [implementation and operational limits](../ags_architecture/UNIFIED-KNOWLEDGE.md).

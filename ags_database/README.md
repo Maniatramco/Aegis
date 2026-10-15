@@ -36,7 +36,7 @@ on first startup and preserves access for existing non-admin dataset owners once
 Later startups never restore revoked assignments. Revocations retain the row
 with `ENABLED = FALSE` and update its audit columns. Every account with role `administrator`
 has access to every dataset without explicit assignments. See
-`ags_queries/user-dataset-access.sql` and [dataset access](../ags_docs/DATASET-ACCESS.md).
+`ags_queries/user-dataset-access.sql` and [dataset access](../ags_docs/ags_guides/DATASET-ACCESS.md).
 
 User roles are stored in `USER_TBL.ROLE`. Existing installations add the column
 automatically at startup; see [user roles migration](ags_docs/USER-ROLES.md).

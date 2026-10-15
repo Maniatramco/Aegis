@@ -150,7 +150,7 @@ The database is available, mTLS is required, and both database compute and stora
 
 OCI API calls were GET/list operations. Kubernetes reads inspected nodes, deployments, pods, services and persistent claims; read-only commands inside existing containers checked versions and configuration. The application catalog query explicitly used a read-only database transaction and bypassed cache writes.
 
-The resource record includes current resource names, allocated capacity, container requests/limits, active model mappings, observed versions and deployed image digests. Credentials, wallet files, private keys, user documents and result payloads are excluded.
+Current handover files are grouped in ags_docs/ags_architecture. Filenames below are relative to that folder. Deployment instructions are in the adjacent ags_deployment folder. Credentials, wallets, private keys and user payloads are excluded.
 
 | Repository reference | Purpose |
 | --- | --- |
@@ -158,7 +158,7 @@ The resource record includes current resource names, allocated capacity, contain
 | OCI-LIVE-SNAPSHOT.json | Sanitized inspection snapshot and image references |
 | ARCHITECTURE.md | Text companion to this Word architecture document |
 | TECH-STACK.md | Observed running technologies and model placement |
-| DEPLOYMENT.md | Instructions for a future authorized application release |
+| [Deployment guide](../ags_deployment/DEPLOYMENT.md) | Instructions for a future authorized application release |
 | Branch ags_sprint1 | Current manager handover and documentation updates |
 
 The deployed image references were recorded before and after the documentation work. The existing source freeze tag is preserved; this update changes documentation on ags_sprint1 and does not redeploy the application.

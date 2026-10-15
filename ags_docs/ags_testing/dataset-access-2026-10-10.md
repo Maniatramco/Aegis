@@ -77,5 +77,5 @@ verification. Source, DDL, usage guide and results were synchronized into both
 the active VS Code project and the finalized checkout. No Git commit or push
 was made by this change.
 
-See [dataset access instructions](../DATASET-ACCESS.md) and
+See [dataset access instructions](../ags_guides/DATASET-ACCESS.md) and
 [saved test evidence](../../docs/testing/results/dataset-access-2026-10-10/).

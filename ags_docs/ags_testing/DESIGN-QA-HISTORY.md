@@ -1,3 +1,7 @@
+# Historical design verification
+
+These dated notes retain earlier design decisions and laptop-only evidence. The current standards are [workflow design](../ags_design/WORKFLOW-DESIGN.md) and [Agent identity](../ags_design/AGENT-BRAND.md).
+
 # Extract list and separate Review page — 11 October 2026
 
 final result: passed

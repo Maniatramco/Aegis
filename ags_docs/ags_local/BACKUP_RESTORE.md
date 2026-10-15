@@ -1,4 +1,6 @@
-# Coordinated backup and restore
+# Local PostgreSQL backup and restore
+
+These scripts cover the separate local PostgreSQL installation. The live application uses Oracle Autonomous AI Database 26ai and OCI Object Storage. Its recovery boundary is described in [deployment and recovery](../ags_deployment/DEPLOYMENT.md); this local procedure is not a rehearsed Oracle cloud restore.
 
 Aegis has more than one state store. A PostgreSQL-only dump is incomplete: original documents and content artifacts live in the data volume. Conversely, a data-volume copy does not preserve users, ownership, job states and object references in PostgreSQL.
 

@@ -87,4 +87,4 @@ safety, high availability, disaster recovery, production telemetry/SLOs or broad
 language/model accuracy. Goal input/result paging and attempts remain bounded;
 oversized or missing results stop honestly. Saved fields remain unreviewed until
 the user verifies them against original sources. See
-[runtime contracts and operator commands](../AGENT-RELIABILITY.md).
+[runtime contracts and operator commands](../ags_operations/AGENT-RELIABILITY.md).

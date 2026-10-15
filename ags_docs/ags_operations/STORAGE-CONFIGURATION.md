@@ -62,7 +62,7 @@ This is an active-workspace reset, not a permanent purge. Already cloud-backed o
 
 The 2026-10-12 fresh start archived 31 datasets, 91 documents, 86 extraction results, 33 prompts and 152 conversations, along with their derived state and 39 Qdrant collections. The local recovery archive contains 2,083 files. The bucket prefix was empty before and immediately after the reset.
 
-The replacement workspace has only `Resume Extraction`, one fictional resume PDF, one JSON Schema prompt and one completed extraction. See [live verification](ags_testing/OCI-STORAGE-2026-10-12.md).
+The replacement workspace has only `Resume Extraction`, one fictional resume PDF, one JSON Schema prompt and one completed extraction. See [live verification](../ags_testing/OCI-STORAGE-2026-10-12.md).
 ## Active destination footer
 
 Every signed-in workspace page shows a compact footer with the active **Files**, **Database** and **Knowledge** destinations (Local or OCI). Desktop labels also show the bucket, database name and search backend; hovering shows the region. File storage describes the destination for new files; existing objects retain their saved locations.

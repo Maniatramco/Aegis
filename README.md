@@ -2,31 +2,31 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It combines a Next.js workspace, a FastAPI API, LangGraph agents and a durable Python worker. Users upload files, extract fields with saved JSON Schema prompts, compare results with originals, export saved data and ask questions with source citations.
 
-**Manager handover:** use branch **`ags_sprint1`** for the updated live OCI architecture, verified 15 October 2026 at 22:26 IST. The original code freeze remains tagged `aegis-freeze-2026-10-15`. Documentation updates do not change the deployed application. See [live resources](OCI-LIVE-RESOURCES.md) and [freeze evidence](RELEASE-FREEZE.md).
+**Manager handover:** use branch **`ags_sprint1`** for the updated live OCI architecture, verified 15 October 2026 at 22:26 IST. The original code freeze remains tagged `aegis-freeze-2026-10-15`. Documentation updates do not change the deployed application. See [live resources](ags_docs/ags_architecture/OCI-LIVE-RESOURCES.md) and [freeze evidence](ags_docs/ags_deployment/RELEASE-FREEZE.md).
 
 ## Start here
 
-The current manager handover files are at the repository root. Superseded planning, deployment journals and earlier agent architecture guides have been removed from this branch.
+Current documents are grouped under [`ags_docs/`](ags_docs/README.md). Start with the manager handover below; design standards, operations, local setup and historical verification each have a separate folder.
 
 | Read | What it explains |
 | --- | --- |
-| [Word architecture handover](Aegis_Architecture_and_Deployment_Handover.docx) | Current cloud/local placement, OCI resources, deployed versions and workflows |
-| [Architecture](ARCHITECTURE.md) | Browser to API, worker, data and model boundaries |
-| [Running technologies](TECH-STACK.md) | Versions observed in running containers and live model mappings |
-| [Live OCI resources](OCI-LIVE-RESOURCES.md) | Cluster, compute, Autonomous AI Database, storage, networking and resource limits |
-| [Deployment and onboarding](DEPLOYMENT.md) | Fresh installation prerequisites, local setup, OCI code release and rollback |
+| [Word architecture handover](ags_docs/ags_architecture/Aegis_Architecture_and_Deployment_Handover.docx) | Current cloud/local placement, OCI resources, deployed versions and workflows |
+| [Architecture](ags_docs/ags_architecture/ARCHITECTURE.md) | Browser to API, worker, data and model boundaries |
+| [Running technologies](ags_docs/ags_architecture/TECH-STACK.md) | Versions observed in running containers and live model mappings |
+| [Live OCI resources](ags_docs/ags_architecture/OCI-LIVE-RESOURCES.md) | Cluster, compute, Autonomous AI Database, storage, networking and resource limits |
+| [Deployment and onboarding](ags_docs/ags_deployment/DEPLOYMENT.md) | Fresh installation prerequisites, local setup, OCI code release and rollback |
 | [Maintainer skill](.agents/skills/aegis-release/SKILL.md) | Reusable repository-specific release and support instructions |
-| [Source manifest](RELEASE-MANIFEST.json) | Frozen application input hashes |
+| [Source manifest](ags_docs/ags_deployment/RELEASE-MANIFEST.json) | Frozen application input hashes |
 
 ## Architecture
 
-![Aegis deployment architecture](aegis-architecture.png)
+![Aegis deployment architecture](ags_docs/ags_architecture/aegis-architecture.png)
 
 The browser uses Next.js on OCI OKE through the OCI load balancer and Caddy HTTPS. FastAPI, LangGraph agents, the worker and CPU reranker also run on OKE. **Oracle Autonomous AI Database 26ai** (`agsora`) stores application records, the durable job queue and native vectors. OCI Object Storage (`mk-aegis`) stores documents and saved results.
 
 **Current model placement:** all three active datasets use Google Gemini (`gemini-embedding-2` and `gemini-3.5-flash-lite`) for embeddings, chat, extraction and OCR. The retained laptop Ollama container is stopped and its relay endpoint is unreachable. The CPU reranker's `local` mode means execution inside the OCI backend.
 
-The live cluster has one ARM64 A1 node with 2 OCPUs and 12 GB RAM. Both application deployments have one ready replica. See the [verified resource inventory](OCI-LIVE-RESOURCES.md) for allocations and the [snapshot](OCI-LIVE-SNAPSHOT.json) for deployed image references.
+The live cluster has one ARM64 A1 node with 2 OCPUs and 12 GB RAM. Both application deployments have one ready replica. See the [verified resource inventory](ags_docs/ags_architecture/OCI-LIVE-RESOURCES.md) for allocations and the [snapshot](ags_docs/ags_architecture/OCI-LIVE-SNAPSHOT.json) for deployed image references.
 
 ## End to end workflow
 
@@ -53,7 +53,7 @@ The live cluster has one ARM64 A1 node with 2 OCPUs and 12 GB RAM. Both applicat
 | LangGraph | 1.2.14 | OCI backend agent runtime |
 | Caddy | 2.10.2 | OCI HTTPS sidecar |
 
-These versions were read from the running deployment. See [running technologies and models](TECH-STACK.md).
+These versions were read from the running deployment. See [running technologies and models](ags_docs/ags_architecture/TECH-STACK.md).
 
 ## Run a separate local installation
 
@@ -67,15 +67,15 @@ git checkout aegis-freeze-2026-10-15
 docker compose --project-directory . --env-file .env -f local/compose.yaml up --build -d
 ```
 
-Open `http://localhost:3000` and create the first administrator using the private installation bootstrap token. Configure reachable models and a reranker before real processing. Generic default reranking is disabled; the `local` and `oci` runtime profiles expect local reranker files. For the Windows Oracle/Ollama option, follow [Oracle setup](ags_docs/ORACLE.md); its launcher defaults to port 3003. Keep any new installation isolated from deployed data.
+Open `http://localhost:3000` and create the first administrator using the private installation bootstrap token. Configure reachable models and a reranker before real processing. Generic default reranking is disabled; the `local` and `oci` runtime profiles expect local reranker files. For the Windows Oracle/Ollama option, follow [Oracle setup](ags_docs/ags_local/ORACLE.md); its launcher defaults to port 3003. Keep any new installation isolated from deployed data.
 
 ## Deployment and operations
 
-Read [DEPLOYMENT.md](DEPLOYMENT.md) before running commands. `ags_deploy/deploy-aegis-code.ps1` updates already prepared OKE application workloads. It is not an empty-cluster installer. The historical provisioning/renderer helpers are pilot-specific and require private state; do not reuse them unchanged for another tenancy.
+Read [DEPLOYMENT.md](ags_docs/ags_deployment/DEPLOYMENT.md) before running commands. `ags_deploy/deploy-aegis-code.ps1` updates already prepared OKE application workloads. It is not an empty-cluster installer. The historical provisioning/renderer helpers are pilot-specific and require private state; do not reuse them unchanged for another tenancy.
 
-Runtime limits and profiles live in [runtime.toml](ags_backend/ags_app/ags_config/runtime.toml), explained in [runtime configuration](ags_docs/RUNTIME-CONFIG.md). Model registrations remain authoritative for model-specific limits. Keep encryption keys, bootstrap tokens, wallets and credentials outside Git and images. The retained laptop model option requires its relay; the three currently active datasets use cloud Gemini mappings.
+Runtime limits and profiles live in [runtime.toml](ags_backend/ags_app/ags_config/runtime.toml), explained in [runtime configuration](ags_docs/ags_operations/RUNTIME-CONFIG.md). Model registrations remain authoritative for model-specific limits. Keep encryption keys, bootstrap tokens, wallets and credentials outside Git and images. The retained laptop model option requires its relay; the three currently active datasets use cloud Gemini mappings.
 
-Use the same Compose configuration arguments for stop/start operations and preserve volumes. [Backup and restore](ags_docs/BACKUP_RESTORE.md) explains coordinated recovery; its local scripts are not a cloud Oracle backup system. Image rollback does not roll back data or schema changes.
+Use the same Compose configuration arguments for stop/start operations and preserve volumes. [Backup and restore](ags_docs/ags_local/BACKUP_RESTORE.md) explains coordinated recovery; its local scripts are not a cloud Oracle backup system. Image rollback does not roll back data or schema changes.
 
 ## Repository map
 
@@ -88,8 +88,7 @@ Use the same Compose configuration arguments for stop/start operations and prese
 | `ags_database/` | Oracle schema, migrations and SQL administration |
 | `ags_deploy/` | Image release script, Kubernetes and recorded OKE pilot tooling |
 | `ags_scripts/` | Backup, restore, smoke and QA utilities |
-| Repository root | Current Word handover, architecture, deployment, live resources, versions and diagram |
-| `ags_docs/` | Current operating guides and dated verification records |
+| `ags_docs/` | Architecture and Word handover, design, deployment, operations, local guides and historical verification |
 | `local/` | Laptop Compose profiles, environment templates and launchers |
 
 The `python`, `webui` and `database` branches contain the full repository; their names do not filter folders. The final handover branch is `ags_sprint1`, created from the `python` source freeze. The original freeze tag is preserved, and `main` is unchanged.
@@ -104,4 +103,4 @@ pip install -r ags_backend/requirements-dev.txt
 (cd ags_frontend && npm ci && npm run test:unit && npm run typecheck && npm run build)
 ```
 
-Compose/browser and real-model tests require a separate authorized environment. Current CI auto-runs on `main` pushes and pull requests; a direct `python` push is not a fresh CI result. Consult [freeze evidence](RELEASE-FREEZE.md) for this snapshot's checks and [all documentation](ags_docs/README.md) for deeper references.
+Compose/browser and real-model tests require a separate authorized environment. Current CI auto-runs on `main` pushes and pull requests; a direct `ags_sprint1` push is not a fresh CI result. Consult [freeze evidence](ags_docs/ags_deployment/RELEASE-FREEZE.md) for this snapshot's checks and [all documentation](ags_docs/README.md) for deeper references.

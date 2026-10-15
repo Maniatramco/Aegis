@@ -1,4 +1,6 @@
-# Verification record
+# Historical verification record
+
+This is an archived record of earlier revisions, beginning 2 October 2026. Statements about missing OCR, untested OCI or old test counts describe those revisions. For the current live deployment use [OCI resources](../ags_architecture/OCI-LIVE-RESOURCES.md); for the source freeze checks use [release evidence](../ags_deployment/RELEASE-FREEZE.md).
 
 ## Current browser suite
 

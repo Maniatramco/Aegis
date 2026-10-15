@@ -4,15 +4,15 @@ Freeze reference: `aegis-freeze-2026-10-15`. Prepared 15 October 2026. This guid
 
 ## Choose the correct deployment path
 
-- **Separate local environment:** follow [the root README](README.md) or [Oracle setup](ags_docs/ORACLE.md). Use independent database, content and secrets.
+- **Separate local environment:** follow [the root README](../../README.md) or [Oracle setup](../ags_local/ORACLE.md). Use independent database, content and secrets.
 - **Empty OCI destination:** prepare infrastructure and the initial application installation described below. The historic `ags_oke` provisioner and renderer are tied to the recorded pilot; the renderer requires seeded state. They are not a general new-tenancy installer.
 - **Prepared OKE installation:** follow the code release and onboarding steps below. No region restriction is imposed by `deploy-aegis-code.ps1`.
 
 ## Runtime settings for this freeze
 
-The source of operational limits is `ags_backend/ags_app/ags_config/runtime.toml`; see [runtime configuration](ags_docs/RUNTIME-CONFIG.md). Current ceilings are 262144 context tokens, 1000000 evidence bytes and 1024 answer tokens, subject to each saved model's smaller limits. The OCI profile requires local reranker files at `/data/models/reranker`. Do not follow earlier ConfigMap-only budget examples as the current source of settings.
+The source of operational limits is `ags_backend/ags_app/ags_config/runtime.toml`; see [runtime configuration](../ags_operations/RUNTIME-CONFIG.md). Current ceilings are 262144 context tokens, 1000000 evidence bytes and 1024 answer tokens, subject to each saved model's smaller limits. The OCI profile requires local reranker files at `/data/models/reranker`. Do not follow earlier ConfigMap-only budget examples as the current source of settings.
 
-The release script builds with `INSTALL_CLOUD_MODELS=false` and `INSTALL_LOCAL_EMBEDDINGS=false`, plus Oracle and OCI enabled. This suits the recorded Ollama/OCI topology. If a destination uses native cloud adapters or local sentence-transformers, build and verify the required optional packages before deploying that image. Use `-SkipBuild` only for the exact verified destination tags.
+The release script builds with `INSTALL_CLOUD_MODELS=false` and `INSTALL_LOCAL_EMBEDDINGS=false`, plus Oracle and OCI enabled. The current Gemini path uses the existing HTTP-compatible transport; it does not require the optional native cloud SDK bundle. If a destination uses an adapter that needs an optional cloud SDK or local sentence-transformers, build and verify those packages before deploying that image. Use `-SkipBuild` only for the exact verified destination tags. Current mappings and running versions are recorded in [the live architecture](../ags_architecture/TECH-STACK.md).
 
 ## 1 Confirm the fresh installation handoff
 
@@ -184,11 +184,11 @@ Connection tests do not prove every write operation. The single onboarding check
 
 Open **Manage workspace → Model Registration**. Create the required registrations:
 
-| Role | Example for the existing laptop model architecture |
+| Role | Current live cloud example |
 | --- | --- |
-| Embedding | `nomic-embed-text` |
-| Chat | `qwen3:4b` |
-| Extraction | `qwen3:4b`, registered separately for the Extraction category |
+| Embedding | Gemini API, `gemini-embedding-2` |
+| Chat | Gemini API, `gemini-3.5-flash-lite` |
+| Extraction | Gemini API, `gemini-3.5-flash-lite`, registered separately for the Extraction category |
 
 For each registration:
 
@@ -198,7 +198,9 @@ For each registration:
 4. Set limits within the model's supported capacity.
 5. Run **Test Connection**, then **Save Model**, and confirm the model is enabled.
 
-For the same laptop relay architecture, the backend reaches Ollama through `http://ollama:11434` once the destination relay is configured. A server-side `127.0.0.1` address points to that server/container, not your laptop. Keep laptop Docker/Ollama and the destination's relay running. Use the destination's relay settings rather than restarting a relay configured for the original tenancy.
+For Gemini, supply the destination's own provider credentials and supported limits. The three active datasets in the inspected live installation use Gemini; their model calls do not need the laptop relay. Choose models actually available to the destination account and test them before mapping.
+
+For the optional laptop architecture, register the installed Ollama models instead, such as `nomic-embed-text` for embeddings and `qwen3:4b` separately for Chat and Extraction. The backend reaches Ollama through `http://ollama:11434` once the destination relay is configured. A server-side `127.0.0.1` address points to that server/container. Keep laptop Docker/Ollama and that destination's relay running when those mappings are used.
 
 Configure OCR separately if your documents require it. Use the model that is installed and supported by your selected OCR connection.
 

@@ -6,19 +6,19 @@ Qdrant, and Ollama. It uses the official Full image pinned to
 from the existing PostgreSQL Compose file and the native SQLite workspace.
 
 The application owner defaults to `AGS_OWNER` with twelve custom tables. Existing
-AEGIS data requires [the one-time migration](../ags_database/ags_migrations/01_aegis_to_ags_owner.md).
+AEGIS data requires [the one-time migration](../../ags_database/ags_migrations/01_aegis_to_ags_owner.md).
 For tables, relationships, audit fields and model category mappings, see
-[the data model](../ags_database/ags_docs/DATA-MODEL.md). To query the local
+[the data model](../../ags_database/ags_docs/DATA-MODEL.md). To query the local
 database from VS Code, see [the connection guide](ORACLE-VSCODE.md) and
-[example SQL](../ags_database/ags_queries/oracle-queries.sql).
+[example SQL](../../ags_database/ags_queries/oracle-queries.sql).
 
 ## Current verification status
 
 The latest Assistant resume and hardware checks are recorded in
-[the 2026-10-10 test report](ags_testing/assistant-resume-2026-10-10.md), including
+[the 2026-10-10 test report](../ags_testing/assistant-resume-2026-10-10.md), including
 actual timings, prior timeouts and memory limitations. Keep sufficient available
 RAM for CPU inference and host applications; GPU support does not remove the
-container memory requirement. For OKE, see [Kubernetes preparation](../DEPLOYMENT.md).
+container memory requirement. For OKE, see [Kubernetes preparation](../ags_deployment/DEPLOYMENT.md).
 
 Scanned PDFs and visible DOCX images use local Qwen2.5-VL OCR before embedding.
 See [OCR configuration, accuracy and failure handling](OCR.md). Originals,
@@ -147,7 +147,7 @@ and [Ollama Docker guide](https://docs.ollama.com/docker).
 
 Run `./local/ags_scripts/test-model-hardware.ps1` for selection/fallback regression checks.
 Kubernetes uses the same containers with deployment-specific environment and
-storage configuration; see [Oracle Kubernetes preparation](../DEPLOYMENT.md).
+storage configuration; see [Oracle Kubernetes preparation](../ags_deployment/DEPLOYMENT.md).
 
 Use no authentication for Ollama. The server explicitly approves only the
 `ollama` container hostname in addition to the existing loopback endpoints.

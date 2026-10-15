@@ -74,4 +74,4 @@ Worker reconciliation and publication skip archived read-only question plans. Qu
 - [Named-result follow-up proof](../../docs/testing/results/reextract-agent-2026-10-13/followup-proof.json)
 - [Corrected browser answer](../../docs/testing/results/reextract-agent-2026-10-13/followup.png)
 
-See [Re-extract Agent design](../REEXTRACT-AGENT.md).
+See [Re-extract Agent design](../ags_guides/REEXTRACT-AGENT.md).

@@ -2,12 +2,12 @@
 
 Approved by the user on 11 October 2026; updated at their request to blue/white with agent animation. This is the fixed visual standard for all Aegis workflow steppers.
 
-Layout reference: [approved design](ags_design/workflow-stepper-reference.png).
+Layout reference: [approved design](workflow-stepper-reference.png).
 Implementation: `ags_frontend/app/workflow-stepper.tsx` and `ags_frontend/app/horizontal-workflow-stepper.css`.
 
 Use `WorkflowStepper` for prompt saving, assistant tool execution, document upload/indexing, extraction, re-extraction, review and background job progress. Do not introduce separate workflow marker or connector implementations.
 
-- Compact horizontal connected markers on a pale blue background (#f6f9fe), following the user's [latest data journey reference](ags_design/aegis-data-journey-reference.html).
+- Compact horizontal connected markers on a pale blue background (#f6f9fe), following the user's [latest data journey reference](https://github.com/Maniatramco/Aegis/blob/aegis-freeze-2026-10-15/ags_docs/ags_design/aegis-data-journey-reference.html).
 - Completed: blue (#2563eb) marker and white check. Connections between completed stages are solid blue (#2a62b4). A brief check appearance animation marks completion.
 - Active: pale blue marker with a library icon and dark navy (#0b316f / #123c8c) rotating ring. Only the incoming connection from a completed stage has flowing particles. Future connectors remain solid and non-animated. Knowledge → AI Chat cannot animate until Knowledge completes and AI Chat is actually active. Stop animation on completion/failure; honor prefers-reduced-motion.
 - Pending: white marker, grey outline/icon or dot, and grey connector. Failures use the accessible red attention state.

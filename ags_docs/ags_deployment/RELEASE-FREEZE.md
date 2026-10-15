@@ -6,7 +6,7 @@ Prepared for Swamy. Freeze tag: `aegis-freeze-2026-10-15`. Source branch: `pytho
 
 This is a source and documentation release. The running installation is preserved. No application deployment, registry push, restart, scaling, configuration apply, infrastructure provisioning, account operation or live document processing is performed for this handover.
 
-The immutable tag identifies this source snapshot. It does not assert that the existing deployed container image is a byte-for-byte build of this commit. [The current OCI resource inventory](OCI-LIVE-RESOURCES.md) contains verified image and runtime observations. A future deployment needs a separately authorized release and its own image digests and receipt.
+The immutable tag identifies this source snapshot. It does not assert that the existing deployed container image is a byte-for-byte build of this commit. [The current OCI resource inventory](../ags_architecture/OCI-LIVE-RESOURCES.md) contains verified image and runtime observations. A future deployment needs a separately authorized release and its own image digests and receipt.
 
 ## Contents
 
@@ -14,7 +14,7 @@ The immutable tag identifies this source snapshot. It does not assert that the e
 - Existing UI changes: shared accessible icon actions, workflow progress, workspace navigation, onboarding, prompt tables, connection status, Review and related assets.
 - OCI pilot helpers and operating guides, plus a destination-parameterized script for updating already prepared application workloads.
 - Manager README, architecture PNG and editable SVG, end to end architecture guide, exact declared technology versions, deployment/onboarding guide, reusable maintainer skill and 11-page Word handover.
-- `RELEASE-MANIFEST.json` fingerprints the source inputs using the algorithm recorded in that file. The Git tag identifies the complete documentation and binary handover snapshot.
+- `ags_docs/ags_deployment/RELEASE-MANIFEST.json` fingerprints the source inputs using the algorithm recorded in that file. The Git tag identifies the complete documentation and binary handover snapshot.
 
 ## Validation
 
@@ -54,14 +54,23 @@ cd Aegis
 git checkout aegis-freeze-2026-10-15
 ```
 
-Follow [deployment and onboarding](DEPLOYMENT.md) for a separate environment or a future application release. Read [the maintainer skill](.agents/skills/aegis-release/SKILL.md) before changing the application contracts.
+Follow [deployment and onboarding](DEPLOYMENT.md) for a separate environment or a future application release. Read [the maintainer skill](../../.agents/skills/aegis-release/SKILL.md) before changing the application contracts.
 
 
 ## Live architecture documentation update
 
-On 15 October 2026 at 22:26 IST, the architecture, technology inventory, diagram and Word handover were revised on `ags_sprint1` using live read-only OCI and application inspection. The updated handover focuses on OCI resources and current Gemini mappings, with stopped laptop models identified separately. The original freeze tag and application source hashes remain unchanged. See [live resource evidence](OCI-LIVE-RESOURCES.md).
+On 15 October 2026 at 22:26 IST, the architecture, technology inventory, diagram and Word handover were revised on `ags_sprint1` using live read-only OCI and application inspection. The updated handover focuses on OCI resources and current Gemini mappings, with stopped laptop models identified separately. The original freeze tag and application source hashes remain unchanged. See [live resource evidence](../ags_architecture/OCI-LIVE-RESOURCES.md).
 
 
-## Root handover cleanup
+## Earlier cleanup
 
-The current Word document, architecture, deployment guide, running technology inventory, OCI resource record, source manifest and diagram now live at the repository root. Eight superseded planning, deployment-journal and earlier agent-architecture files were removed from the active branch. Current operational runbooks, test fixtures and dated verification evidence are retained. Historical report links to retired guides point to the preserved freeze tag. Application source and the deployed installation are unchanged.
+Eight superseded planning, deployment-journal and earlier agent-architecture files were removed from the active branch. Current operational runbooks, test fixtures and dated verification evidence are retained. Historical report links to retired guides point to the preserved freeze tag. Application source and the deployed installation are unchanged.
+
+
+## Documentation organization
+
+The current architecture, Word handover, technologies, live OCI inventory and diagram are grouped in `ags_docs/ags_architecture/`. Deployment and freeze evidence are in `ags_docs/ags_deployment/`; design standards and source assets are in `ags_docs/ags_design/`. Operations, optional local setup and user guides each have their own folders. The [documentation index](../README.md) is the single index for these groups and historical verification records.
+
+The duplicate data-model pointer, obsolete document-workflow guide and redundant test-folder README were removed. The already absent standalone HTML design demo is retired; its reference is linked to the immutable freeze tag. Dated verification and design QA are explicitly historical. Module, setup and test-tool READMEs remain where they explain distinct code responsibilities or commands.
+
+The source manifest remains the original freeze fingerprint. Its hashes verify the immutable tag. Three current-tree inputs have documentation path updates: frontend AGENTS.md, the database README and the database user-roles guide. Application code, tests, infrastructure definitions and runtime configuration are unchanged by this cleanup. The Word handover path references were refreshed and its rendered pages reviewed. No deployment commands were run.

@@ -32,18 +32,18 @@ Use **Stop**, rather than **Terminate**, **Delete**, a node-pool resize to zero,
 
 ## Start the next day
 
-1. Start your laptop and open Docker Desktop. Start the existing **aegis-oracle-ollama-1** container from Docker Desktop's Containers list if it is stopped.
+1. Sign in to the OCI Console. The active Gemini model mappings do not require Docker Desktop or laptop Ollama.
 2. In the OCI portal, open the same Compute instance.
 3. Choose **Actions → Start** and wait for **Running**. [Oracle instructions for starting an instance](https://docs.oracle.com/en-us/iaas/Content/Compute/Tasks/restartinginstance-start-instance.htm).
 4. Allow several more minutes for Kubernetes and Aegis to recover. Running describes the VM; it does not by itself confirm the application is ready.
-5. Restore the laptop model tunnel as described below if its launcher is no longer running.
-6. Open https://aegis.92.4.67.183.sslip.io/ and sign in. Keep the laptop, Docker and tunnel online while using AI features.
+5. Wait for both application deployments to become ready. Restore the optional laptop model tunnel only if you intentionally use an Ollama mapping.
+6. Open https://aegis.92.4.67.183.sslip.io/ and sign in. The cloud Gemini path runs without the laptop model tunnel.
 
 If you previously used the PowerShell instructions to set application replicas to zero, starting the VM alone will leave those replicas at zero. Run the **Start the next day** block in [the PowerShell guide](AEGIS_DAILY_STOP_START.md) once to restore them. For subsequent portal-only daily stops, use this guide consistently; do not combine both stop procedures.
 
-## Restore the laptop model connection
+## Optional laptop model connection
 
-The OCI portal starts the cloud VM; it cannot start a tunnel process on your laptop. If the existing tunnel launcher remained running, it retries and reconnects automatically after the node becomes ready.
+This section applies only when intentionally using an Ollama registration. Start Docker Desktop and the existing Ollama container first. The OCI portal starts the cloud VM; it cannot start a tunnel process on your laptop. If the existing tunnel launcher remained running, it retries and reconnects automatically after the node becomes ready.
 
 After a laptop restart, open this folder in Windows File Explorer:
 
@@ -53,7 +53,7 @@ C:\Users\Laya\Documents\Codex\2026-10-09\new-chat\Aegis\local\ags_scripts
 
 Right-click **start-oke-model-relay.ps1 → Run with PowerShell**. On Windows 11, the option may be under **Show more options**. Keep that PowerShell window open while using Aegis. Start only one tunnel launcher. It uses the existing SSH key and reconnects automatically; initial timeouts while the VM is starting can recover.
 
-If you used the earlier PowerShell stop procedure, its `stop-model-relay` flag blocks this launcher. Use the existing PowerShell guide's start block to clear the pause and resume the connection correctly.
+If you used the PowerShell stop procedure, its `stop-model-relay` flag blocks this launcher. After confirming the application is running and that you want laptop inference, remove `ags_runtime/ags_oke/stop-model-relay` from the repository's private runtime folder before starting the launcher.
 
 ## Credit usage while stopped
 
@@ -61,4 +61,4 @@ Stopping this Standard Compute VM through the portal pauses its Compute billing.
 
 Your existing documents, extraction results and vectors are not deleted by Stop or Start. No upgrade or new resource is required by these steps.
 
-Prepared 14 October 2026 from the recorded Aegis resource IDs and Oracle's Console instructions. The VM was not stopped as a test; the application remains running for you.
+Laptop prerequisites clarified against the [15 October live snapshot](../ags_architecture/OCI-LIVE-RESOURCES.md). Prepared 14 October 2026 from the recorded Aegis resource IDs and Oracle's Console instructions. The VM was not stopped as a test; the application remains running for you.

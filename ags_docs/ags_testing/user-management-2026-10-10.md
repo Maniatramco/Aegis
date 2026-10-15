@@ -25,4 +25,4 @@ Updated and restarted the existing API, worker and web containers. Oracle, Qdran
 
 The same application containers remain suitable for the prepared Kubernetes deployment configuration. No OCI cluster deployment or cluster verification was performed. Password change/reset is verified for the local Oracle installation and shared HTTPS route, not every future deployment environment.
 
-No existing user passwords were changed, and no commit or push was made by this task. See `ags_docs/USER-MANAGEMENT.md` for usage and recovery limits.
+No existing user passwords were changed, and no commit or push was made by this task. See `ags_docs/ags_guides/USER-MANAGEMENT.md` for usage and recovery limits.
