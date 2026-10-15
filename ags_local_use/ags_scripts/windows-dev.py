@@ -1,4 +1,4 @@
-"""Local Windows adapter for Aegis ags_local_use/ags_scripts/local-smoke.sh. No external model calls."""
+"""Local Windows adapter for Aegis ags_testing/scripts/local-smoke.sh. No external model calls."""
 import argparse, base64, json, os, secrets, shutil, socket, subprocess, time
 from pathlib import Path
 

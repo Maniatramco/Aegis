@@ -5,4 +5,4 @@ __pycache__
 **/.pytest_cache
 *.db
 data
-ags_tests
+ags_testing

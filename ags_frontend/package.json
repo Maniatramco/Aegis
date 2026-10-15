@@ -6,10 +6,10 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start -H 0.0.0.0",
-    "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test current-workspace.spec.ts recovery.spec.ts review-flow.spec.ts",
-    "test:unit": "node --test ags_tests/*.test.cjs",
-    "test:screenshots": "playwright test current-workspace.spec.ts -g current.screens.fit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p ../ags_testing/frontend/tsconfig.json",
+    "test:e2e": "node ../ags_testing/frontend/run.cjs e2e",
+    "test:unit": "node ../ags_testing/frontend/run.cjs unit",
+    "test:screenshots": "node ../ags_testing/frontend/run.cjs screenshots"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

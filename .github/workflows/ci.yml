@@ -14,10 +14,11 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: ags_backend/requirements*.txt
-      - run: pip install -r ags_backend/requirements-dev.txt
-      - run: pytest -q
-        working-directory: ags_backend
+          cache-dependency-path: |
+            ags_backend/requirements*.txt
+            ags_testing/backend/requirements.txt
+      - run: pip install -r ags_testing/backend/requirements.txt
+      - run: python -B ags_testing/run_backend_tests.py
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -46,7 +47,7 @@ jobs:
     timeout-minutes: 25
     env:
       AEGIS_SMOKE_PASSWORD: Aegis-CI-only-disposable-password
-      COMPOSE_FILE: ags_local_use/compose.yaml:ags_local_use/compose.test.yaml
+      COMPOSE_FILE: ags_local_use/compose.yaml:ags_testing/compose.test.yaml
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,7 +66,7 @@ jobs:
       - run: docker compose --project-directory . up --build -d --wait --wait-timeout 180
       - name: Exercise durable document workflows
         id: smoke
-        run: python ags_local_use/ags_scripts/smoke.py
+        run: python ags_testing/scripts/smoke.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

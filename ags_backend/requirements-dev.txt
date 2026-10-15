@@ -1,4 +1,0 @@
-# Offline backend tests; heavyweight local embeddings are opt-in.
--r requirements.txt
--r requirements-models.txt
-pytest==9.1.1

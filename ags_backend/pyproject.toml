@@ -5,9 +5,6 @@ requires-python = ">=3.11"
 dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
-[tool.pytest.ini_options]
-testpaths = ["ags_tests"]
-pythonpath = ["."]
 
 [tool.setuptools.package-data]
 ags_app = ["ags_config/*.toml"]

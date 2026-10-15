@@ -123,7 +123,7 @@ services:
     profiles: [test]
     build:
       context: .
-      dockerfile: ags_local_use/ags_docker/ags_oracle/Dockerfile.tests
+      dockerfile: ags_testing/docker/Dockerfile.oracle-tests
     environment:
       DATABASE_PROVIDER: oracle
       ORACLE_HOST: oracle
@@ -135,7 +135,7 @@ services:
     depends_on:
       oracle:
         condition: service_healthy
-    command: python ags_local_use/ags_scripts/oracle_check.py
+    command: python ags_testing/scripts/oracle_check.py
     networks: [private]
 
 volumes:

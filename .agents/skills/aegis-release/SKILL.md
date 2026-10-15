@@ -9,7 +9,7 @@ Start at the repository root and read `AGENTS.md`; for UI work also read `ags_fr
 
 For source freezes and application releases, read [the README](../../../README.md), [architecture handover](../../../ags_docs/Aegis_Architecture_and_Deployment_Handover.docx) ([PDF](../../../ags_docs/Aegis_Architecture_and_Deployment_Handover.pdf)) and the dedicated [OCI Kubernetes deployment guide](../../../ags_docs/Aegis_OCI_Kubernetes_Deployment_Guide.docx). For database-only work, use the [Oracle database deployment PDF](../../../ags_docs/Aegis_OCI_Database_Deployment_Guide.pdf) and [database README](../../../ags_database/README.md); keep that work scoped to the database. Maintain the existing documents and keep the handover PDF synchronized with its Word source. For Word text extraction, use a document reader or Python python-docx. Do not create further document sets or external diagram assets.
 
-Local launchers, Compose profiles, test container support, alternative Kubernetes manifests and manual QA tools live under [ags_local_use](../../../ags_local_use/README.md). Backend and frontend component tests stay beside their source. OCI release and authentication tools remain under `ags_deploy/`.
+Local launchers, runtime Compose profiles and alternative Kubernetes manifests live under [ags_local_use](../../../ags_local_use/README.md). Backend/frontend tests, fixtures, manual QA tools, test-only scripts and containers are centralized under [ags_testing](../../../ags_testing/README.md). Use its isolated backend runner and the frontend npm test commands; keep application startup checks with runtime code. OCI release and authentication tools remain under `ags_deploy/`.
 
 ## Preserve the application contracts
 

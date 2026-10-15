@@ -1,0 +1,13 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY ags_backend/requirements.txt ags_backend/requirements-models.txt ags_backend/requirements-oracle.txt ./ags_backend/
+COPY ags_testing/backend/requirements.txt ./ags_testing/backend/
+RUN pip install --no-cache-dir -r ags_testing/backend/requirements.txt -r ags_backend/requirements-oracle.txt
+COPY ags_backend/ags_app ./ags_backend/ags_app
+COPY ags_testing/backend ./ags_testing/backend
+COPY ags_testing/pytest.ini ./ags_testing/
+COPY ags_testing/scripts/oracle_check.py ags_testing/scripts/oracle_model_check.py ./ags_testing/scripts/
+COPY ags_local_use/ags_scripts/setup_oracle.py ags_local_use/ags_scripts/reset_admin_password.py ./ags_local_use/ags_scripts/
+COPY ags_local_use/.env.oracle.example ./ags_local_use/
+ENV PYTHONPATH=/app/ags_backend PYTHONUNBUFFERED=1
+CMD ["python", "ags_testing/scripts/oracle_check.py"]

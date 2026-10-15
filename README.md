@@ -12,41 +12,23 @@ For Oracle Autonomous AI Database creation, wallet and user setup, schema deploy
 
 The live inspection on 15 October 2026 at 22:26 IST confirmed OKE hosting the web app, API, worker and CPU reranker; Oracle Autonomous AI Database 26ai storing records, the durable queue and native vectors; and OCI Object Storage holding documents and saved results. The three active datasets use Google Gemini. Laptop Ollama is a retained, stopped alternative.
 
-Application source is under `ags_backend/` and `ags_frontend/`; Oracle scripts under `ags_database/`; OCI release tooling under `ags_deploy/`. Local launchers, Compose profiles, test containers, alternative Kubernetes manifests and manual QA tools are grouped under [ags_local_use](ags_local_use/README.md). Component tests remain beside their application source.
+Application source is under `ags_backend/` and `ags_frontend/`; Oracle scripts under `ags_database/`; OCI release tooling under `ags_deploy/`. Local launchers, runtime Compose profiles and alternative Kubernetes manifests are grouped under [ags_local_use](ags_local_use/README.md). Tests, fixtures, manual QA tools and test containers are centralized under [ags_testing](ags_testing/README.md).
 
 Normal code updates use `ags_deploy/deploy-aegis-code.ps1`. For a fresh schema on another OCI Autonomous Database, follow the [database installation instructions](ags_database/README.md#deploy-the-schema-to-another-oci-database); the installer checks the explicit owner/service and requires an empty schema. Historical resource provisioning and pilot registry setup are consolidated in `ags_deploy/ags_oke/ags_legacy_provisioning.py`.
 
 The reusable [release skill](.agents/skills/aegis-release/SKILL.md) remains discoverable by AI tools. It requires a prepared destination and explicit deployment instructions. Preserve the [Unified Chat workflow](AGENTS.md).
 
-Earlier guides and verification reports remain in Git history at documentation commit `a33d5fb`. `ags_docs/` contains the handover in Word/PDF, the dedicated application deployment guide and one database deployment PDF. The architecture diagram stays embedded in the handover. Reusable QA inputs live under `ags_local_use/ags_qa/ags_fixtures/`. These repository changes do not deploy or change the running application.
+Earlier guides and verification reports remain in Git history at documentation commit `a33d5fb`. `ags_docs/` contains the handover in Word/PDF, the dedicated application deployment guide and one database deployment PDF. The architecture diagram stays embedded in the handover. Reusable QA inputs live under `ags_testing/qa/ags_fixtures/`. These repository changes do not deploy or change the running application.
 
 ## Backend dependencies and manual tests
 
-Use Python 3.12. `ags_backend/requirements.txt` contains the pinned shared runtime, including OCI and CPU reranking. Install `requirements-oracle.txt` for Oracle connectivity, `requirements-models.txt` for optional native cloud providers, or `requirements-local.txt` for CPU local embeddings. Docker keeps the existing `INSTALL_LOCAL_EMBEDDINGS`, `INSTALL_CLOUD_MODELS` and `INSTALL_ORACLE` choices; `INSTALL_OCI` is accepted for compatibility because OCI is already included. Development dependencies are collected in `requirements-dev.txt`. The consolidation preserves the previous final package versions.
+Use Python 3.12. `ags_backend/requirements.txt` contains the pinned shared runtime, including OCI and CPU reranking. Optional Oracle, native cloud-provider and local-embedding dependencies remain in their named runtime requirements files. The existing Docker build choices and pinned package versions are preserved. Test dependencies live in `ags_testing/backend/requirements.txt`.
 
-To run `ags_backend/ags_tests` manually, open PowerShell at the repository root. If `.venv` does not exist, create it once with `py -3.12 -m venv .venv`. Install the test dependencies:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r ags_backend\requirements-dev.txt
-```
-
-Then select temporary local state and mock providers in this PowerShell session:
+Run backend tests from the repository root in PowerShell (`py -3.12 -m venv .venv` once if needed):
 
 ```powershell
-$env:AEGIS_STORAGE_ROOT = Join-Path $env:TEMP ("aegis-tests-" + [guid]::NewGuid())
-$env:DATA_DIR = $env:AEGIS_STORAGE_ROOT
-$env:DATABASE_URL = "sqlite://"
-$env:DATABASE_PROVIDER = "sqlite"
-$env:AEGIS_CONFIG_PROFILE = ""
-$env:AEGIS_CONFIG_FILE = ""
-$env:AEGIS_ALLOW_MOCK = "true"
-$env:MODEL_PROVIDER = "mock"
-$env:EMBEDDING_PROVIDER = "mock"
-$env:SEARCH_PROVIDER = "local"
-$env:STORAGE_PROVIDER = "local"
-Get-ChildItem Env:AEGIS_TEST_* | Remove-Item
-Set-Location ags_backend
-..\.venv\Scripts\python.exe -B -m pytest ags_tests -q -p no:cacheprovider
+.\.venv\Scripts\python.exe -m pip install -r ags_testing\backend\requirements.txt
+.\.venv\Scripts\python.exe -B ags_testing\run_backend_tests.py
 ```
 
-For one file, replace `ags_tests` with `ags_tests/test_api_documentation.py`; append `::test_documentation_requires_login_and_returns_only_contract` to select one test. Add `-v` for individual test names. `passed` means success, `failed` needs investigation, and `skipped` normally identifies opt-in integrations. Oracle and real model tests require explicit `AEGIS_TEST_*` settings and their separate test services. The commands above use local temporary state and do not deploy or test against live OCI. Close this PowerShell session after testing.
+The runner selects temporary SQLite storage and mock providers in a child process, clearing inherited cloud settings and opt-in integration flags. For one file, append `backend/test_api_documentation.py -v`. Frontend unit/browser checks retain their `npm run test:*` commands. See the single [testing guide](ags_testing/README.md) for the folder layout, all commands and opt-in integrations. Application startup checks remain with runtime code. These commands do not deploy or access live OCI.

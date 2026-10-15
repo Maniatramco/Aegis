@@ -1,0 +1,21 @@
+{
+  "extends": "../../ags_frontend/tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "paths": {
+      "@playwright/test": [
+        "../../ags_frontend/node_modules/@playwright/test"
+      ],
+      "@/*": [
+        "../../ags_frontend/*"
+      ]
+    },
+    "typeRoots": [
+      "../../ags_frontend/node_modules/@types"
+    ]
+  },
+  "include": [
+    "*.ts"
+  ],
+  "exclude": []
+}
