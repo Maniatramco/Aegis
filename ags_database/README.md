@@ -1,5 +1,9 @@
 # OCI Oracle database installation and live schema reference
 
+For one step-by-step guide from creating a new OCI Autonomous AI Database through
+schema deployment and verification, use the
+[database deployment PDF](../ags_docs/Aegis_OCI_Database_Deployment_Guide.pdf).
+
 `ags_database/` contains native Oracle SQL aligned with the deployed `agsora`
 Autonomous AI Database in `ap-mumbai-1`. Read-only inspection on
 16 October 2026 at 00:18 IST (15 October at 18:48 UTC) confirmed owner `ADMIN`, mTLS wallet alias
