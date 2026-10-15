@@ -108,5 +108,10 @@ Moving these files does not execute them or deploy anything.
 Run `python -B -m unittest discover -s ags_testing/deployment -v` from the
 repository root. These offline checks verify that the code-release guard accepts
 the intended image updates and rejects configuration drift, wrong destinations,
-unready/partial rollouts and inconsistent receipts. They make no OCI, Docker or
-database connections and require only the Python standard library.
+unready/partial rollouts and inconsistent receipts. The command-line checks also
+exercise connection/publication approvals, existing-schema and fresh-owner
+workflows, source/target drift and partial failures using simulated clients.
+The schema fixture contains historical logical metadata with synthetic destination,
+capability and status values; it is not a new live inspection. These checks make
+no OCI, Docker or database connections and require only the Python standard library
+plus Git. The PowerShell launcher smoke check runs on Windows when available.

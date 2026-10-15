@@ -46,6 +46,21 @@ passwords or tokens, and do not create credentials, users or pull Secrets.
 
 ## Resolve the release
 
+For an operator running directly in PowerShell, the repository now provides
+`.\ags_deploy\deploy.ps1`, optionally `-Inputs C:\aegis-target\target.json` or
+`-CheckOnly`. The non-secret template is `ags_deploy/deployment-inputs.example.json`;
+keep filled destination files outside Git. The CLI exports committed source,
+prompts CONNECT before discovery and PUBLISH after local builds and the detailed
+plan, then uses the maintained schema/release helpers and configuration guard.
+`DatabaseAction=verify` compares the existing schema; `install` is only for the
+explicit prepared empty-owner case below. It never provisions or configures OCI.
+It records operator regression/backup references, and does not run regression,
+inference or write-workflow tests. An AI using it must still complete the evidence
+and detailed target review required here; never supply approval tokens without
+the user's approval for that exact scope/plan. Direct operator use is documented
+in the root README; use the manual helper workflow below when interactive CLI
+prompts cannot be presented to the user.
+
 Find the Aegis repository from the active project or the user's supplied path;
 confirm it contains `ags_deploy/deploy-aegis-code.ps1` and `ags_database/install.sql`.
 Use all paths below relative to that repository. Read `AGENTS.md`, the root README

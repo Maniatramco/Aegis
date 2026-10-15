@@ -18,7 +18,29 @@ Application source is under `ags_backend/` and `ags_frontend/`; Oracle scripts u
 
 Retired files are retained for review under the root `delete/` folder with their original relative paths. This archive stays outside application build contexts and active test discovery; generated reports remain ignored by Git.
 
-Normal code updates use `ags_deploy/deploy-aegis-code.ps1`. For a fresh schema on another OCI Autonomous Database, follow the [database installation instructions](ags_database/README.md#deploy-the-schema-to-another-oci-database); the installer checks the explicit owner/service and requires an empty schema. Historical resource provisioning and pilot registry setup are consolidated in `ags_deploy/ags_oke/ags_legacy_provisioning.py`.
+## Deploy with one command
+
+From the repository root in PowerShell, run:
+
+```powershell
+.\ags_deploy\deploy.ps1
+```
+
+Answer the prompts, or copy [the non-secret input example](ags_deploy/deployment-inputs.example.json) outside the repository, fill in known values, and run:
+
+```powershell
+.\ags_deploy\deploy.ps1 -Inputs C:\aegis-target\target.json
+```
+
+The command exports the selected committed source (`ags_sprint1` by default), discovers missing target details through existing access, builds both images locally, and shows the release plan. Type `CONNECT` to permit read-only discovery, then `PUBLISH` to approve the displayed database action and frontend/API/worker release. Add `-CheckOnly` for read-only preflight without builds, table creation, publishing or rollout. Uncommitted changes are excluded.
+
+Use `DatabaseAction: "verify"` for an existing schema: it compares all thirteen OCI table definitions and makes no schema changes. Use `"install"` for a **prepared empty owner**: also supply `WalletPath`, `DatabaseOwner`, `ServiceAlias` and the full `ExpectedService`. SQLcl privately prompts for the password. It creates the application tables, then requires schema, saved connection and app readiness checks before publishing images. It does not migrate an existing schema or copy documents, users or application data.
+
+Prerequisites: Python 3.10+ (3.12 recommended; the repository `.venv` is preferred), Git, Docker, kubectl, existing OCI authentication/registry login, and prepared OKE Deployments, persistent state, database connection, routing and credentials. Fresh table installation also needs SQLcl and the destination wallet. The OCI database instance, owner, privileges/quota and application configuration must already exist. Existing releases require a backup/restore reference; all releases request a regression/CI evidence reference for the exact source. The command records this operator evidence; it does not run regression or inference tests. It discovers an existing HTTPS URL; it does not create one.
+
+Infrastructure, configuration, models and existing data are preserved. The current `Recreate` strategy can cause a brief restart window when you actually release. Private plans/results and the exact release receipt are stored under ignored `ags_deploy/deployment-records/`. On any failure, inspect the reported phase and receipt before retrying: schema DDL can commit partially, and no automatic rollback is attempted. Missing prerequisites stop the command.
+
+The existing `ags_deploy/deploy-aegis-code.ps1` and guarded database installer remain the underlying helpers. For database preparation, follow the [database installation instructions](ags_database/README.md#deploy-the-schema-to-another-oci-database). Historical resource provisioning and pilot registry setup are consolidated in `ags_deploy/ags_oke/ags_legacy_provisioning.py`; the one-command release does not run them.
 
 The reusable [release skill](.agents/skills/aegis-release/SKILL.md) remains discoverable by AI tools. It requires a prepared destination and explicit deployment instructions. Preserve the [Unified Chat workflow](AGENTS.md).
 

@@ -1,0 +1,19 @@
+{
+  "SourcePath": "",
+  "Ref": "ags_sprint1",
+  "Kubeconfig": "C:\\aegis-target\\kubeconfig.yaml",
+  "Context": "",
+  "Namespace": "aegis-oci",
+  "Registry": "",
+  "RegistryNamespace": "",
+  "Platform": "",
+  "AppUrl": "",
+  "DatabaseAction": "verify",
+  "WalletPath": "",
+  "DatabaseOwner": "",
+  "ServiceAlias": "",
+  "ExpectedService": "",
+  "SqlclPath": "sql",
+  "BackupReference": "",
+  "ValidationReference": ""
+}
