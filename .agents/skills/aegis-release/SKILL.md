@@ -9,6 +9,8 @@ Start at the repository root and read `AGENTS.md`; for UI work also read `ags_fr
 
 Read [the README](../../../README.md), [architecture handover](../../../ags_docs/Aegis_Architecture_and_Deployment_Handover.docx) ([PDF](../../../ags_docs/Aegis_Architecture_and_Deployment_Handover.pdf)) and the dedicated [OCI Kubernetes deployment guide](../../../ags_docs/Aegis_OCI_Kubernetes_Deployment_Guide.docx). These cover verified live placement, running versions, destination prerequisites, release commands, rollback and validation evidence. Maintain these two documents and keep the handover PDF synchronized. For Word text extraction, use a document reader or Python python-docx. Do not create further document sets or external diagram assets.
 
+Local launchers, Compose profiles, test container support, alternative Kubernetes manifests and manual QA tools live under [ags_local_use](../../../ags_local_use/README.md). Backend and frontend component tests stay beside their source. OCI release and authentication tools remain under `ags_deploy/`.
+
 ## Preserve the application contracts
 
 - Every Unified Chat question enforces scope, runs hybrid retrieval, CPU reranking, model generation and answer/citation validation. Keep complete authorized facts for exact counts; do not invent completed stages or bypass retrieval for help questions.

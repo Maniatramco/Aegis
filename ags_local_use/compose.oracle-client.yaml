@@ -1,0 +1,12 @@
+# Optional laptop database access for Oracle SQL Developer / VS Code.
+# Use alongside ags_local_use/compose.oracle.yaml; keep this out of a public deployment.
+services:
+  oracle:
+    ports:
+      - '127.0.0.1:${AEGIS_ORACLE_CLIENT_PORT:-1521}:1521'
+    # Docker does not publish ports for a container attached only to an
+    # internal network. The optional client bridge enables the loopback bind.
+    networks: [private, oracle-client]
+networks:
+  oracle-client:
+    driver: bridge

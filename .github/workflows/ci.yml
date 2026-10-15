@@ -46,7 +46,7 @@ jobs:
     timeout-minutes: 25
     env:
       AEGIS_SMOKE_PASSWORD: Aegis-CI-only-disposable-password
-      COMPOSE_FILE: local/compose.yaml:local/compose.test.yaml
+      COMPOSE_FILE: ags_local_use/compose.yaml:ags_local_use/compose.test.yaml
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,7 +54,7 @@ jobs:
           python-version: '3.12'
       - name: Create isolated test configuration
         run: |
-          ./local/ags_scripts/setup.sh
+          ./ags_local_use/ags_scripts/setup.sh
           cat >> .env <<'CONFIG'
           MODEL_PROVIDER=mock
           EMBEDDING_PROVIDER=mock
@@ -65,7 +65,7 @@ jobs:
       - run: docker compose --project-directory . up --build -d --wait --wait-timeout 180
       - name: Exercise durable document workflows
         id: smoke
-        run: python ags_scripts/smoke.py
+        run: python ags_local_use/ags_scripts/smoke.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

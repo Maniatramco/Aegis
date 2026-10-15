@@ -1,7 +1,7 @@
 .env
 .env.*
-!local/.env.example
-!local/.env.oracle.example
+!ags_local_use/.env.example
+!ags_local_use/.env.oracle.example
 secrets/
 backups/
 data/

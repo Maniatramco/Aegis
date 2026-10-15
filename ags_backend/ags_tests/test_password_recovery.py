@@ -8,7 +8,7 @@ import subprocess
 import sys
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / 'ags_scripts/reset_admin_password.py'
+SCRIPT = Path(__file__).resolve().parents[2] / 'ags_local_use/ags_scripts/reset_admin_password.py'
 spec = importlib.util.spec_from_file_location('recovery', SCRIPT)
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)

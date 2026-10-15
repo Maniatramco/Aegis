@@ -1,0 +1,16 @@
+# Optional NVIDIA acceleration; combine with ags_local_use/compose.oracle.yaml or ags_local_use/compose.yaml.
+# The base Compose files remain usable on machines without a supported GPU.
+services:
+  ollama:
+    environment:
+      # Chat plus the small embedding model fit on the laptop GPU. Keeping
+      # both loaded avoids reloading chat after document retrieval.
+      OLLAMA_MAX_LOADED_MODELS: '${AEGIS_GPU_MAX_LOADED_MODELS:-2}'
+      OLLAMA_KEEP_ALIVE: '${AEGIS_GPU_KEEP_ALIVE:-15m}'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
