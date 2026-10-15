@@ -18,4 +18,4 @@ FROM ags_owner.user_tbl
 GROUP BY role;
 ```
 
-See [the account guide](../../ags_docs/ags_guides/USER-MANAGEMENT.md) and [the relational model](DATA-MODEL.md). No additional application table or container is required.
+See [the account guide](https://github.com/Maniatramco/Aegis/blob/a33d5fba9e5c9c62319bb65c42a0341eed8de238/ags_docs/ags_guides/USER-MANAGEMENT.md) and [the relational model](DATA-MODEL.md). No additional application table or container is required.
