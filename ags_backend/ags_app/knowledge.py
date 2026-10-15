@@ -187,7 +187,7 @@ def embedding_snapshot(actor, dataset_id=''):
         try: snapshot = routing.embedding_snapshot(dataset)
         except HTTPException: continue
         cfg = copy.deepcopy(snapshot['settings'])
-        if cfg['embedding_provider'] not in ('ollama', 'mock', 'sentence_transformers') or cfg['search_provider'] not in ('qdrant', 'oracle', 'local'): continue
+        if cfg['embedding_provider'] not in ('ollama', 'mock', 'sentence_transformers', 'openai', 'registered') or cfg['search_provider'] not in ('qdrant', 'oracle', 'local'): continue
         # One compatible embedding space across dataset-specific index namespaces.
         cfg['_index_namespace'] = 'unified-knowledge-v1'
         cfg['embedding_extra_parameters'] = {k:v for k,v in cfg.get('embedding_extra_parameters', {}).items() if k != 'truncate'}
@@ -195,7 +195,7 @@ def embedding_snapshot(actor, dataset_id=''):
         signature = digest({'schema': SCHEMA_VERSION, 'embedding': providers.fingerprint(cfg)})[:20]
         snapshot['knowledge_collection'] = 'aegis_knowledge_'+signature
         return snapshot
-    raise HTTPException(409, 'Map a local embedding model to an accessible dataset before using unified semantic search.')
+    raise HTTPException(409, 'Map an embedding model with Local, Qdrant, or Oracle vector storage to an accessible dataset before using unified semantic search.')
 
 
 def _manifest_ref(snapshot): return 'knowledge/'+snapshot['knowledge_collection']+'/manifest.json'
