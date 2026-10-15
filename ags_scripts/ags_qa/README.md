@@ -18,7 +18,7 @@ run them only against a chosen test workspace with those operations authorized.
 Most tools import `ags_app` and require backend dependencies and `ags_backend/` on
 `PYTHONPATH`, or execution inside the configured API/worker environment. Do not
 execute all scripts as a batch. CI uses isolated fixtures and mock providers.
-Fictional fixtures remain in `ags_docs/ags_testing/ags_fixtures/`, and raw evidence remains
+Fictional fixtures live beside these tools in `ags_scripts/ags_qa/ags_fixtures/`, and raw evidence remains
 in ignored `docs/testing/results/`. Retired session-specific `verify_*.py` probes,
 the old setup profiler and browser runners for removed controls are available in
 Git history and the local `ags_runtime/ags_archive/ags_cleanup_2026_10_14/` archive.

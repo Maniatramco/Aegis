@@ -14,4 +14,4 @@ Application source is under `ags_backend/` and `ags_frontend/`; Oracle scripts u
 
 The reusable [release skill](.agents/skills/aegis-release/SKILL.md) remains discoverable by AI tools. It requires a prepared destination and explicit deployment instructions. Preserve the [Unified Chat workflow](AGENTS.md).
 
-Earlier separate guides and verification reports remain in Git history at documentation commit `a33d5fb`. `ags_docs/` now has one maintained handover, supporting image assets and fictional test inputs. This documentation push does not deploy or change the running application.
+Earlier separate guides and verification reports remain in Git history at documentation commit `a33d5fb`. `ags_docs/` contains one maintained handover and supporting image assets. Reusable QA inputs live under `ags_scripts/ags_qa/ags_fixtures/`. This documentation push does not deploy or change the running application.

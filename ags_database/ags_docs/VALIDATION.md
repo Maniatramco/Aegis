@@ -52,7 +52,7 @@ Observed checks:
 The post-migration browser check was blocked twice by computer-use's CDP
 `Emulation.setFocusEmulationEnabled` timeout. A graphical worksheet/browser test
 after migration is therefore not claimed. Earlier extraction UI validation is
-documented separately in `ags_docs/ags_testing/assistant-resume-2026-10-10.md`.
+documented separately in [the historical resume test report](https://github.com/Maniatramco/Aegis/blob/a33d5fba9e5c9c62319bb65c42a0341eed8de238/ags_docs/ags_testing/assistant-resume-2026-10-10.md).
 
 No live Oracle Kubernetes cluster was deployed or tested. Cluster image publication,
 storage provisioning, secret setup, readiness and the actual end-to-end smoke test
