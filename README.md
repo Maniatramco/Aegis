@@ -6,7 +6,7 @@ Aegis turns documents into searchable knowledge and structured, reviewable resul
 
 Read the architecture handover in [Word](ags_docs/Aegis_Architecture_Handover.docx) or [PDF](ags_docs/Aegis_Architecture_Handover.pdf) for the approved Mural diagram, end-to-end workflows, observed OCI resources, running technology versions and model placement.
 
-Use the single [final OCI deployment PDF](ags_docs/Aegis_OCI_Deployment_Guide.pdf) in order: **Section 1 Resource provisioning (pages 2-7)** covers OCI/model prerequisites and their purposes, the recorded Mumbai pilot example and initial installation handoff. **Section 2 Code deployment (pages 8-14)** covers source/target inputs, component flags, the AI skill and JSON + PowerShell routes, approvals, verification and recovery. It replaces the separate database, backend and Kubernetes deployment guides. Provisioning and initial configuration remain separate from the code/object release command and AI deployment skill.
+Use the single [final OCI deployment PDF](ags_docs/Aegis_OCI_Deployment_Guide.pdf) in order: **Section 1 Resource provisioning (pages 2-7)** covers OCI/model prerequisites and their purposes, the recorded Mumbai pilot example and initial installation handoff. **Section 2 Code deployment (pages 8-15)** includes the deployment script workflow diagram on page 9 and covers source/target inputs, component flags, the AI skill and JSON + PowerShell routes, approvals, verification and recovery. It replaces the separate database, backend and Kubernetes deployment guides. Provisioning and initial configuration remain separate from the code/object release command and AI deployment skill.
 
 ## Deploy with one command
 
