@@ -1,16 +1,48 @@
 ---
 name: aegis-deploy
-description: "Deploy Aegis frontend, API and worker code to an existing OCI OKE installation while preserving configuration; verify its Oracle schema, or install the supplied schema into an explicitly requested empty owner. Use for Aegis release execution and deployment preflight, excluding infrastructure provisioning."
+description: "Prepare and deploy Aegis code to existing OCI resources while preserving configuration: clarify inputs, obtain permission for read-only OCI discovery, verify the target, and obtain approval of the detailed release plan before publishing images or applying database scripts. Excludes infrastructure provisioning."
 ---
 
 # Aegis deployment to prepared OCI
 
 Use the repository's maintained deployment helpers. The user wants AI to perform
 the release, with existing OCI resources, settings, credentials, model mappings
-and stored data preserved. Creating this skill, explaining it, or requesting a
-preflight does not authorize a deployment. An explicit deployment request for a
-clear destination authorizes the code release; do not repeatedly ask for the same
-permission. Ask only for a missing destination/input or an actual scope change.
+and stored data preserved. The user requires two separate approvals: permission
+to connect for read-only discovery, then approval of the verified deployment plan
+before publication. A general deployment request authorizes preparation; it does
+not replace the final review below. Credential sharing, access permission and
+preflight completion do not authorize image pushes, database DDL or pod updates.
+
+## Clarify inputs and obtain connection permission
+
+Ask the user which environment they intend and what they already know: repository
+and branch/commit; existing versus fresh database owner; OCI profile/credential
+location, tenancy, compartment and region; OKE cluster/kubeconfig; registry; and
+any existing public endpoint. Bundle missing inputs into a concise question and
+allow "unknown; please discover". Do not require an application URL before a first
+deployment or make the user manually collect every OCID.
+
+Read local source and supplied non-secret destination records first. Before any
+OCI API, Kubernetes, Oracle or public-target network inspection, request permission
+for the selected account/profile and discovery scope, unless that permission was
+already explicitly granted for this release. For example:
+
+> May I use the specified OCI profile and existing access for read-only discovery
+> in this tenancy/region/compartment, to identify the cluster, database, registry
+> and public endpoint? I will not publish images or change infrastructure,
+> application configuration or database objects during discovery.
+
+Wait for an affirmative answer; a missing reply is not consent. Sharing access in
+response to that request permits only the clearly stated discovery scope, not
+publication. If account/profile or tenancy selection remains ambiguous, clarify
+it before connecting. Do not repeatedly ask for an unchanged, already approved
+discovery scope. Without connection permission, continue only local preparation.
+
+After permission, use existing authenticated list/get/metadata access to discover
+and verify the missing details. Keep discovery within the approved scope; do not
+scan unrelated accounts/regions or fetch application document contents. Reuse
+existing authentication and secure credential paths; do not print private keys,
+passwords or tokens, and do not create credentials, users or pull Secrets.
 
 ## Resolve the release
 
@@ -22,18 +54,65 @@ documents the helper's parameters, receipts and rollback procedure.
 
 Resolve these inputs once from the user or existing trusted destination records:
 source commit/branch, kubeconfig, Kubernetes context and server, namespace, OCIR
-host and registry namespace, image architecture, public application URL, and DB
-owner/service identity. Do not infer a new destination from the OCI tenant alone.
+host and registry namespace, image architecture, public endpoint, and DB
+owner/service identity. Discover unknown values after connection permission;
+do not infer a deployment destination from the OCI tenant alone.
 The current handover branch is `ags_sprint1`; the pilot namespace is `aegis-oci`
 and its platform is `linux/arm64`. Confirm these against the selected destination.
 Credentials and wallet files stay outside Git and prompts/logs. Use existing
 authentication and registry login; obtain missing secrets through a private
 credential mechanism. Do not create users, grants, Secrets or pull credentials.
 
+Discover an unknown URL from existing Service/Ingress/load-balancer addresses and
+configured hostnames. Report whether DNS/HTTPS and application reachability are
+verified or pending. Do not invent a hostname or create/change routing, DNS or TLS.
+An empty OKE cluster is not a prepared Aegis installation: Deployments, Services,
+Secrets, volumes, database connection and application state must already exist.
+Report missing initial setup as outside this code-only scope, not permission to
+provision it. Resolve every required target detail before proposing publication.
+
 Select the exact approved source commit. Preserve unrelated working-tree changes;
 use a separate clean checkout or `git archive` export of that commit for builds
 when needed. Do not reset, stash or include untracked files without instruction.
 Keep `delete/`, test reports, private state and wallet/secret files outside images.
+
+## Obtain approval of the complete release plan
+
+Complete authorized discovery, local tests/builds and read-only preflight before
+asking for publication approval. Present one concrete, readable plan containing:
+
+| Area | Details to show the user |
+| --- | --- |
+| Source and artifacts | Repository, branch, exact commit, test/build results, release tag, locally built image IDs and intended image repositories/tags |
+| OCI target | Tenancy, compartment, region, OKE cluster name/ID, context/server, namespace and node architecture |
+| Database | Verified owner, full service and wallet alias; verify-only or explicitly scoped fresh-table installation; schema comparison and data-preservation result |
+| Current application | Existing Deployments and images, public endpoint, routing/HTTPS status, and all required resource/configuration checks |
+| Preserved settings | ConfigMap/Secret fingerprints, runtime configuration, saved database/storage settings, volumes, replica/strategy settings, sidecars/init images and model mappings |
+| Operational readiness | Active-job status, existing backup/restore point, reranker/provider checks, local Ollama/relay availability and any checks not run |
+| Planned actions | Exact order, frontend/API/worker image updates, any approved fresh-schema DDL, expected restart window, receipt location and recovery scope |
+
+Clearly distinguish verified facts, optional unavailable providers and blocked
+prerequisites. Resolve required unknowns and failures before publishing. If image
+registry digests are not yet available because nothing has been pushed, show the
+local image IDs and target tags; report registry digests after publication rather
+than inventing them. For a first schema installation, label app checks that can
+only run after DDL as conditional and require them before publishing app images.
+
+Ask explicitly whether the user approves this exact plan and wait. For example:
+
+> Do you approve publishing release RELEASE from commit COMMIT to the verified
+> OCI cluster/context and namespace above, with the listed database action and
+> restart window, while preserving all infrastructure and configuration?
+
+This final checkpoint is required by the user's deployment convention, separately
+from permission to connect. Do not run `docker push`, the combined release helper,
+schema DDL or Kubernetes image updates until the presented plan is approved.
+Local builds and read-only discovery are preparation, not publication. A preflight-
+only request ends with readiness/results and does not advance to publication.
+Approval covers the listed commit, artifacts, destination, database action and
+scope; if a material detail changes, verify it and obtain approval of the amended
+plan. Do not ask again while executing an unchanged approved plan. Never treat a
+previous release's approval as authorization for a different target or release.
 
 ## Scope and database decision
 
@@ -72,7 +151,8 @@ Only for an explicitly requested **new, empty owner**, use the existing installe
 .\ags_database\deploy-oci-database.ps1 -WalletPath $WalletPath -UserName $DbOwner -ServiceAlias $ServiceAlias -ExpectedService $FullService -CheckOnly
 ```
 
-When the fresh installation is authorized for this exact destination, run:
+Only after the final reviewed plan explicitly approves the fresh installation
+for this exact owner/service, run:
 
 ```powershell
 .\ags_database\deploy-oci-database.ps1 -WalletPath $WalletPath -UserName $DbOwner -ServiceAlias $ServiceAlias -ExpectedService $FullService
@@ -103,6 +183,23 @@ with Oracle/OCI enabled and optional in-process embeddings/native cloud model
 SDKs disabled. Ollama and OpenAI-compatible Gemini use their existing remote
 endpoints; their model files/registrations are not installed or replaced here.
 Confirm any selected native provider's SDK is present before using this helper.
+Build the exact local images before the final approval using the same OCI profile:
+
+```powershell
+$WebImage = "$Registry/$RegistryNamespace/ags-aegis-web`:$Release"
+$BackendImage = "$Registry/$RegistryNamespace/ags-aegis-backend`:$Release"
+docker build --platform $Platform -t $WebImage "$SourcePath/ags_frontend"
+if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
+docker build --platform $Platform --build-arg INSTALL_LOCAL_EMBEDDINGS=false --build-arg INSTALL_CLOUD_MODELS=false --build-arg INSTALL_ORACLE=true --build-arg INSTALL_OCI=true -t $BackendImage "$SourcePath/ags_backend"
+if ($LASTEXITCODE -ne 0) { throw 'Backend build failed.' }
+docker image inspect $WebImage $BackendImage --format '{{.Id}} {{.Os}}/{{.Architecture}}'
+if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the prepared release images.' }
+```
+
+Set the resolved variables described below before these commands. These builds
+remain local; do not push them during preparation. Include their image IDs in the
+reviewed plan. After approval, recheck those IDs and use `-SkipBuild` so the helper
+publishes those reviewed artifacts instead of rebuilding a different image.
 
 Check existing authenticated read access, registry login/pull access, node
 architecture, schema, persistent state and reranker assets. Let active jobs finish
@@ -132,19 +229,19 @@ identities and images rather than configuration/secret values. It does not verif
 the schema or models; perform those separate checks above. Missing read permission
 must be resolved outside this code-only deployment, not bypassed.
 
-Present the resolved target/commit, DB action, images-only scope and restart window
-briefly. If the user already requested this deployment, proceed without another
-generic confirmation. For a preflight-only request, finish here and report readiness.
-Immediately before mutation, recheck that the source and destination are unchanged:
+Complete the detailed plan and approval checkpoint above before publication.
+Immediately after approval, confirm the local image IDs still match the reviewed
+artifacts and recheck that the source and destination are unchanged:
 
 ```powershell
 python -B .\ags_deploy\check-code-release.py verify --source-path $SourcePath --kubeconfig $Kubeconfig --context $Context --namespace $Namespace --baseline $Baseline
 if ($LASTEXITCODE -ne 0) { throw 'Pre-release configuration check failed; no release started.' }
-.\ags_deploy\deploy-aegis-code.ps1 -SourcePath $SourcePath -Kubeconfig $Kubeconfig -Context $Context -Namespace $Namespace -Registry $Registry -RegistryNamespace $RegistryNamespace -Platform $Platform -Release $Release
+.\ags_deploy\deploy-aegis-code.ps1 -SourcePath $SourcePath -Kubeconfig $Kubeconfig -Context $Context -Namespace $Namespace -Registry $Registry -RegistryNamespace $RegistryNamespace -Platform $Platform -Release $Release -SkipBuild
 ```
 
-The deployment helper builds/pushes both images, records previous image references,
-updates API+worker first and web second, and waits for rollouts. `-SkipBuild` still
+With `-SkipBuild`, the deployment helper pushes both reviewed local images,
+records previous image references, updates API+worker first and web second, and
+waits for rollouts. `-SkipBuild` still
 pushes and deploys; it is not a dry run. There is no backend-only switch or automatic
 rollback. Do not edit the helper, manifests, configuration or source during execution.
 

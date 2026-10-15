@@ -31,6 +31,9 @@ For routine code deployment to existing OCI resources with configuration preserv
 use [aegis-deploy](../aegis-deploy/SKILL.md). It adds read-only before/after checks
 around the existing release helper and distinguishes schema verification from a
 fresh installation. Keep this release skill for source maintenance and handovers.
+Follow its separate permission for read-only OCI discovery and final approval of
+the detailed release plan before any image publication, workload update or schema
+DDL. Access credentials or a general deployment request do not replace that review.
 
 For an explicitly requested fresh database schema installation, follow [ags_database/README.md](../../../ags_database/README.md#deploy-the-schema-to-another-oci-database). Use `ags_database/deploy-oci-database.ps1` with the destination wallet, owner, alias and full server service; `-CheckOnly` validates local inputs without connecting. Its shared `install.sql` preflight requires an empty owner and compatible Oracle features. For manual SQL execution, start the client in `ags_database`. Schema creation does not transfer live data or prepare OKE application state. For an existing workspace, use the read-only verification script instead of the fresh installer.
 
