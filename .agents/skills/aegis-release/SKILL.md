@@ -7,7 +7,7 @@ description: Prepare Aegis source freezes, architecture handovers and releases t
 
 Start at the repository root and read `AGENTS.md`; for UI work also read `ags_frontend/AGENTS.md`. Follow the user's requested deployment boundary. A documentation or GitHub push request does not authorize changing the running installation.
 
-Read [the README](../../../README.md) and the single [architecture and deployment handover](../../../ags_docs/Aegis_Architecture_and_Deployment_Handover.docx) for verified live placement, running versions, destination prerequisites, release commands, rollback and validation evidence. The Word document is the only current manager handover. For text extraction, use a document reader or Python python-docx; do not recreate separate architecture/deployment/freeze documents.
+Read [the README](../../../README.md), [architecture handover](../../../ags_docs/Aegis_Architecture_and_Deployment_Handover.docx) ([PDF](../../../ags_docs/Aegis_Architecture_and_Deployment_Handover.pdf)) and the dedicated [OCI Kubernetes deployment guide](../../../ags_docs/Aegis_OCI_Kubernetes_Deployment_Guide.docx). These cover verified live placement, running versions, destination prerequisites, release commands, rollback and validation evidence. Maintain these two documents and keep the handover PDF synchronized. For Word text extraction, use a document reader or Python python-docx. Do not create further document sets or external diagram assets.
 
 ## Preserve the application contracts
 
@@ -21,7 +21,7 @@ Read [the README](../../../README.md) and the single [architecture and deploymen
 
 Inspect branch, remote, existing changes and component Docker contexts. Include the intended application files and required assets; exclude private state, environment files, deployment receipts and session-only QA notes. Keep source-declared versions distinct from observed deployed versions.
 
-Run backend regressions and frontend unit tests, type checking and a production build in an isolated environment. Diagnose failures and report unrun integration checks accurately. Update the single Word handover when relevant and reuse the approved Mural diagram already embedded in the handover. Record actual validation in that handover. Preserve existing immutable tags; apply a new tag only when requested for a new source freeze. Push only the intended branch and tag without force.
+Run backend regressions and frontend unit tests, type checking and a production build in an isolated environment. Diagnose failures and report unrun integration checks accurately. Update the handover and dedicated deployment guide when relevant, synchronize the handover PDF and reuse its embedded approved Mural diagram. Record actual validation in the handover. Preserve existing immutable tags; apply a new tag only when requested for a new source freeze. Push only the intended branch and tag without force.
 
 ## Deploy only when requested
 
