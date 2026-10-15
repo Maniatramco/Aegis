@@ -5,6 +5,10 @@ description: "Prepare and deploy Aegis code to existing OCI resources while pres
 
 # Aegis deployment to prepared OCI
 
+The single operator handover is `ags_docs/Aegis_OCI_Deployment_Guide.pdf`.
+It covers both this AI route and JSON + PowerShell. Do not direct the user to
+superseded database, backend or Kubernetes guides under `delete/`.
+
 Use the repository's maintained deployment helpers. The user wants AI to perform
 the release, with existing OCI resources, settings, credentials, model mappings
 and stored data preserved. The user requires two separate approvals: permission
@@ -84,14 +88,16 @@ block publication when no backup reference is supplied. Never claim that a backu
 was created or verified. An AI using it must still complete the evidence
 and detailed target review required here; never supply approval tokens without
 the user's approval for that exact scope/plan. Direct operator use is documented
-in the root README; use the manual helper workflow below when interactive CLI
-prompts cannot be presented to the user.
+in the final deployment PDF; prefer the same deploy.ps1 Y/N release-file
+workflow for AI-assisted execution when interactive prompts can be presented.
+Use the guarded manual helper workflow below only when required by the agent
+environment, while preserving the same selections, checks and approvals.
 
 Find the Aegis repository from the active project or the user's supplied path;
 confirm it contains `ags_deploy/deploy-aegis-code.ps1` and `ags_database/install.sql`.
 Use all paths below relative to that repository. Read `AGENTS.md`, the root README
-and `ags_database/README.md`. The existing backend deployment PDF in `ags_docs/`
-documents the helper's parameters, receipts and rollback procedure.
+and `ags_database/README.md`. Read `ags_docs/Aegis_OCI_Deployment_Guide.pdf`
+for the maintained entry point, flags, receipt handling and recovery limits.
 
 Resolve these inputs once from the user or existing trusted destination records:
 source commit/branch, kubeconfig, Kubernetes context and server, namespace, OCIR
@@ -128,11 +134,11 @@ asking for publication approval. Present one concrete, readable plan containing:
 | --- | --- |
 | Source and artifacts | Repository, branch, exact commit, test/build results, release tag, locally built image IDs and intended image repositories/tags |
 | OCI target | Tenancy, compartment, region, OKE cluster name/ID, context/server, namespace and node architecture |
-| Database | Verified owner, full service and wallet alias; verify-only or explicitly scoped fresh-table installation; schema comparison and data-preservation result |
+| Database | Verified owner, full service and wallet alias; verify-only or reviewed release-file actions; script hashes, missing objects and any new account/grants/quota; schema comparison and data-preservation result |
 | Current application | Existing Deployments and images, public endpoint, routing/HTTPS status, and all required resource/configuration checks |
 | Preserved settings | ConfigMap/Secret fingerprints, runtime configuration, saved database/storage settings, volumes, replica/strategy settings, sidecars/init images and model mappings |
 | Operational readiness | Active-job status, optional backup reference if supplied, reranker/provider checks, local Ollama/relay availability and any checks not run |
-| Planned actions | Exact order, frontend/API/worker image updates, any approved fresh-schema DDL, expected restart window, receipt location and recovery scope |
+| Planned actions | Exact order, frontend/API/worker image updates, any approved release-file or fresh-schema DDL, expected restart window, receipt location and recovery scope |
 
 Clearly distinguish verified facts, optional unavailable providers and blocked
 prerequisites. Resolve required unknowns and failures before publishing. If image
