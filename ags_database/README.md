@@ -1,4 +1,4 @@
-# Live OCI Oracle database reference
+# OCI Oracle database installation and live schema reference
 
 `ags_database/` contains native Oracle SQL aligned with the deployed `agsora`
 Autonomous AI Database in `ap-mumbai-1`. Read-only inspection on
@@ -18,17 +18,146 @@ local tooling does not remove or replace that runtime dependency.
 | Folder or file | Purpose |
 | --- | --- |
 | `ags_tables/` | Thirteen Oracle table definitions read from live metadata, including native vectors |
-| `install.sql` | Ordered reference installer for a separate empty, prepared Oracle application schema |
+| `install.sql` | Guarded fresh installer with target, capability and completed-schema checks |
 | `ags_schema/verify_live_schema.sql` | Read-only connection, table, column, constraint and vector checks |
 | `ags_queries/` | Read-only workflow, account and dataset-access inspection using the connected owner |
 
-## Verification and installation boundary
+## Deploy the schema to another OCI database
 
-Use a fresh SQLcl or SQL Developer connection with the intended destination's
-wallet and private database credentials. The current live connection uses
-`agsora_low` and owner `ADMIN`. Keep passwords and wallets outside Git.
+These scripts install the current thirteen-table application schema in a
+**separate, empty owner on a prepared Oracle Autonomous AI Database 26ai**.
+The destination can have a different tenancy, region, database name, account
+and wallet alias. Nothing in the installer connects to `agsora` automatically.
+It does not provision OCI resources or copy existing records, files or users.
 
-For read-only verification from the repository root, run:
+### 1 Prepare the destination account
+
+Have the destination DBA create a dedicated application owner, for example
+`AGS_APP`, with a private password, `CREATE SESSION`, `CREATE TABLE`, a default
+tablespace and enough available quota. On Autonomous Database that tablespace
+is normally `DATA`. Create the user through Database Actions or your approved
+account provisioning process; do not put passwords in SQL files or Git.
+The DBA can apply these statements to the **new destination only**, replacing
+the example owner and selecting an appropriate quota:
+
+```sql
+GRANT CREATE SESSION, CREATE TABLE TO AGS_APP;
+ALTER USER AGS_APP DEFAULT TABLESPACE DATA QUOTA 200M ON DATA;
+```
+
+The 200 MB quota is an installation example, not production capacity sizing.
+Use an owner without existing objects; enabling optional user features can
+create objects, in which case prepare a separate empty owner. Oracle documents
+[Autonomous account creation and DATA quota](https://docs.oracle.com/en/cloud/paas/autonomous-database/serverless/adbsb/manage-users-create.html).
+
+The database must support SQL `BOOLEAN`, native `VECTOR` and the observed
+data-bound collations. The collation definitions require
+`MAX_STRING_SIZE=EXTENDED` and compatible database settings. The installer
+checks capabilities with read-only probes and stops when they are unavailable;
+it never changes database-wide settings. Refer any prerequisite failure to the
+destination DBA. See Oracle's
+[collation requirements](https://docs.oracle.com/en/database/oracle/oracle-database/26/nlspg/database-globalization-support-guide.pdf)
+and [MAX_STRING_SIZE reference](https://docs.oracle.com/en/database/oracle/oracle-database/26/refrn/MAX_STRING_SIZE.html).
+
+### 2 Connect using the destination wallet
+
+Obtain the new database's wallet and permitted network access. Keep wallet
+files outside the repository and use the new owner's credentials. In a full
+checkout of `ags_sprint1`, start SQLcl **with `ags_database` as its working
+directory** so all nested scripts resolve:
+
+```powershell
+Set-Location .\ags_database
+sql /nolog
+```
+
+In SQLcl, replace the path, owner and wallet TNS alias below. Enter the password
+at the client prompt; do not include it in the command:
+
+```sql
+SET CLOUDCONFIG C:\aegis-target\Wallet_NEWDB.zip
+CONNECT AGS_APP@NEWDB_low
+
+SELECT USER AS connected_owner,
+       SYS_CONTEXT('USERENV','CURRENT_SCHEMA') AS current_schema,
+       SYS_CONTEXT('USERENV','SERVICE_NAME') AS full_service_name
+FROM dual;
+```
+
+Compare the result with the intended destination. `NEWDB_low` is only the
+wallet alias; the returned full service name is the installer's second
+argument. Confirm that name against the new wallet's `tnsnames.ora` service
+descriptor. Oracle's [SQLcl wallet connection instructions](https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/connect-sqlcl.html)
+describe this connection flow. SQL*Plus can also run the installer once its
+destination wallet connection is configured; `SET CLOUDCONFIG` is SQLcl-specific.
+
+### 3 Install once in the verified empty owner
+
+Only when you intend to install into that new destination, replace both values
+with the confirmed owner and **full server service name**:
+
+```sql
+@install.sql AGS_APP YOUR_FULL_SERVICE_NAME.adb.oraclecloud.com
+```
+
+The installer rejects a different connected owner/current schema, a different
+service, SYS/SYSTEM connections, a nonempty schema, missing table privileges,
+missing quota or unsupported Oracle features **before creating a table**.
+It creates the thirteen tables in foreign-key order, then requires the expected
+column counts, constraints, application indexes and native vector column.
+Success prints `AEGIS_SCHEMA_INSTALL_OK` and exits the client with status zero.
+SQL/OS errors and failed checks exit unsuccessfully.
+
+Keep the complete `ags_database` directory together. SQL*Plus command errors
+are not all covered by `WHENEVER SQLERROR`; inspect the output as well as the
+exit status and require the final success marker. A failed/partial install
+must be reviewed in that destination. Oracle DDL commits implicitly, so earlier
+table creation is not undone by `ROLLBACK`. This installer never drops objects
+or retries over an existing schema. See Oracle's
+[SQL error handling reference](https://docs.oracle.com/en/database/oracle/oracle-database/26/sqpug/WHENEVER-SQLERROR.html).
+
+### 4 Verify and complete the application handoff
+
+Reconnect to the same destination owner and run this read-only check, still
+from `ags_database`:
+
+```sql
+@ags_schema/verify_live_schema.sql
+```
+
+Expect thirteen `PRESENT` tables, 165 columns in total, enabled constraints,
+twenty application indexes in addition to Oracle-managed indexes, an
+`EMBEDDING` column of type `VECTOR`, and identical-vector distance zero.
+The script also prints the connected owner and service for the release record.
+
+The result is an empty database schema. Complete the new installation's wallet,
+encrypted database configuration, storage, encryption key and model handoff
+using the existing [OCI deployment guide](../ags_docs/Aegis_OCI_Kubernetes_Deployment_Guide.docx).
+Create the initial workspace administrator through the new application's
+bootstrap flow. No old application accounts, documents, registrations or
+credentials are seeded by these SQL files. A code-image release is a separate
+operation from schema installation.
+
+### Validation performed
+
+On 16 October 2026, the installer completed against a disposable local Oracle AI Database 26ai
+Free `23.26.3.0.0` instance with extended strings enabled. All thirteen tables,
+165 columns, thirteen primary keys, two unique constraints, 49 foreign keys,
+131 check/NOT NULL constraints and twenty application indexes passed the final
+checks. A repeat install was rejected. Wrong-owner, wrong-service,
+missing-privilege, missing-quota and incompatible-collation cases also stopped
+before creating objects. The disposable instance was removed.
+
+This validates native SQL execution and the guards on that Oracle version;
+it is not a deployment to a second OCI tenancy. The new OCI destination must
+pass its own connection, prerequisites and application checks when deployment
+is explicitly requested. No installation SQL was run on live `agsora`.
+
+## Inspect an existing installation safely
+
+For the current live database, use a fresh connection and read-only verification
+only. The observed connection uses `agsora_low` and owner `ADMIN`. From the
+repository root, run:
 
 ```sql
 @ags_database/ags_schema/verify_live_schema.sql
@@ -38,11 +167,9 @@ The script reads schema metadata and checks native vector support. The diagnosti
 queries use unqualified application table names, so they run in the connected
 schema rather than assuming the old local `AGS_OWNER` schema.
 
-`install.sql` and `ags_tables/*.sql` are logical schema references and an optional
-rebuild path for an empty, separately prepared Oracle 26ai application schema.
-They are not upgrade scripts for the populated live database. Oracle DDL commits
-implicitly. No installer, table creation, user creation, migration, grant or
-data-changing SQL was executed while aligning this folder.
+`install.sql` and `ags_tables/*.sql` are fresh installation scripts for a
+separate prepared owner. They are not upgrade scripts for the populated live
+database. Review any schema changes to an existing workspace separately.
 
 The SQL preserves the observed 165 columns, defaults, collations, primary/unique/
 foreign/check constraints and twenty application indexes. Schema qualification
