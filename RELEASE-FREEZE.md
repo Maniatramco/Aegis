@@ -6,7 +6,7 @@ Prepared for Swamy. Freeze tag: `aegis-freeze-2026-10-15`. Source branch: `pytho
 
 This is a source and documentation release. The running installation is preserved. No application deployment, registry push, restart, scaling, configuration apply, infrastructure provisioning, account operation or live document processing is performed for this handover.
 
-The immutable tag identifies this source snapshot. It does not assert that the existing deployed container image is a byte-for-byte build of this commit. [The historical OCI record](OCI_DEPLOYMENT_RECORD.md) contains dated image and runtime observations. A future deployment needs a separately authorized release and its own image digests and receipt.
+The immutable tag identifies this source snapshot. It does not assert that the existing deployed container image is a byte-for-byte build of this commit. [The current OCI resource inventory](OCI-LIVE-RESOURCES.md) contains verified image and runtime observations. A future deployment needs a separately authorized release and its own image digests and receipt.
 
 ## Contents
 
@@ -54,9 +54,14 @@ cd Aegis
 git checkout aegis-freeze-2026-10-15
 ```
 
-Follow [deployment and onboarding](DEPLOYMENT.md) for a separate environment or a future application release. Read [the maintainer skill](../.agents/skills/aegis-release/SKILL.md) before changing the application contracts.
+Follow [deployment and onboarding](DEPLOYMENT.md) for a separate environment or a future application release. Read [the maintainer skill](.agents/skills/aegis-release/SKILL.md) before changing the application contracts.
 
 
 ## Live architecture documentation update
 
 On 15 October 2026 at 22:26 IST, the architecture, technology inventory, diagram and Word handover were revised on `ags_sprint1` using live read-only OCI and application inspection. The updated handover focuses on OCI resources and current Gemini mappings, with stopped laptop models identified separately. The original freeze tag and application source hashes remain unchanged. See [live resource evidence](OCI-LIVE-RESOURCES.md).
+
+
+## Root handover cleanup
+
+The current Word document, architecture, deployment guide, running technology inventory, OCI resource record, source manifest and diagram now live at the repository root. Eight superseded planning, deployment-journal and earlier agent-architecture files were removed from the active branch. Current operational runbooks, test fixtures and dated verification evidence are retained. Historical report links to retired guides point to the preserved freeze tag. Application source and the deployed installation are unchanged.

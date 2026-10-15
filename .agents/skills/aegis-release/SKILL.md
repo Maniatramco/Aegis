@@ -7,7 +7,7 @@ description: Prepare Aegis source freezes, architecture handovers and releases t
 
 Start at the repository root and read `AGENTS.md`; for UI work also read `ags_frontend/AGENTS.md`. Follow the user's requested deployment boundary. A documentation or GitHub push request does not authorize changing the running installation.
 
-Read [the README](../../../README.md), [architecture](../../../ags_docs/ARCHITECTURE.md), [deployment](../../../ags_docs/DEPLOYMENT.md) and [freeze evidence](../../../ags_docs/RELEASE-FREEZE.md) for the task at hand. Resolve these links from this skill directory, three levels below the repository root.
+Read [the README](../../../README.md), [architecture](../../../ARCHITECTURE.md), [deployment](../../../DEPLOYMENT.md) and [freeze evidence](../../../RELEASE-FREEZE.md) for the task at hand. Resolve these links from this skill directory, three levels below the repository root.
 
 ## Preserve the application contracts
 
@@ -21,7 +21,7 @@ Read [the README](../../../README.md), [architecture](../../../ags_docs/ARCHITEC
 
 Inspect branch, remote, existing changes and component Docker contexts. Include the intended application files and required assets; exclude private state, environment files, deployment receipts and session-only QA notes. Keep source-declared versions distinct from observed deployed versions.
 
-Run backend regressions and frontend unit tests, type checking and a production build in an isolated environment. Diagnose failures and report unrun integration checks accurately. Refresh the source manifest, architecture PNG and handover when relevant. Record actual results in `ags_docs/RELEASE-FREEZE.md` before committing and applying a new immutable tag. Push only the intended branch and tag without force.
+Run backend regressions and frontend unit tests, type checking and a production build in an isolated environment. Diagnose failures and report unrun integration checks accurately. Refresh the source manifest, architecture PNG and handover when relevant. Record actual results in `RELEASE-FREEZE.md` before committing and applying a new immutable tag. Push only the intended branch and tag without force.
 
 ## Deploy only when requested
 

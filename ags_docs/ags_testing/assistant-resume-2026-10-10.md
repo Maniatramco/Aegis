@@ -91,7 +91,7 @@ Still requires OKE evidence: image registry access/architecture, Secret setup,
 server-side dry-run/RBAC, storage class/PVC permissions, node memory/CPU capacity,
 Oracle startup, model download egress, NetworkPolicy enforcement, GPU device-plugin
 and scheduling (if enabled), ingress configuration, full browser workflow and
-persistence/backups on the actual cluster. See [Kubernetes instructions](../KUBERNETES.md).
+persistence/backups on the actual cluster. See [Kubernetes instructions](https://github.com/Maniatramco/Aegis/blob/aegis-freeze-2026-10-15/ags_docs/KUBERNETES.md).
 
 Changes are in the working tree of `feat/aegis-assistant-oracle-docker`; no new
 commit/push was requested or performed for this task.

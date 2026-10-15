@@ -61,4 +61,4 @@ Authorization, revision guards and runtime model configuration still use the con
 - [Expanded actual workflow](../../docs/testing/results/chat-agent-2026-10-12/workflow.png)
 - [Review page](../../docs/testing/results/chat-agent-2026-10-12/review.png)
 
-See [Chat Agent design](../CHAT-AGENT.md) for source selection, freshness and context limits.
+See [Chat Agent design](https://github.com/Maniatramco/Aegis/blob/aegis-freeze-2026-10-15/ags_docs/CHAT-AGENT.md) for source selection, freshness and context limits.

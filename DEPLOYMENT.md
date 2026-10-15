@@ -4,13 +4,13 @@ Freeze reference: `aegis-freeze-2026-10-15`. Prepared 15 October 2026. This guid
 
 ## Choose the correct deployment path
 
-- **Separate local environment:** follow [the root README](../README.md) or [Oracle setup](ORACLE.md). Use independent database, content and secrets.
+- **Separate local environment:** follow [the root README](README.md) or [Oracle setup](ags_docs/ORACLE.md). Use independent database, content and secrets.
 - **Empty OCI destination:** prepare infrastructure and the initial application installation described below. The historic `ags_oke` provisioner and renderer are tied to the recorded pilot; the renderer requires seeded state. They are not a general new-tenancy installer.
 - **Prepared OKE installation:** follow the code release and onboarding steps below. No region restriction is imposed by `deploy-aegis-code.ps1`.
 
 ## Runtime settings for this freeze
 
-The source of operational limits is `ags_backend/ags_app/ags_config/runtime.toml`; see [runtime configuration](RUNTIME-CONFIG.md). Current ceilings are 262144 context tokens, 1000000 evidence bytes and 1024 answer tokens, subject to each saved model's smaller limits. The OCI profile requires local reranker files at `/data/models/reranker`. Do not follow earlier ConfigMap-only budget examples as the current source of settings.
+The source of operational limits is `ags_backend/ags_app/ags_config/runtime.toml`; see [runtime configuration](ags_docs/RUNTIME-CONFIG.md). Current ceilings are 262144 context tokens, 1000000 evidence bytes and 1024 answer tokens, subject to each saved model's smaller limits. The OCI profile requires local reranker files at `/data/models/reranker`. Do not follow earlier ConfigMap-only budget examples as the current source of settings.
 
 The release script builds with `INSTALL_CLOUD_MODELS=false` and `INSTALL_LOCAL_EMBEDDINGS=false`, plus Oracle and OCI enabled. This suits the recorded Ollama/OCI topology. If a destination uses native cloud adapters or local sentence-transformers, build and verify the required optional packages before deploying that image. Use `-SkipBuild` only for the exact verified destination tags.
 

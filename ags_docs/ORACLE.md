@@ -18,7 +18,7 @@ The latest Assistant resume and hardware checks are recorded in
 [the 2026-10-10 test report](ags_testing/assistant-resume-2026-10-10.md), including
 actual timings, prior timeouts and memory limitations. Keep sufficient available
 RAM for CPU inference and host applications; GPU support does not remove the
-container memory requirement. For OKE, see [Kubernetes preparation](KUBERNETES.md).
+container memory requirement. For OKE, see [Kubernetes preparation](../DEPLOYMENT.md).
 
 Scanned PDFs and visible DOCX images use local Qwen2.5-VL OCR before embedding.
 See [OCR configuration, accuracy and failure handling](OCR.md). Originals,
@@ -147,7 +147,7 @@ and [Ollama Docker guide](https://docs.ollama.com/docker).
 
 Run `./local/ags_scripts/test-model-hardware.ps1` for selection/fallback regression checks.
 Kubernetes uses the same containers with deployment-specific environment and
-storage configuration; see [Oracle Kubernetes preparation](KUBERNETES.md).
+storage configuration; see [Oracle Kubernetes preparation](../DEPLOYMENT.md).
 
 Use no authentication for Ollama. The server explicitly approves only the
 `ollama` container hostname in addition to the existing loopback endpoints.

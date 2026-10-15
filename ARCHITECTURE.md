@@ -22,7 +22,7 @@ The public HTTPS application returned 200. Both application deployments had one 
 
 ## Live application architecture
 
-![Live OCI and model architecture](ags_assets/aegis-architecture.png)
+![Live OCI and model architecture](aegis-architecture.png)
 
 Users open https://aegis.92.4.67.183.sslip.io/. The OCI load balancer forwards HTTP and HTTPS to Caddy, which provides TLS and forwards to the Next.js web application. The web application proxies authenticated API requests to the internal FastAPI service.
 
@@ -154,11 +154,11 @@ The resource record includes current resource names, allocated capacity, contain
 
 | Repository reference | Purpose |
 | --- | --- |
-| ags_docs/OCI-LIVE-RESOURCES.md | Readable live resource inventory |
-| ags_docs/OCI-LIVE-SNAPSHOT.json | Sanitized inspection snapshot and image references |
-| ags_docs/ARCHITECTURE.md | Text companion to this Word architecture document |
-| ags_docs/TECH-STACK.md | Observed running technologies and model placement |
-| ags_docs/DEPLOYMENT.md | Instructions for a future authorized application release |
+| OCI-LIVE-RESOURCES.md | Readable live resource inventory |
+| OCI-LIVE-SNAPSHOT.json | Sanitized inspection snapshot and image references |
+| ARCHITECTURE.md | Text companion to this Word architecture document |
+| TECH-STACK.md | Observed running technologies and model placement |
+| DEPLOYMENT.md | Instructions for a future authorized application release |
 | Branch ags_sprint1 | Current manager handover and documentation updates |
 
 The deployed image references were recorded before and after the documentation work. The existing source freeze tag is preserved; this update changes documentation on ags_sprint1 and does not redeploy the application.
