@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, Database, FileSearch, FileText, Layers, MessageSquare, Plus, Search, Settings2, Shield, X } from "lucide-react";
 import "./dataset-focus.css";
 import "./model-configuration.css";
+import {useDatasetLifecycle} from "./dataset-lifecycle";
 import {DirectoryRows} from "./dataset-directory";
 
 type Entity = Record<string, any>;
@@ -35,6 +36,7 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
 export function DatasetWorkspace({ datasets, models, documents, selectedId, onSelect, onCreated, api, run, busy, reload, notify, onConnections, onUse, uploadPanel, documentsPanel, modelsFocus, onUploadWorkflowVisible, canManage = true }: {
   datasets: Entity[]; models: Entity[]; documents: Entity[]; selectedId: string; onSelect: (id: string) => void; onCreated: (dataset: Entity) => void; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void; onUse: (view: "Aegis agent V2" | "Extract") => void; uploadPanel: React.ReactNode; documentsPanel: React.ReactNode; modelsFocus: boolean; onUploadWorkflowVisible?: (visible:boolean)=>void; canManage?: boolean;
 }) {
+  const lifecycle=useDatasetLifecycle(api,reload,canManage);
   const [creating, setCreating] = useState(false);
   const [showList, setShowList] = useState(!selectedId);
   const [showUpload, setShowUpload] = useState(false);
@@ -61,6 +63,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
   const startCreating = () => { setCreating(true); setName(""); setDescription(""); };
   const openDataset = (id: string) => { onSelect(id); setShowList(false); setCreating(false); setTab("documents"); setShowUpload(false); };
   return <div className="dataset-focus">
+    {!creating&&lifecycle.controls}
     <div className="dataset-intro dataset-navigation">
       {!creating && dataset && !showList ? <button className="text-button" onClick={() => { setShowList(true); setShowUpload(false); }}><ArrowLeft size={15} />All datasets</button> : <div><h2>{creating ? "New dataset" : "Your datasets"}</h2><p>{creating ? "Give your documents a name and a place." : `${datasets.length} dataset${datasets.length === 1 ? "" : "s"} · Choose one to view its documents`}</p></div>}
       {!creating && canManage && <button className={`btn ${showList || !dataset ? "primary" : ""}`} onClick={startCreating}><Plus size={15} />New dataset</button>}
@@ -73,7 +76,7 @@ export function DatasetWorkspace({ datasets, models, documents, selectedId, onSe
         <div className="row dataset-create-actions"><button type="button" className="btn" onClick={() => setCreating(false)}>Cancel</button><button className="btn primary" disabled={busy || !name.trim()}>Create dataset <ArrowRight size={14} /></button></div>
       </form>
     </section> : showList || !dataset ? <>
-      {datasets.length > 0 && <DirectoryRows datasets={datasets} documents={documents} onOpen={openDataset} onChat={id=>{onSelect(id);onUse("Aegis agent V2");}}/>}
+      {datasets.length > 0 && <DirectoryRows onDelete={canManage?lifecycle.requestDelete:undefined} datasets={datasets} documents={documents} onOpen={openDataset} onChat={id=>{onSelect(id);onUse("Aegis agent V2");}}/>}
       <div className="dataset-grid" hidden={datasets.length>0}>
         {visibleDatasets.map(d => {
           const all = documents.filter(doc => (doc.dataset_id || doc.kb_id) === d.id);

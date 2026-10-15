@@ -6,7 +6,7 @@ from . import core, relational
 
 request_actor = ContextVar('aegis_request_actor', default=None)
 SHARED = {'document', 'template', 'extraction'}
-PRIVATE = {'conversation', 'agent_plan', 'temporary_session', 'temporary_document'}
+PRIVATE = {'conversation', 'agent_plan', 'agent_onboarding', 'temporary_session', 'temporary_document'}
 
 
 def require_admin(actor):
@@ -17,11 +17,12 @@ def require_admin(actor):
 
 
 def dataset_ids(actor, session):
+    live = select(core.Record.id).where(core.Record.kind == 'knowledge_base', core.Record.status != 'deleted')
     if core.is_administrator(actor,session):
-        return set(session.scalars(select(core.Record.id).where(core.Record.kind == 'knowledge_base')))
+        return set(session.scalars(live))
     if not session.get(core.User, actor) and request_actor.get() is None:
-        return set(session.scalars(select(core.Record.id).where(core.Record.kind == 'knowledge_base', core.Record.owner == actor)))
-    return set(session.scalars(select(relational.UserDataset.dataset_id).where(relational.UserDataset.user_id == actor,relational.UserDataset.enabled == True)))
+        return set(session.scalars(live.where(core.Record.owner == actor)))
+    return set(session.scalars(select(relational.UserDataset.dataset_id).where(relational.UserDataset.user_id == actor,relational.UserDataset.enabled == True,relational.UserDataset.dataset_id.in_(live))))
 
 
 def allowed(record, actor, session, datasets=None, models=None):
@@ -35,7 +36,7 @@ def allowed(record, actor, session, datasets=None, models=None):
     if record.kind in PRIVATE:
         dataset_id=record.parent_id
         if record.owner!=actor:return False
-        if not dataset_id and record.kind in {'conversation','agent_plan'}:
+        if not dataset_id and record.kind in {'conversation','agent_plan','agent_onboarding'}:
             try:
                 data=core.store.json(record.ref);dataset_id=data.get('dataset_id') or data.get('kb_id')
             except FileNotFoundError:pass

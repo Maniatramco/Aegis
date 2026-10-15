@@ -1074,6 +1074,8 @@ def export_profile(id:str,owner=Depends(auth)):
 
 
 routing.install_routes(app,auth,write_profile)
+from . import dataset_lifecycle
+dataset_lifecycle.install(app,auth)
 from . import model_registration
 model_registration.install_routes(app,auth)
 

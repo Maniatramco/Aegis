@@ -187,7 +187,12 @@ def process(jid,token):
                 dataset=routing.owned(snapshot['dataset_id'],job.owner,'knowledge_base')
                 if routing.dataset_config(dataset).get('index_generation')!=snapshot['index_generation']:raise ValueError('Dataset embedding configuration changed. Submit a new reindex job.')
                 _process(jid,token,snapshot)
-        else:_process(jid,token,snapshot)
+        else:
+            # Deletion holds this lock through its status commit. A claimed job
+            # blocks deletion; extraction itself retains normal concurrency.
+            with document_lock('dataset-'+snapshot['dataset_id']):
+                routing.owned(snapshot['dataset_id'],job.owner,'knowledge_base')
+            _process(jid,token,snapshot)
 
 def _process(jid,token,snapshot):
     with Session() as s:
