@@ -1,4 +1,4 @@
--- Run as AGS_OWNER. Read-only; no credentials or password hashes selected.
+-- OCI application owner (live reference: ADMIN). Read-only; no credentials selected.
 SELECT u.username, d.dataset_name, g.enabled,
        g.created_at, creator.username AS created_by,
        g.updated_at, updater.username AS updated_by,

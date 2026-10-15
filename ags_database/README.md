@@ -1,54 +1,60 @@
-# Aegis database reference
+# Live OCI Oracle database reference
 
-This folder contains the database definitions, inspection queries and setup
-reference. The current live installation uses Oracle Autonomous AI Database on
-OCI. The supplied `AGS_OWNER` and `FREEPDB1` setup examples describe the separate
-local Oracle Free installation. Use the verified [architecture handover](../ags_docs/Aegis_Architecture_and_Deployment_Handover.docx)
-and [OCI Kubernetes deployment guide](../ags_docs/Aegis_OCI_Kubernetes_Deployment_Guide.docx)
-for the live topology and destination prerequisites.
+`ags_database/` contains native Oracle SQL aligned with the deployed `agsora`
+Autonomous AI Database in `ap-mumbai-1`. Read-only inspection on
+15 October 2026 at 23:54 IST (18:24 UTC) confirmed owner `ADMIN`, mTLS wallet alias
+`agsora_low`, and all thirteen application tables. OCI identifies
+the database as Oracle 26ai; the connected server reports `23.26.4.1.0`.
+No application data or credentials are included in these scripts.
 
-The application has twelve relational tables in Oracle mode. OCI native vector
-storage additionally creates `aegis_knowledge_vectors` through
-`ags_backend/ags_app/oracle_vectors.py`, giving thirteen application tables in
-that mode. The static SQL installer covers the twelve relational tables;
-native `VECTOR` storage is managed separately by the application.
+Local Oracle Free owner creation, the SQLAlchemy-based local DDL generator,
+its twelve-table installer and generated SQL now live under
+[`ags_local_use/ags_database/`](../ags_local_use/ags_database/).
+SQLAlchemy remains part of the live backend's Oracle access layer. Moving the
+local tooling does not remove or replace that runtime dependency.
 
 ## Files and responsibilities
 
 | Folder or file | Purpose |
 | --- | --- |
-| `ags_schema/` | Local owner provisioning and read-only owner verification |
-| `ags_tables/` | Twelve relational table scripts, foreign keys, checks and indexes |
-| `install.sql` | Ordered SQLcl/SQL Developer installation for an empty local schema |
-| `generate_tables.py` | Regenerate reviewable Oracle DDL from application metadata |
-| `ags_queries/` | Operator inspection queries for workflows, models, users and access |
+| `ags_tables/` | Thirteen Oracle table definitions read from live metadata, including native vectors |
+| `install.sql` | Ordered reference installer for a separate empty, prepared Oracle application schema |
+| `ags_schema/verify_live_schema.sql` | Read-only connection, table, column, constraint and vector checks |
+| `ags_queries/` | Read-only workflow, account and dataset-access inspection using the connected owner |
 
-Schema relationships, roles and the legacy owner migration are maintained below.
-Historical local validation results are retained in [Git history](https://github.com/Maniatramco/Aegis/blob/fffaf53259a2bb197267923658411bb36f360aa4/ags_database/ags_docs/VALIDATION.md).
-They are a record of the earlier local setup, not the current live OCI inventory.
+## Verification and installation boundary
 
-## Installation and inspection
+Use a fresh SQLcl or SQL Developer connection with the intended destination's
+wallet and private database credentials. The current live connection uses
+`agsora_low` and owner `ADMIN`. Keep passwords and wallets outside Git.
 
-The application creates its required tables on a fresh installation. For the
-optional local SQL installation, connect as `AGS_OWNER` in `FREEPDB1` and run
-`@ags_database/install.sql` from the repository root on an empty schema. Oracle
-DDL commits implicitly; do not run the fresh installer over existing tables.
+For read-only verification from the repository root, run:
 
-`generate_tables.py` writes the SQL files from the application's metadata and
-requires backend/Oracle Python dependencies. Review generated changes before
-using them. This is a source maintenance tool, not an automatic live migration.
+```sql
+@ags_database/ags_schema/verify_live_schema.sql
+```
 
-Use `ags_schema/verify_owner.sql` to inspect the connected owner and tables, and
-`ags_queries/oracle-queries.sql` for workflow joins. The `Aegis-Local` saved
-SQL Developer connection refers to the laptop installation. Database passwords
-remain in private credentials, secrets and connection storage.
+The script reads schema metadata and checks native vector support. The diagnostic
+queries use unqualified application table names, so they run in the connected
+schema rather than assuming the old local `AGS_OWNER` schema.
 
-User access inspection is in `ags_queries/user-dataset-access.sql` and
-`ags_queries/user_management.sql`. Application writes enforce session revocation,
-audit updates and last-administrator protection; direct SQL updates bypass those
-contracts. Existing installations changing the old `AEGIS` owner must use the
-[legacy migration procedure](#legacy-owner-migration), rather than changing the
-configured username and assuming data will move.
+`install.sql` and `ags_tables/*.sql` are logical schema references and an optional
+rebuild path for an empty, separately prepared Oracle 26ai application schema.
+They are not upgrade scripts for the populated live database. Oracle DDL commits
+implicitly. No installer, table creation, user creation, migration, grant or
+data-changing SQL was executed while aligning this folder.
+
+The SQL preserves the observed 165 columns, defaults, collations, primary/unique/
+foreign/check constraints and twenty application indexes. Schema qualification
+and Autonomous Database managed physical storage clauses are omitted so a
+reviewed destination can use its own owner and storage defaults. LOB/system and
+constraint-backed indexes are managed by Oracle rather than duplicated as
+separate application index statements.
+
+The local-only generator writes exclusively inside `ags_local_use/ags_database/`;
+it cannot overwrite this OCI schema reference. Local setup and the legacy
+`AEGIS` to `AGS_OWNER` procedure are documented in
+[`ags_local_use/README.md`](../ags_local_use/README.md#local-database-tools).
 
 ## Tables and keys
 
@@ -66,11 +72,12 @@ configured username and assuming data will move.
 | `MODEL_CONFIG_TBL` | `MODEL_ID, CATEGORY` | Model name, provider model, category, configuration reference, version and enabled flag |
 | `DATASET_MODEL_TBL` | `DATASET_ID, MODEL_ID, CATEGORY` | Dataset/category model mapping, enabled and default flags |
 | `AEGIS_ITEMS` | `ID` | Internal entity catalog: kind, owner, parent, reference, status and version |
+| `AEGIS_KNOWLEDGE_VECTORS` | `COLLECTION_NAME, POINT_ID` | Native vectors, dimensions, payload and owner/dataset/document scope |
 
 Core account/session/job keys retain the physical column name `ID` to preserve
 existing application interfaces. Workflow entity IDs equal their catalog IDs;
 they are not new IDs invented during migration. There is no separate `records`
-table in AGS_OWNER: that legacy catalog is now `AEGIS_ITEMS`.
+table in the active Oracle schema: that legacy catalog is now `AEGIS_ITEMS`.
 
 ## Workflow relationships
 
@@ -211,16 +218,15 @@ Original/merged files, prompt schemas, extracted field values, citations, merge
 source lists and review JSON remain in persistent application storage (or the
 configured OCI Object Storage). The current OCI installation stores vectors in
 Oracle Autonomous AI Database through the separate `aegis_knowledge_vectors` table.
-Qdrant belongs to the alternative local/self-hosted configuration. The twelve
-relational scripts in `ags_tables/` do not create the native vector table or store the full
-extracted fields.
+Qdrant belongs to the alternative local/self-hosted configuration. The thirteen scripts in `ags_tables/` include the separate native vector
+table. Relational tables retain references rather than the full extracted fields.
 
 `AEGIS_ITEMS` and versioned payloads remain the application's compatibility source;
 the named tables are transactionally maintained relational views of those entities,
 implemented as physical tables. Writing projection tables directly does not update
 the catalog. Native SQLite retains legacy core names to preserve existing native
-workspaces. The `AGS_OWNER` setup examples target local Oracle Free; the live
-Autonomous Database connection is configured separately.
+workspaces. The verified live owner is `ADMIN`; local Oracle Free setup remains
+under `ags_local_use/ags_database/`.
 
 Exact column definitions, constraints and indexes are in `ags_database/ags_tables/*.sql`.
 The query file shows joins and readable time conversion without selecting
@@ -238,52 +244,12 @@ Read-only inspection:
 
 ```sql
 SELECT id, username, role, created_at, updated_at, updated_by, updated_via
-FROM ags_owner.user_tbl
+FROM user_tbl
 ORDER BY username;
 
 SELECT role, COUNT(*) AS account_count
-FROM ags_owner.user_tbl
+FROM user_tbl
 GROUP BY role;
 ```
 
 See [the account guide](https://github.com/Maniatramco/Aegis/blob/a33d5fba9e5c9c62319bb65c42a0341eed8de238/ags_docs/ags_guides/USER-MANAGEMENT.md) and [the relational model](#tables-and-keys). No additional application table or container is required.
-
-## Legacy owner migration
-
-This is a one-time copy, not a rename or destructive move. The source `AEGIS`
-schema is retained. Application users, password hashes, sessions, IDs, versions,
-timestamps, status/error fields and storage references are compared exactly before
-the target transaction commits. Actual row contents and credentials are not logged.
-
-1. Finish/cancel active jobs and stop application writes. Stop web, API and worker.
-2. Create `AGS_OWNER` using the Oracle startup script or `ags_database/ags_schema/create_owner.py`.
-3. Build the updated backend image and run the migration against an **empty** target:
-
-```powershell
-docker compose --project-directory . --env-file .env.oracle -f ags_local_use/compose.oracle.yaml -f ags_local_use/compose.gpu.yaml -f ags_local_use/compose.oracle-client.yaml build api worker
-docker compose --project-directory . --env-file .env.oracle -f ags_local_use/compose.oracle.yaml -f ags_local_use/compose.gpu.yaml -f ags_local_use/compose.oracle-client.yaml stop web api worker
-docker compose --project-directory . --env-file .env.oracle -f ags_local_use/compose.oracle.yaml -f ags_local_use/compose.gpu.yaml -f ags_local_use/compose.oracle-client.yaml run --rm --no-deps api python -m ags_app.migrate_owner --source AEGIS
-docker compose --project-directory . --env-file .env.oracle -f ags_local_use/compose.oracle.yaml -f ags_local_use/compose.gpu.yaml -f ags_local_use/compose.oracle-client.yaml up -d --no-deps --wait api worker web
-```
-
-Omit the GPU override for CPU machines. The migration implementation lives in
-`ags_backend/ags_app/migrate_owner.py` so the identical API image can run it under Docker
-or as a Kubernetes maintenance Job, with the same storage and secrets mounted.
-It refuses a nonempty target or active jobs. Oracle DDL can leave empty tables
-after failure; the data-copy transaction itself rolls back on verification errors.
-Review rows are backfilled from retained reviewed JSON versions.
-
-Fresh installations create the new schema directly; they do not need this copy.
-Do not rerun it against the live migrated schema. There is no automatic migration
-of an existing Oracle cluster during startup.
-
-The old owner is a snapshot, not a continuously synchronized rollback database.
-Before rolling back after new writes, plan how to retain those writes. Immediately
-after migration, rollback can restart the **previous backend image** with its
-previous `ORACLE_USER=AEGIS` configuration and unchanged storage. The new image
-uses renamed tables and must not be pointed at the old schema as a rollback.
-
-Historical `created_by` / `updated_by` were not recorded and remain NULL, with
-`created_via=legacy` and `updated_via=migration`. Legacy accounts/sessions had no
-creation timestamps; their new audit timestamps mark import time. Historical
-review actors/times are recovered from review JSON when available.

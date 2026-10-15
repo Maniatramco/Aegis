@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 import oracledb
 
-root=Path(__file__).resolve().parents[2]
+root=Path(__file__).resolve().parents[3]
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=1521)

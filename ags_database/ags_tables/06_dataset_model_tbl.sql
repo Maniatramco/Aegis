@@ -1,19 +1,22 @@
--- Generated from ags_backend/ags_app/core.py and relational.py. Run as AGS_OWNER on an empty schema.
-CREATE TABLE dataset_model_tbl (
-	dataset_id VARCHAR2(80 CHAR) NOT NULL,
-	model_id VARCHAR2(80 CHAR) NOT NULL,
-	category VARCHAR2(24 CHAR) NOT NULL,
-	enabled BOOLEAN NOT NULL,
-	is_default BOOLEAN NOT NULL,
-	created_at BINARY_DOUBLE NOT NULL,
-	updated_at BINARY_DOUBLE NOT NULL,
-	created_by VARCHAR2(80 CHAR),
-	updated_by VARCHAR2(80 CHAR),
-	created_via VARCHAR2(24 CHAR) NOT NULL,
-	updated_via VARCHAR2(24 CHAR) NOT NULL,
-	PRIMARY KEY (dataset_id, model_id, category),
-	CONSTRAINT fk_dataset_model_category FOREIGN KEY(model_id, category) REFERENCES model_config_tbl (model_id, category),
-	FOREIGN KEY(dataset_id) REFERENCES dataset_tbl (dataset_id) ON DELETE CASCADE,
-	FOREIGN KEY(created_by) REFERENCES user_tbl (id),
-	FOREIGN KEY(updated_by) REFERENCES user_tbl (id)
-);
+-- OCI Autonomous Database logical schema read from live agsora, owner ADMIN.
+-- Verified 2026-10-15T18:24:27.101837+00:00; server 23.26.4.1.0.
+-- Reference/rebuild for an empty prepared application schema only; never run on the live populated schema.
+-- Managed storage clauses and schema qualification omitted; logical definitions preserved.
+CREATE TABLE "DATASET_MODEL_TBL" (
+  "DATASET_ID" VARCHAR2(80 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "MODEL_ID" VARCHAR2(80 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "CATEGORY" VARCHAR2(24 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "ENABLED" BOOLEAN NOT NULL ENABLE,
+  "IS_DEFAULT" BOOLEAN NOT NULL ENABLE,
+  "CREATED_AT" BINARY_DOUBLE NOT NULL ENABLE,
+  "UPDATED_AT" BINARY_DOUBLE NOT NULL ENABLE,
+  "CREATED_BY" VARCHAR2(80 CHAR) COLLATE "USING_NLS_COMP",
+  "UPDATED_BY" VARCHAR2(80 CHAR) COLLATE "USING_NLS_COMP",
+  "CREATED_VIA" VARCHAR2(24 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "UPDATED_VIA" VARCHAR2(24 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  PRIMARY KEY ("DATASET_ID", "MODEL_ID", "CATEGORY"),
+  CONSTRAINT "FK_DATASET_MODEL_CATEGORY" FOREIGN KEY ("MODEL_ID", "CATEGORY") REFERENCES "MODEL_CONFIG_TBL" ("MODEL_ID", "CATEGORY") ENABLE,
+  FOREIGN KEY ("DATASET_ID") REFERENCES "DATASET_TBL" ("DATASET_ID") ON DELETE CASCADE ENABLE,
+  FOREIGN KEY ("CREATED_BY") REFERENCES "USER_TBL" ("ID") ENABLE,
+  FOREIGN KEY ("UPDATED_BY") REFERENCES "USER_TBL" ("ID") ENABLE
+) DEFAULT COLLATION "USING_NLS_COMP";

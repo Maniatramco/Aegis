@@ -1,18 +1,21 @@
--- Generated from ags_backend/ags_app/core.py and relational.py. Run as AGS_OWNER on an empty schema.
-CREATE TABLE user_tbl (
-	id VARCHAR2(80 CHAR) NOT NULL,
-	username VARCHAR2(120 CHAR) NOT NULL,
-	password_hash CLOB NOT NULL,
-	role VARCHAR2(20 CHAR) DEFAULT 'user' NOT NULL,
-	created_at BINARY_DOUBLE NOT NULL,
-	updated_at BINARY_DOUBLE NOT NULL,
-	created_by VARCHAR2(80 CHAR),
-	updated_by VARCHAR2(80 CHAR),
-	created_via VARCHAR2(24 CHAR) NOT NULL,
-	updated_via VARCHAR2(24 CHAR) NOT NULL,
-	PRIMARY KEY (id),
-	CONSTRAINT ck_user_role CHECK (role IN ('user', 'administrator')),
-	UNIQUE (username),
-	FOREIGN KEY(created_by) REFERENCES user_tbl (id),
-	FOREIGN KEY(updated_by) REFERENCES user_tbl (id)
-);
+-- OCI Autonomous Database logical schema read from live agsora, owner ADMIN.
+-- Verified 2026-10-15T18:24:27.101837+00:00; server 23.26.4.1.0.
+-- Reference/rebuild for an empty prepared application schema only; never run on the live populated schema.
+-- Managed storage clauses and schema qualification omitted; logical definitions preserved.
+CREATE TABLE "USER_TBL" (
+  "ID" VARCHAR2(80 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "USERNAME" VARCHAR2(120 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "PASSWORD_HASH" CLOB COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "ROLE" VARCHAR2(20 CHAR) COLLATE "USING_NLS_COMP" DEFAULT 'user' NOT NULL ENABLE,
+  "CREATED_AT" BINARY_DOUBLE NOT NULL ENABLE,
+  "UPDATED_AT" BINARY_DOUBLE NOT NULL ENABLE,
+  "CREATED_BY" VARCHAR2(80 CHAR) COLLATE "USING_NLS_COMP",
+  "UPDATED_BY" VARCHAR2(80 CHAR) COLLATE "USING_NLS_COMP",
+  "CREATED_VIA" VARCHAR2(24 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  "UPDATED_VIA" VARCHAR2(24 CHAR) COLLATE "USING_NLS_COMP" NOT NULL ENABLE,
+  CONSTRAINT "CK_USER_ROLE" CHECK (role IN ('user', 'administrator')) ENABLE,
+  PRIMARY KEY ("ID"),
+  UNIQUE ("USERNAME"),
+  FOREIGN KEY ("CREATED_BY") REFERENCES "USER_TBL" ("ID") ENABLE,
+  FOREIGN KEY ("UPDATED_BY") REFERENCES "USER_TBL" ("ID") ENABLE
+) DEFAULT COLLATION "USING_NLS_COMP";

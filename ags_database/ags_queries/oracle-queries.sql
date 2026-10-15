@@ -1,5 +1,5 @@
--- Saved VS Code connection: Aegis-Local, Oracle user AGS_OWNER.
--- Highlight a statement and press Ctrl+Enter.
+-- OCI Autonomous Database: connect to the intended application owner with its own wallet.
+-- Live reference: agsora_low / ADMIN. These queries only read application/schema metadata.
 SELECT USER AS connected_owner, SYS_CONTEXT('USERENV','SERVICE_NAME') AS service_name FROM dual;
 SELECT table_name FROM user_tables ORDER BY table_name;
 SELECT COUNT(*) AS application_table_count FROM user_tables;
@@ -54,11 +54,6 @@ ORDER BY e.created_at DESC,j.created_at DESC;
 SELECT review_id,extract_id,extraction_version,review_version,status,
        reviewed_result_reference,created_by,created_at,updated_by,updated_at
 FROM review_tbl ORDER BY created_at DESC;
-
--- Inspect the previously verified three-profile result.
-SELECT e.extract_id,e.filename,e.status,e.version,j.id AS job_id,j.status AS job_status,j.progress
-FROM extract_tbl e LEFT JOIN job_tbl j ON j.extract_id=e.extract_id
-WHERE e.extract_id='6efc597a-01e6-445a-9372-aa7e2578f686';
 
 -- Display a Unix epoch audit timestamp in India time.
 SELECT dataset_name,
