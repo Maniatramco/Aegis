@@ -21,7 +21,7 @@ def _sdk():
         import oci
         return oci
     except ImportError:
-        raise OCIProviderUnavailable('OCI SDK missing; install requirements-oci.txt') from None
+        raise OCIProviderUnavailable('OCI SDK missing; install requirements.txt') from None
 
 
 def _client(service: str, endpoint: str | None = None, *, region=None, auth_mode=None, profile=None, config_file=None, key_file=None):

@@ -1,3 +1,0 @@
-# Optional CPU reranking runtime; inference reads only local model files.
-onnxruntime==1.30.0
-tokenizers==0.23.2

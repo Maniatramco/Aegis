@@ -60,7 +60,7 @@ def _load(directory):
         options.inter_op_num_threads=1
         session=ort.InferenceSession(str(Path(directory)/'onnx/model.onnx'),sess_options=options,providers=['CPUExecutionProvider'])
     except Exception as exc:
-        raise RerankerError('Local reranker could not load. Install ags_backend/requirements-reranker.txt and check the model files.') from exc
+        raise RerankerError('Local reranker could not load. Install ags_backend/requirements.txt and check the model files.') from exc
     _loaded_paths.add(directory)
     return tokenizer,session,question_tokenizer
 

@@ -246,7 +246,7 @@ class QueueTransport:
             elif not configured:
                 state, reason = 'not_configured', 'OCI_QUEUE_ID, HTTPS OCI_QUEUE_ENDPOINT and supported OCI_AUTH_MODE are required'
             elif not sdk_available:
-                state, reason = 'not_configured', 'OCI SDK missing; install requirements-oci.txt'
+                state, reason = 'not_configured', 'OCI SDK missing; install requirements.txt'
             elif not live_verified:
                 state, reason = 'unverified', 'OCI transport configured; publish/receive/terminal-ack round trip is not verified in this process'
             else:
