@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# Frozen to the base image used by the current OCI deployment.
+FROM python:3.12.15-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
 WORKDIR /app
 COPY requirements.txt requirements-local.txt requirements-models.txt requirements-oracle.txt ./
 ARG INSTALL_LOCAL_EMBEDDINGS=true

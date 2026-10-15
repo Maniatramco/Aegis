@@ -223,12 +223,14 @@ cluster mutations are selected image updates for `web`, `api` and `worker` only.
 Before release, verify the approved source's backend tests, frontend unit tests,
 type checks and production build using `ags_testing/README.md`. Reuse completed
 evidence only when it applies to the exact unchanged source. Build with the
-committed lockfiles and the existing OCI feature profile; do not upgrade packages
+committed lockfiles, pinned base-image digests and the existing OCI feature
+profile; do not upgrade packages
 or change build flags to fix unrelated failures. The helper currently builds
-with Oracle/OCI enabled and optional in-process embeddings/native cloud model
-SDKs disabled. Ollama and OpenAI-compatible Gemini use their existing remote
-endpoints; their model files/registrations are not installed or replaced here.
-Confirm any selected native provider's SDK is present before using this helper.
+with Oracle/OCI and native cloud model SDKs enabled, matching the live image;
+requirements-models.txt also pins their transitive dependencies. In-process local
+embeddings stay disabled, as on live. Ollama and OpenAI-compatible Gemini use
+their existing remote endpoints; model files/registrations are not installed or
+replaced here. Confirm required provider connectivity separately.
 Build the exact local images before the final approval using the same OCI profile:
 
 ```powershell
@@ -236,7 +238,7 @@ $WebImage = "$Registry/$RegistryNamespace/ags-aegis-web`:$Release"
 $BackendImage = "$Registry/$RegistryNamespace/ags-aegis-backend`:$Release"
 docker build --platform $Platform -t $WebImage "$SourcePath/ags_frontend"
 if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
-docker build --platform $Platform --build-arg INSTALL_LOCAL_EMBEDDINGS=false --build-arg INSTALL_CLOUD_MODELS=false --build-arg INSTALL_ORACLE=true --build-arg INSTALL_OCI=true -t $BackendImage "$SourcePath/ags_backend"
+docker build --platform $Platform --build-arg INSTALL_LOCAL_EMBEDDINGS=false --build-arg INSTALL_CLOUD_MODELS=true --build-arg INSTALL_ORACLE=true --build-arg INSTALL_OCI=true -t $BackendImage "$SourcePath/ags_backend"
 if ($LASTEXITCODE -ne 0) { throw 'Backend build failed.' }
 docker image inspect $WebImage $BackendImage --format '{{.Id}} {{.Os}}/{{.Architecture}}'
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the prepared release images.' }

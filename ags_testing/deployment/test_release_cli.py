@@ -214,6 +214,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn('schema-check', self.runner.events)
         self.assertNotIn('install', self.runner.events)
         self.assertEqual(self.runner.after['deployments']['aegis-web'], self.runner.before['deployments']['aegis-web'])
+        build = next(call for call in self.runner.calls if call[:2] == ['docker', 'build'])
+        self.assertIn('INSTALL_CLOUD_MODELS=true', build)
+        self.assertIn('INSTALL_LOCAL_EMBEDDINGS=false', build)
+        self.assertIn('INSTALL_ORACLE=true', build)
 
     def test_database_verify_only_builds_nothing_and_needs_no_publish_approval(self):
         self.select(False, False, 'verify')
@@ -752,6 +756,10 @@ function global:kubectl {
                     for arguments in matching:
                         component = 'frontend' if any('ags-aegis-web:' in value for value in arguments) else 'backend'
                         self.assertIn(component, chosen)
+                        if verb == 'build' and component == 'backend':
+                            self.assertIn('INSTALL_CLOUD_MODELS=true', arguments)
+                            self.assertIn('INSTALL_LOCAL_EMBEDDINGS=false', arguments)
+                            self.assertIn('INSTALL_ORACLE=true', arguments)
                 updates = [call['arguments'] for call in calls if call['tool']=='kubectl' and 'set' in call['arguments']]
                 self.assertEqual(len(updates), len(chosen))
                 for arguments in updates:

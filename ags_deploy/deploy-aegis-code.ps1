@@ -81,7 +81,7 @@ if (-not $SkipBuild) {
     if ($deployBackend) {
         Invoke-Checked -Program docker -Arguments @('build', '--platform', $Platform,
             '--build-arg', 'INSTALL_LOCAL_EMBEDDINGS=false',
-            '--build-arg', 'INSTALL_CLOUD_MODELS=false',
+            '--build-arg', 'INSTALL_CLOUD_MODELS=true',
             '--build-arg', 'INSTALL_ORACLE=true', '--build-arg', 'INSTALL_OCI=true',
             '-t', $backendImage, (Join-Path $source 'ags_backend'))
     }

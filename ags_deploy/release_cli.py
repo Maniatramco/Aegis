@@ -502,7 +502,7 @@ class Workflow:
             self.runner.interactive(['docker', 'build', '--platform', self.platform, '-t', self.web_image, str(self.source/'ags_frontend')])
         if self.backend:
             self.runner.interactive(['docker', 'build', '--platform', self.platform,
-                                     '--build-arg', 'INSTALL_LOCAL_EMBEDDINGS=false', '--build-arg', 'INSTALL_CLOUD_MODELS=false',
+                                     '--build-arg', 'INSTALL_LOCAL_EMBEDDINGS=false', '--build-arg', 'INSTALL_CLOUD_MODELS=true',
                                      '--build-arg', 'INSTALL_ORACLE=true', '--build-arg', 'INSTALL_OCI=true',
                                      '-t', self.backend_image, str(self.source/'ags_backend')])
         self.image_ids = self.inspect_image_ids()

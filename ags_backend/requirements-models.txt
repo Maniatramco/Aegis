@@ -1,4 +1,9 @@
-# Optional native model protocols. Install once on API and worker hosts.
+# Native model protocols and their transitive pins, matched to the live OCI image.
 boto3==1.43.109
+botocore==1.43.114
 google-auth[requests]==2.61.0
+jmespath==1.1.0
 oci==2.187.2
+pyasn1==0.6.4
+pyasn1_modules==0.4.2
+s3transfer==0.19.2
