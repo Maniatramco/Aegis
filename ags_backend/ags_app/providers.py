@@ -7,6 +7,7 @@ import httpx
 # import can expose qdrant_client.http's partially initialized AsyncApiClient.
 from qdrant_client import QdrantClient
 from .core import settings, api_key, store, oci_api_key, execution_context
+from . import runtime_config
 
 class ProviderError(RuntimeError):pass
 def ollama_call(operation,*args):
@@ -328,8 +329,8 @@ async def answer_stream_async(question,sources,history=None):
     if not completed:raise ProviderError('OpenAI stream ended before completion')
 
 def evidence_limit(schema):
-    if schema.get('type')=='array':return 32
-    if schema.get('type')=='object':return max(1,min(64,sum(evidence_limit(value) for value in schema.get('properties',{}).values())))
+    if schema.get('type')=='array':return runtime_config.get('AEGIS_EVIDENCE_ARRAY_ITEMS')
+    if schema.get('type')=='object':return max(1,min(runtime_config.get('AEGIS_EVIDENCE_FIELD_LIMIT'),sum(evidence_limit(value) for value in schema.get('properties',{}).values())))
     return 1
 
 
@@ -337,7 +338,7 @@ def evidence_schema(schema,compact=False):
     # Evidence is optional per field. Large nested templates previously allowed
     # 64 repeated quotes to consume the local output budget before JSON closed.
     # Bound supporting quotes without limiting any extracted data/array items.
-    return {'type':'object','properties':{'data':schema,'evidence':{'type':'array',**({'maxItems':min(8,evidence_limit(schema))} if compact else {}),'items':{'type':'object','properties':{'field':{'type':'string'},'chunk_id':{'type':'string'},'quote':{'type':'string',**({'maxLength':160} if compact else {})}},'required':['field','chunk_id','quote'],'additionalProperties':False}}},'required':['data','evidence'],'additionalProperties':False}
+    return {'type':'object','properties':{'data':schema,'evidence':{'type':'array',**({'maxItems':min(runtime_config.get('AEGIS_COMPACT_EVIDENCE_ITEMS'),evidence_limit(schema))} if compact else {}),'items':{'type':'object','properties':{'field':{'type':'string'},'chunk_id':{'type':'string'},'quote':{'type':'string',**({'maxLength':runtime_config.get('AEGIS_COMPACT_EVIDENCE_QUOTE_CHARS')} if compact else {})}},'required':['field','chunk_id','quote'],'additionalProperties':False}}},'required':['data','evidence'],'additionalProperties':False}
 
 
 def extract_with_evidence(text,schema,sources):

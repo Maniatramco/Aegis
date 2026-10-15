@@ -5,9 +5,9 @@ import copy,json,time
 from contextlib import nullcontext
 from sqlalchemy import select
 from fastapi import HTTPException
-from .. import core, knowledge, providers, dataset_access as access, relational
+from .. import core, knowledge, providers, dataset_access as access, relational, runtime_config
 
-MAX_POINTS=6000
+MAX_POINTS=runtime_config.get('AEGIS_CHAT_KNOWLEDGE_MAX_POINTS')
 
 class PublishedKnowledge:
     def __init__(self,actor,dataset_id='',document_ids=None):
@@ -88,7 +88,7 @@ class PublishedKnowledge:
             self.search_diagnostics={'mode':'hybrid','reranker_enabled':active,'eligible_points':0,'returned_entities':0}
             return []
         points={id:self.manifest['points'][id] for id in permitted}
-        candidates=min(50,reranker.candidate_limit(limit) if active else max(25,limit))
+        candidates=min(runtime_config.get('AEGIS_CHAT_SEARCH_CANDIDATES_MAX'),reranker.candidate_limit(limit) if active else max(runtime_config.get('AEGIS_RERANK_CANDIDATES'),limit))
         with (progress.step('Hybrid search') if progress else nullcontext()),core.execution_context(self.snapshot):
             keywords=keyword_ranks(query,points,candidates)
             vector=providers.embed([query],query=True)[0]

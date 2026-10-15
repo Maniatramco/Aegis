@@ -21,11 +21,12 @@ import threading
 from urllib.parse import urlparse
 
 from .oci_adapters import OCIProviderUnavailable, OCIQueueAdapter, OCIServiceFailure
+from . import runtime_config
 
 
 logger = logging.getLogger(__name__)
 TERMINAL_STATUSES = frozenset({'completed', 'failed', 'cancelled'})
-VISIBILITY_SECONDS = 900
+VISIBILITY_SECONDS = runtime_config.get('AEGIS_WORKER_LEASE_SECONDS')
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,7 @@ import re
 import time
 import logging
 import httpx
+from .... import runtime_config
 from jsonschema import validate
 
 def base_url():
@@ -87,8 +88,8 @@ def generation_options(messages,max_output):
     from .... import core
     from ....model_parameters import validate_parameters
     cfg=core.settings();max_output=cfg.get('max_output_tokens') or max_output
-    needed=len(json.dumps(messages,ensure_ascii=False).encode('utf-8'))//2+max_output+512
-    limit=cfg.get('context_limit') or 32768
+    needed=len(json.dumps(messages,ensure_ascii=False).encode('utf-8'))//2+max_output+runtime_config.get('AEGIS_CONTEXT_HEADROOM_TOKENS')
+    limit=cfg.get('context_limit') or runtime_config.get('AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS')
     if isinstance(limit,bool) or not isinstance(limit,int) or not 1<=limit<=2097152:
         raise OllamaError('Invalid context budget. Set a supported token limit in Model Registration.')
     if needed>limit:
@@ -97,11 +98,11 @@ def generation_options(messages,max_output):
     while context<needed:context=min(context*2,limit)
     try:extra=validate_parameters(cfg.get('extra_parameters',{}),'ollama','chat')
     except ValueError as exc:raise OllamaError(str(exc)) from exc
-    batch=os.getenv('AEGIS_OLLAMA_BATCH_SIZE','')
-    if batch and (not batch.isdecimal() or not 1<=int(batch)<=2048):raise OllamaError('Invalid local inference batch size. Use a value from 1 to 2048.')
+    try:batch=runtime_config.get('AEGIS_OLLAMA_BATCH_SIZE')
+    except runtime_config.ConfigurationError as exc:raise OllamaError('Invalid local inference batch size. '+str(exc)) from exc
     return {'temperature':0.7,'top_p':0.8,'top_k':20,'repeat_penalty':1.1,
             **({'num_batch':int(batch)} if batch else {}),
-            'num_ctx':context,'num_predict':max_output,'seed':42,**{k:v for k,v in extra.items() if k!='keep_alive'},**({'num_gpu':0} if os.getenv('AEGIS_INFERENCE_DEVICE')=='cpu' else {})}
+            'num_ctx':context,'num_predict':max_output,'seed':42,**{k:v for k,v in extra.items() if k!='keep_alive'},**({'num_gpu':0} if runtime_config.get('AEGIS_INFERENCE_DEVICE')=='cpu' else {})}
 
 
 def request_parameters(embedding=False):
@@ -214,7 +215,7 @@ def embed(model,texts,timeout):
         for text in texts:check_budget(cfg,text,embedding=True)
     except ValueError as exc:raise OllamaError(str(exc)) from exc
     dim=(cfg.get('embedding_connection') or {}).get('dimensions')
-    data=request('/api/embed',{'model':local_model_name(model),'input':texts,'truncate':False,**({'dimensions':dim} if dim else {}),**({'options':{'num_gpu':0}} if os.getenv('AEGIS_INFERENCE_DEVICE')=='cpu' else {}),**request_parameters(embedding=True)},timeout)
+    data=request('/api/embed',{'model':local_model_name(model),'input':texts,'truncate':False,**({'dimensions':dim} if dim else {}),**({'options':{'num_gpu':0}} if runtime_config.get('AEGIS_INFERENCE_DEVICE')=='cpu' else {}),**request_parameters(embedding=True)},timeout)
     vectors=data.get('embeddings')
     if not isinstance(vectors,list) or len(vectors)!=len(texts):raise OllamaError('Local Ollama returned an invalid embedding count.')
     result=[];dimension=None

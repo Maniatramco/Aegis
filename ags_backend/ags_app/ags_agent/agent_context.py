@@ -9,6 +9,7 @@ import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from .. import providers
+from .. import runtime_config
 
 _observer=ContextVar('agent_context_observer',default=None)
 READS={'list_documents','list_datasets','list_prompts','get_dataset_status',
@@ -54,7 +55,8 @@ def fit(messages,cfg,output_tokens,serialize,stage):
     `_context` tags are assigned only by server code. A user cannot authorize
     removing evidence or make text into a system message by supplying tags.
     """
-    limit=cfg.get('context_limit') or 32768
+    limit=cfg.get('context_limit') or runtime_config.get('AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS')
+    headroom=runtime_config.get('AEGIS_CONTEXT_HEADROOM_TOKENS')
     if isinstance(limit,bool) or not isinstance(limit,int) or not 1<=limit<=2097152:
         raise providers.ProviderError('Invalid model context limit. Check Model Registration.')
     if isinstance(output_tokens,bool) or not isinstance(output_tokens,int) or output_tokens<1:
@@ -74,7 +76,7 @@ def fit(messages,cfg,output_tokens,serialize,stage):
     def measure():
         wire=serialize([clean(m) for m in packed])
         wire_bytes=len(json.dumps(wire,ensure_ascii=False).encode('utf-8'))
-        return wire,wire_bytes,(wire_bytes+1)//2+output_tokens+512
+        return wire,wire_bytes,(wire_bytes+1)//2+output_tokens+headroom
     wire,wire_bytes,total=measure()
     for kind,unit in groups:
         if total<=limit:break
@@ -82,7 +84,7 @@ def fit(messages,cfg,output_tokens,serialize,stage):
         removed[kind]+=1
         wire,wire_bytes,total=measure()
     audit={'stage':stage,'context_limit':limit,'estimated_input_tokens':(wire_bytes+1)//2,
-        'reserved_output_tokens':output_tokens,'safety_tokens':512,'estimated_total_tokens':total,
+        'reserved_output_tokens':output_tokens,'safety_tokens':headroom,'estimated_total_tokens':total,
         'history_turns_dropped':removed['history'],'example_pairs_dropped':removed['example'],
         'duplicate_reads_removed':duplicates,'dispatch_allowed':total<=limit}
     callback=_observer.get()

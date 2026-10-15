@@ -13,6 +13,7 @@ import time
 
 import httpx
 from jsonschema import validate
+from . import runtime_config
 
 _pdf_lock = threading.Lock()  # PDFium is not thread safe, even across documents.
 SCHEMA = {'type': 'object', 'additionalProperties': False,
@@ -33,23 +34,23 @@ class OcrError(ValueError):
 
 def config():
     from .ollama_provider import local_model_name
-    enabled = os.getenv('AEGIS_OCR_ENABLED', 'true').lower() == 'true'
     try:
-        timeout = int(os.getenv('AEGIS_OCR_TIMEOUT', '1200'))
-        output = int(os.getenv('AEGIS_OCR_MAX_TOKENS', '3000'))
-        context = int(os.getenv('AEGIS_OCR_CONTEXT', '8192'))
-        dpi = int(os.getenv('AEGIS_OCR_DPI', '180'))
-        batch = int(os.getenv('AEGIS_OCR_BATCH', '128'))
-        if not 30 <= timeout <= 3600 or not 512 <= output <= 8192 or not output + 2048 <= context <= 32768 or not 100 <= dpi <= 300 or not 32 <= batch <= 1024:
+        enabled = runtime_config.get('AEGIS_OCR_ENABLED')
+        timeout = runtime_config.get('AEGIS_OCR_TIMEOUT')
+        output = runtime_config.get('AEGIS_OCR_MAX_TOKENS')
+        context = runtime_config.get('AEGIS_OCR_CONTEXT')
+        dpi = runtime_config.get('AEGIS_OCR_DPI')
+        batch = runtime_config.get('AEGIS_OCR_BATCH')
+        if context < output + runtime_config.get('AEGIS_OCR_INPUT_HEADROOM_TOKENS'):
             raise ValueError()
         from . import core
         cloud = (core._execution.get() or {}).get('ocr_execution')
         if cloud:
             from .ags_models.providers.ags_gcp import ocr as gemini_ocr
             return gemini_ocr.configure(cloud, dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch))
-        model = local_model_name(os.getenv('AEGIS_OCR_MODEL', 'qwen2.5vl:3b'))
+        model = local_model_name(runtime_config.get('AEGIS_OCR_MODEL'))
         from .model_connections import validate_endpoint
-        endpoint = validate_endpoint(os.getenv('AEGIS_OCR_URL') or os.getenv('AEGIS_OLLAMA_URL', 'http://127.0.0.1:11434'), 'ollama')
+        endpoint = validate_endpoint(runtime_config.get('AEGIS_OCR_URL') or os.getenv('AEGIS_OLLAMA_URL', 'http://127.0.0.1:11434'), 'ollama')
     except Exception:
         raise OcrError('OCR configuration is invalid. Check the selected model, endpoint and OCR limits.') from None
     return dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch, model=model, endpoint=endpoint, protocol=3, provider='ollama', digest_type='weights')
@@ -150,7 +151,7 @@ def transcribe(image, cfg):
         'content': 'Transcribe every visible line, in reading order. Your JSON MUST have exactly these two keys: {"text":"full transcription as one string with newline characters", "unreadable":false}. Do not use document fields as keys. Set unreadable true if any text is unclear.',
         'images': [base64.b64encode(image).decode('ascii')]}],
         'options': {'temperature': 0.1, 'repeat_penalty':1.1, 'seed': 42, 'num_ctx': cfg['context'], 'num_predict': cfg['output'], 'num_batch':cfg['batch'],
-                    **({'num_gpu':0} if os.getenv('AEGIS_OCR_FORCE_CPU','false').lower()=='true' else {})}, 'keep_alive': os.getenv('AEGIS_OCR_KEEP_ALIVE','0')})
+                    **({'num_gpu':0} if runtime_config.get('AEGIS_OCR_FORCE_CPU') else {})}, 'keep_alive': runtime_config.get('AEGIS_OCR_KEEP_ALIVE')})
     if not result.get('done') or result.get('done_reason') == 'length':
         raise OcrError('OCR output was incomplete. Increase AEGIS_OCR_MAX_TOKENS and AEGIS_OCR_CONTEXT or split the page, then retry. Partial text was not indexed.')
     try:

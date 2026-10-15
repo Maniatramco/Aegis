@@ -2,6 +2,7 @@
 import copy
 import json
 import math
+from .. import runtime_config
 
 
 class ParameterError(ValueError):
@@ -57,7 +58,7 @@ def validate_parameters(parameters, protocol, category, connection=None):
 def check_budget(cfg, contents, embedding=False, output_tokens=None):
     limit = cfg.get('embedding_context_limit' if embedding else 'context_limit')
     if limit is None: return
-    reserved = 0 if embedding else (output_tokens if output_tokens is not None else cfg.get('max_output_tokens', 4096)) + 512
+    reserved = 0 if embedding else (output_tokens if output_tokens is not None else cfg.get('max_output_tokens', runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS'))) + runtime_config.get('AEGIS_CONTEXT_HEADROOM_TOKENS')
     # Conservative UTF-8 estimate, not a provider-specific tokenizer. Never truncate input.
     needed = (len(json.dumps(contents, ensure_ascii=False).encode('utf-8')) + 1) // 2 + reserved
     if needed > limit:

@@ -10,7 +10,7 @@ from fastapi import Depends, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field,model_validator
 from typing import Literal
-from .. import core, dataset_models as routing, providers
+from .. import core, dataset_models as routing, providers, runtime_config
 from ..temporary_chat import chat_snapshot
 from ..json_documents import json_document_text
 
@@ -518,7 +518,7 @@ def install(app, auth, main):
         if body.document_ids: routing.documents_scope(owner, body.dataset_id, body.document_ids)
         if body.template_id: routing.owned(body.template_id, owner, 'template')
         from . import chat_agent
-        graph_enabled=os.getenv('AEGIS_AGENT_ENGINE','langgraph')!='legacy' or body.agent_operation is not None
+        graph_enabled=runtime_config.get('AEGIS_AGENT_ENGINE')!='legacy' or body.agent_operation is not None
         context=chat_agent.routing_context(body,owner) if graph_enabled and (chat_agent.enabled() or body.agent_operation) else application_context(body.model_dump(),owner)
         # Resolve one snapshot. A dataset snapshot already validates the chosen
         # chat model and profile, so a separate global snapshot is redundant.

@@ -11,6 +11,7 @@ from .connection import ConnectionError, ModelConnection, validate_connection, v
 from .parameters import validate_parameters
 from .validation import temporary_credentials
 from .catalog import choices
+from .. import runtime_config
 
 
 def probe_agent(cfg):
@@ -45,7 +46,7 @@ class RegistrationInput(BaseModel):
     category: Literal['embedding', 'chat', 'extraction']
     provider_model: str = Field(min_length=1, max_length=200)
     connection: ConnectionInput
-    timeout: int = Field(default=60, ge=5, le=1800)
+    timeout: int = Field(default=runtime_config.get('AEGIS_MODEL_REGISTRATION_TIMEOUT'), ge=5, le=1800)
     context_limit: int | None = Field(default=None, ge=1, le=2097152, strict=True)
     max_output_tokens: int | None = Field(default=None, ge=1, le=131072, strict=True)
     extra_parameters: dict | None = None
@@ -95,7 +96,7 @@ def prepare(body, owner, existing=None):
         old_cfg = snapshot['settings'] if existing else {}
         context_key = 'embedding_context_limit' if role == 'embedding' else 'context_limit'
         extra_key = 'embedding_extra_parameters' if role == 'embedding' else 'extra_parameters'
-        cfg[context_key] = body.context_limit if body.context_limit is not None else old_cfg.get(context_key) or (8192 if role == 'embedding' else 32768)
+        cfg[context_key] = body.context_limit if body.context_limit is not None else old_cfg.get(context_key) or runtime_config.get('AEGIS_DEFAULT_EMBEDDING_INPUT_TOKENS' if role == 'embedding' else 'AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS')
         params = body.extra_parameters if body.extra_parameters is not None else old_cfg.get(extra_key, {})
         try:
             cfg[extra_key] = validate_parameters(params, c['protocol'], body.category, c)
@@ -105,9 +106,9 @@ def prepare(body, owner, existing=None):
             if body.max_output_tokens is not None:
                 raise ConnectionError('Embedding models return vectors; output tokens apply only to Chat and Extraction.')
         else:
-            cfg['max_output_tokens'] = body.max_output_tokens if body.max_output_tokens is not None else old_cfg.get('max_output_tokens') or 4096
-            if cfg['max_output_tokens'] + 512 >= cfg['context_limit']:
-                raise ConnectionError('Context tokens must exceed maximum output tokens plus 512 tokens of headroom.')
+            cfg['max_output_tokens'] = body.max_output_tokens if body.max_output_tokens is not None else old_cfg.get('max_output_tokens') or runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS')
+            if cfg['max_output_tokens'] + runtime_config.get('AEGIS_CONTEXT_HEADROOM_TOKENS') >= cfg['context_limit']:
+                raise ConnectionError('Context tokens must exceed maximum output tokens plus '+str(runtime_config.get('AEGIS_CONTEXT_HEADROOM_TOKENS'))+' tokens of headroom.')
         return cfg, secret, (md['capabilities'] if md else [body.category])
     except ConnectionError as exc:
         raise HTTPException(400, str(exc)) from exc

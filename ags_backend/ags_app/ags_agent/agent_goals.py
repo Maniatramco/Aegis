@@ -6,11 +6,11 @@ has a durable lease, bounded retries and a conversation-level deduplication key.
 """
 import time
 from fastapi import HTTPException
-from .. import core, dataset_models as routing, providers
+from .. import core, dataset_models as routing, providers, runtime_config
 
 ACTIVE = {'queued','running','retry_wait'}
-MAX_ATTEMPTS = 3
-LEASE_SECONDS = 900
+MAX_ATTEMPTS = runtime_config.get('AEGIS_GOAL_MAX_ATTEMPTS')
+LEASE_SECONDS = runtime_config.get('AEGIS_GOAL_LEASE_SECONDS')
 
 def save(record,data):
     from .agent_workspace import save_plan

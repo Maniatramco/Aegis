@@ -9,6 +9,8 @@ x-backend: &backend
   environment: &backend-env
     DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD:?Run local/ags_scripts/setup.sh first}@db:5432/aegis
     AEGIS_STORAGE_ROOT: /data
+    AEGIS_CONFIG_FILE: /etc/aegis/runtime.toml
+    AEGIS_CONFIG_PROFILE: ${AEGIS_CONFIG_PROFILE:-default}
     AEGIS_MASTER_KEY: ${AEGIS_MASTER_KEY:?Run local/ags_scripts/setup.sh first}
     AEGIS_BOOTSTRAP_TOKEN: ${AEGIS_BOOTSTRAP_TOKEN:?Run local/ags_scripts/setup.sh first}
     QDRANT_URL: http://qdrant:6333
@@ -30,6 +32,7 @@ x-backend: &backend
     OCI_QUEUE_ENDPOINT: ${OCI_QUEUE_ENDPOINT:-}
   volumes:
     - storage:/data
+    - ./ags_backend/ags_app/ags_config/runtime.toml:/etc/aegis/runtime.toml:ro
   depends_on:
     db:
       condition: service_healthy

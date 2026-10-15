@@ -11,7 +11,7 @@ from test_chat_hybrid_required import install_models
 def test_default_and_profile_limits(monkeypatch):
     for key in ('AEGIS_CHAT_CONTEXT_TOKENS','AEGIS_CHAT_EVIDENCE_BYTES','AEGIS_CHAT_OUTPUT_TOKENS'):monkeypatch.delenv(key,raising=False)
     settings={'context_limit':262144,'max_output_tokens':1024}
-    assert chat_agent.chat_limits(settings)=={'context_tokens':16384,'output_tokens':1024,'evidence_bytes':22000}
+    assert chat_agent.chat_limits(settings)=={'context_tokens':262144,'output_tokens':1024,'evidence_bytes':1000000}
     assert settings=={'context_limit':262144,'max_output_tokens':1024}
     assert chat_agent.chat_limits({'context_limit':4096,'max_output_tokens':512})['context_tokens']==4096
     monkeypatch.setenv('AEGIS_CHAT_CONTEXT_TOKENS','32768');monkeypatch.setenv('AEGIS_CHAT_EVIDENCE_BYTES','40000')
@@ -27,6 +27,7 @@ def test_invalid_evidence_cap_is_rejected(monkeypatch,value):
 @pytest.mark.parametrize('size,allowed',[(14000,True),(23000,False)])
 def test_new_evidence_band_reaches_model_without_discarding_fields(system,monkeypatch,size,allowed):
     s=system;d=dataset(s)
+    monkeypatch.setenv('AEGIS_CHAT_CONTEXT_TOKENS','16384');monkeypatch.setenv('AEGIS_CHAT_EVIDENCE_BYTES','22000')
     monkeypatch.setattr(knowledge,'GUIDE',{'knowledge':'Aegis guidance '+('x'*size)})
     knowledge.sync(s.owner,d['id']);install_models(monkeypatch)
     monkeypatch.setattr(agent_model,'classify',lambda _:dict(intent='answer',source='application'))

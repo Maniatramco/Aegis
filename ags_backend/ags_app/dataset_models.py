@@ -6,7 +6,8 @@ from contextvars import ContextVar
 from fastapi import HTTPException, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from . import core, providers, dataset_access as access
+from . import core
+from . import runtime_config, providers, dataset_access as access
 
 CAPABILITIES={'chat','extraction','embedding'}
 ROUTING_DEFAULTS={'mappings':[], 'default_chat_model_id':None, 'default_extraction_model_id':None, 'embedding_model_id':None, 'index_generation':0}
@@ -94,7 +95,7 @@ def model_public(r):
     connection=snap['settings'].get('embedding_connection' if data['capabilities']==['embedding'] else 'model_connection')
     configured=(bool(snap['secret_refs'].get('connection')) or connection.get('auth_mode') in ('none','server_identity','config_profile')) if connection else p not in ('openai','oci') or bool(snap['secret_refs'].get(p)) or (p=='oci' and snap['settings'].get('oci_auth_mode')!='api_key')
     embedding=data['capabilities']==['embedding'];cfg=snap['settings']
-    return core.representation(r)|data|{'provider':connection['protocol'] if connection else p,'connection_profile_version':snap['connection_profile_version'],'credential_configured':configured,'connection':copy.deepcopy(connection),'timeout':cfg.get('timeout',60),'context_limit':cfg.get('embedding_context_limit' if embedding else 'context_limit') or (8192 if embedding else 32768),'max_output_tokens':None if embedding else cfg.get('max_output_tokens') or 4096,'extra_parameters':copy.deepcopy(cfg.get('embedding_extra_parameters' if embedding else 'extra_parameters',{}))}
+    return core.representation(r)|data|{'provider':connection['protocol'] if connection else p,'connection_profile_version':snap['connection_profile_version'],'credential_configured':configured,'connection':copy.deepcopy(connection),'timeout':cfg.get('timeout',runtime_config.get('AEGIS_MODEL_REGISTRATION_TIMEOUT')),'context_limit':cfg.get('embedding_context_limit' if embedding else 'context_limit') or runtime_config.get('AEGIS_DEFAULT_EMBEDDING_INPUT_TOKENS' if embedding else 'AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS'),'max_output_tokens':None if embedding else cfg.get('max_output_tokens') or runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS'),'extra_parameters':copy.deepcopy(cfg.get('embedding_extra_parameters' if embedding else 'extra_parameters',{}))}
 
 def dataset_config(r):return configuration(r)
 def mapped_model(dataset,id):
@@ -146,8 +147,8 @@ def resolve_model(r,capability,model_id=None):
         snap['settings']['embedding_model']=data['provider_model']
     else:
         snap['settings']['model']=data['provider_model'];snap['settings']['oci_model']=data['provider_model']
-        snap['settings'].setdefault('context_limit',32768)
-        snap['settings'].setdefault('max_output_tokens',4096)
+        snap['settings'].setdefault('context_limit',runtime_config.get('AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS'))
+        snap['settings'].setdefault('max_output_tokens',runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS'))
         snap['settings'].setdefault('extra_parameters',{})
     return snap
 

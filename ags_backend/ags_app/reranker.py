@@ -5,6 +5,7 @@ import os
 import threading
 from functools import lru_cache
 from pathlib import Path
+from . import runtime_config
 
 MODEL_ID='cross-encoder/ms-marco-MiniLM-L6-v2'
 REVISION='233902d25c440f23af6f7d6e94d2946bac0bee0a'
@@ -16,18 +17,17 @@ _loaded_paths=set()
 class RerankerError(RuntimeError):pass
 
 def enabled():
-    value=os.getenv('AEGIS_RERANKER','none').lower()
+    value=runtime_config.get('AEGIS_RERANKER').lower()
     if value not in ('none','local'):raise RerankerError('AEGIS_RERANKER must be none or local.')
     return value=='local'
 
 def candidate_limit(top_k):
-    try:limit=int(os.getenv('AEGIS_RERANK_CANDIDATES','25'))
-    except ValueError:raise RerankerError('Reranker candidate limit must be an integer from 1 to 100.')
-    if not 1<=limit<=100:raise RerankerError('Reranker candidate limit must be an integer from 1 to 100.')
+    try:limit=runtime_config.get('AEGIS_RERANK_CANDIDATES')
+    except runtime_config.ConfigurationError as exc:raise RerankerError(str(exc)) from exc
     return max(top_k,limit)
 
 def model_directory():
-    path=os.getenv('AEGIS_RERANK_MODEL_DIR')
+    path=runtime_config.get('AEGIS_RERANK_MODEL_DIR')
     if not path:raise RerankerError('Set AEGIS_RERANK_MODEL_DIR to the downloaded local reranker directory.')
     return Path(path).resolve()
 
@@ -56,7 +56,7 @@ def _load(directory):
         question_tokenizer=Tokenizer.from_file(str(Path(directory)/'tokenizer.json'))
         question_tokenizer.enable_truncation(max_length=128)
         options=ort.SessionOptions()
-        options.intra_op_num_threads=min(4,os.cpu_count() or 1)
+        options.intra_op_num_threads=min(runtime_config.get('AEGIS_RERANK_CPU_THREADS'),os.cpu_count() or 1)
         options.inter_op_num_threads=1
         session=ort.InferenceSession(str(Path(directory)/'onnx/model.onnx'),sess_options=options,providers=['CPUExecutionProvider'])
     except Exception as exc:
@@ -83,8 +83,9 @@ def predict(query,passages):
     try:
         import numpy as np
         inputs={value.name for value in session.get_inputs()}
-        for offset in range(0,len(passages),8):
-            encodings=tokenizer.encode_batch([(question,p) for p in passages[offset:offset+8]])
+        batch=runtime_config.get('AEGIS_RERANK_BATCH_SIZE')
+        for offset in range(0,len(passages),batch):
+            encodings=tokenizer.encode_batch([(question,p) for p in passages[offset:offset+batch]])
             tensors={
                 'input_ids':np.asarray([e.ids for e in encodings],dtype=np.int64),
                 'attention_mask':np.asarray([e.attention_mask for e in encodings],dtype=np.int64),

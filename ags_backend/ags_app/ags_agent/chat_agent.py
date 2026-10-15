@@ -3,26 +3,24 @@ No application read tools, mutations, history or iterative tool selection.
 """
 import json,os,re
 from fastapi import HTTPException
-from .. import core, ollama_provider, providers
+from .. import core, ollama_provider, providers, runtime_config
 from . import agent_model, chat_policy, agent_context, token_usage
 from .chat_knowledge import PublishedKnowledge, assemble
 from .agent_tools import matches_result_filter
 
-def enabled():return os.getenv('AEGIS_CHAT_AGENT_VECTOR_ONLY','true').lower() not in ('0','false','no')
+def enabled():return runtime_config.get('AEGIS_CHAT_AGENT_VECTOR_ONLY')
 
 def chat_limits(settings):
     """Unified Chat caps only; model profiles and other agents stay intact."""
-    def value(name,default,maximum):
-        raw=os.getenv(name,str(default))
-        if not raw.isdecimal() or not 1<=int(raw)<=maximum:
-            raise HTTPException(503,'Invalid Unified Chat budget configuration: '+name)
-        return int(raw)
-    context=value('AEGIS_CHAT_CONTEXT_TOKENS',16384,262144)
-    output=value('AEGIS_CHAT_OUTPUT_TOKENS',1024,16384)
-    evidence=value('AEGIS_CHAT_EVIDENCE_BYTES',22000,1000000)
+    try:
+        context=runtime_config.get('AEGIS_CHAT_CONTEXT_TOKENS')
+        output=runtime_config.get('AEGIS_CHAT_OUTPUT_TOKENS')
+        evidence=runtime_config.get('AEGIS_CHAT_EVIDENCE_BYTES')
+    except runtime_config.ConfigurationError as exc:
+        raise HTTPException(503,'Invalid Unified Chat budget configuration: '+str(exc)) from exc
     context=min(context,settings.get('context_limit') or context)
     output=min(output,settings.get('max_output_tokens') or output)
-    if context<=output+512:raise HTTPException(503,'Unified Chat context must reserve room for evidence and the answer.')
+    if context<=output+runtime_config.get('AEGIS_CONTEXT_HEADROOM_TOKENS'):raise HTTPException(503,'Unified Chat context must reserve room for evidence and the answer.')
     return {'context_tokens':context,'output_tokens':output,'evidence_bytes':evidence}
 
 def routing_context(body,owner):

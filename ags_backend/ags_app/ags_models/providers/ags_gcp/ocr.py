@@ -2,7 +2,7 @@
 import hashlib
 import json
 from urllib.parse import urlsplit
-from .... import core
+from .... import core, runtime_config
 from ...connection import ModelConnection
 from ...parameters import validate_parameters
 
@@ -34,8 +34,8 @@ def configure(snapshot, limits):
     identity['parameters'] = cfg.get('extra_parameters', {})
     return limits | {'provider': 'gemini', 'model': snapshot['provider_model'],
         'endpoint': connection['endpoint'], 'protocol': 4, 'execution': snapshot,
-        'context': min(limits['context'], cfg.get('context_limit') or 32768),
-        'output': min(limits['output'], cfg.get('max_output_tokens') or 4096),
+        'context': min(limits['context'], cfg.get('context_limit') or runtime_config.get('AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS')),
+        'output': min(limits['output'], cfg.get('max_output_tokens') or runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS')),
         # Cloud APIs do not expose installed weight digests. This pins configuration.
         'digest': hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
         'digest_type': 'configuration'}

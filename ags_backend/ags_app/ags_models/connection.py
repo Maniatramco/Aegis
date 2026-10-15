@@ -4,6 +4,7 @@ import math
 import httpx
 from jsonschema import validate, ValidationError
 from .. import core
+from .. import runtime_config
 from .parameters import check_budget, validate_parameters, ParameterError
 from .validation import ConnectionError, PROTOCOLS, AUTH_MODES, validate_endpoint, validate_connection, validate_credentials, credentials
 from .provider_registry import provider
@@ -60,7 +61,7 @@ class ModelConnection:
         if schema:
             instruction += '\nReturn only JSON matching this schema: ' + json.dumps(schema, ensure_ascii=False)
         try:
-            output_tokens=self.cfg.get('max_output_tokens') or 4096
+            output_tokens=self.cfg.get('max_output_tokens') or runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS')
             check_budget(self.cfg,[instruction,text],output_tokens=output_tokens)
             extra=validate_parameters(self.cfg.get('extra_parameters',{}),p,'extraction' if schema else 'chat',self.c)
             result = provider(self.c).generate(self, instruction, text, schema, output_tokens, extra)

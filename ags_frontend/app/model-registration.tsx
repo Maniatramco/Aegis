@@ -36,7 +36,8 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   models: Entity[]; settings: Entity; api: Api; run: (fn: () => Promise<void>) => Promise<void>;
   busy: boolean; onSaved: (model: Entity) => void; onMapping: () => void;
 }) {
-  const blank = (): Entity => ({ name: "", category: "chat", provider_model: "", timeout: 60, context_limit: 32768, max_output_tokens: 4096, enabled: true,
+  const defaults = settings.model_defaults;
+  const blank = (): Entity => ({ name: "", category: "chat", provider_model: "", timeout: defaults?.timeout, context_limit: defaults?.context_limit, max_output_tokens: defaults?.max_output_tokens, enabled: true,
     credentials: {}, clear_credentials: false, allow_external: false,
     connection: { protocol: "ollama", endpoint: settings.ollama_endpoint || endpointHints.ollama, auth_mode: "none", region: "", project_id: "", compartment_id: "", profile: "DEFAULT", embedding_format: "titan", chat_format: "generic", dimensions: null, structured_output: true } });
   const [form, setForm] = useState<Entity>(blank);
@@ -51,7 +52,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   useEffect(() => { let active = true; api("/model-providers").then(value => { if (active) setProviderChoices(value); }).catch(() => { if (active) setProviderError("Provider choices could not load. Reload this screen to retry."); }); return () => { active = false; }; }, [api]);
   const [extraText, setExtraText] = useState("{}");
   const [extraOpen, setExtraOpen] = useState(false);
-  const change = (key: string, value: any) => { setForm(current => ({ ...current, [key]: value, ...(key === "category" ? { context_limit: value === "embedding" ? 8192 : 32768 } : {}) })); if (key === "category") setExtraText("{}"); setTest(null); };
+  const change = (key: string, value: any) => { setForm(current => ({ ...current, [key]: value, ...(key === "category" ? { context_limit: value === "embedding" ? defaults?.embedding_context_limit : defaults?.context_limit } : {}) })); if (key === "category") setExtraText("{}"); setTest(null); };
   const connectionChange = (key: string, value: any) => {
     setForm(current => ({ ...current, connection: { ...current.connection, [key]: value },
       ...(["protocol", "endpoint", "auth_mode"].includes(key) ? { credentials: {}, allow_external: false } : {}) }));
@@ -59,10 +60,11 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
     if (["protocol", "embedding_format", "chat_format"].includes(key)) setExtraText("{}");
   };
   const start = (model?: Entity) => {
+    if (!defaults) return;
     const initial = blank();
     if (model) {
       initial.name = model.name; initial.provider_model = model.provider_model;
-      initial.category = model.capabilities[0]; initial.enabled = model.enabled; initial.timeout = model.timeout || 60; initial.context_limit = model.context_limit || (initial.category === "embedding" ? 8192 : 32768); initial.max_output_tokens = model.max_output_tokens || 4096;
+      initial.category = model.capabilities[0]; initial.enabled = model.enabled; initial.timeout = model.timeout || defaults.timeout; initial.context_limit = model.context_limit || (initial.category === "embedding" ? defaults.embedding_context_limit : defaults.context_limit); initial.max_output_tokens = model.max_output_tokens || defaults.max_output_tokens;
       if (model.connection) initial.connection = { ...initial.connection, ...model.connection };
       else if (model.provider !== "ollama") {
         initial.connection = { ...initial.connection, protocol: "openai-compatible", auth_mode: "api_key", endpoint: "" };
@@ -84,7 +86,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   return <div className="model-registration">
     {settings.local_only && <div className="notice"><Layers size={17} /><div>This deployment runs in local-only mode. You can register cloud connections, but testing and applying them require cloud use to be enabled by the deployment administrator.</div></div>}
     {!open ? <section className="panel registration-directory">
-      <div className="panel-head"><div><h2>Registered models</h2><p className="muted small">Register a model once, then use it across your datasets.</p></div><button className="btn primary" onClick={() => start()}><Plus size={15} />Register model</button></div>
+      <div className="panel-head"><div><h2>Registered models</h2><p className="muted small">Register a model once, then use it across your datasets.</p></div><button className="btn primary" disabled={busy || !defaults} onClick={() => start()}><Plus size={15} />Register model</button></div>
       {!!models.length && <label className="registration-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search registered models" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}} placeholder="Search models or categories" />{search&&<button className="btn icon" type="button" title="Clear search" aria-label="Clear model search" onClick={()=>setSearch('')}><X size={14}/></button>}</label>}
       {!!models.length && <div className="registration-table" role="region" aria-label="Registered models table" tabIndex={0}>
         <table aria-label="Registered models"><thead><tr><th scope="col">Model</th><th scope="col">Category</th><th scope="col">Provider</th><th scope="col">Endpoint</th><th scope="col" className="registration-tokens" title="Configured input limit for embeddings; total context limit for chat and extraction">Input / context</th><th scope="col" className="registration-tokens" title="Configured maximum output tokens">Output</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
@@ -96,7 +98,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
             <td className="registration-tokens" title={m.capabilities[0]==='embedding'?'Input tokens':'Context tokens'}>{m.context_limit?.toLocaleString()||'—'}</td>
             <td className="registration-tokens" title={m.capabilities[0]==='embedding'?'Not applicable to embeddings':'Maximum output tokens'}>{m.capabilities[0]==='embedding'?'—':m.max_output_tokens?.toLocaleString()||'—'}</td>
             <td><span className={`pill ${m.enabled?'green':'amber'}`}>{m.enabled?'Enabled':'Disabled'}</span></td>
-            <td><button className="btn icon registration-edit" disabled={busy} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`} onClick={()=>start(m)}><Pencil size={15}/></button></td>
+            <td><button className="btn icon registration-edit" disabled={busy || !defaults} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`} onClick={()=>start(m)}><Pencil size={15}/></button></td>
           </tr>)}{!visible.length&&<tr><td colSpan={8} className="registration-table-empty">No models match your search.</td></tr>}</tbody>
         </table>
       </div>}
@@ -116,9 +118,9 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
             {form.connection.protocol === "vertex" && <div className="field"><label htmlFor="registration-project">Project ID</label><input id="registration-project" value={form.connection.project_id} onChange={e => connectionChange("project_id", e.target.value)} required /></div>}
             {form.connection.protocol === "oci" && <div className="field"><label htmlFor="registration-compartment">Compartment OCID</label><input id="registration-compartment" value={form.connection.compartment_id} onChange={e => connectionChange("compartment_id", e.target.value)} required /></div>}
             <div className="field"><label htmlFor="registration-auth">Authentication</label><select id="registration-auth" value={form.connection.auth_mode} onChange={e => connectionChange("auth_mode", e.target.value)}>{authOptions[form.connection.protocol].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-            <div className="field"><label htmlFor="registration-timeout">Timeout (seconds)</label><input id="registration-timeout" type="number" min={5} max={1800} value={form.timeout} onChange={e => change("timeout", Number(e.target.value))} required /><small>Detailed local extraction on CPU may need 1,200 seconds. This is a limit, not an estimated completion time.</small></div>
-            <div className="field"><label htmlFor="registration-context-limit">{form.category === "embedding" ? "Input token limit" : "Context token limit"}</label><input id="registration-context-limit" type="number" min={1} max={2097152} step={1} value={form.context_limit} onChange={e => change("context_limit", Number(e.target.value))} aria-describedby="registration-context-help" required /><small id="registration-context-help">{form.category === "embedding" ? "Maximum input per text chunk or query. No output tokens; embeddings return vectors." : "Total input and output budget, including instructions and history. Keep 512 tokens of headroom beyond the output limit."} Aegis uses a conservative text estimate. Set this within the model’s supported capacity.</small></div>
-            {form.category !== "embedding" && <div className="field"><label htmlFor="registration-output-limit">Maximum output tokens</label><input id="registration-output-limit" type="number" min={1} max={131072} step={1} value={form.max_output_tokens} onChange={e => change("max_output_tokens", Number(e.target.value))} required /><small>Maximum tokens generated per answer or extraction. Default: 4,096. Larger limits can take longer and use more memory or provider credits.</small></div>}
+            <div className="field"><label htmlFor="registration-timeout">Timeout (seconds)</label><input id="registration-timeout" type="number" min={defaults?.timeout_min} max={defaults?.timeout_max} value={form.timeout} onChange={e => change("timeout", Number(e.target.value))} required /><small>Detailed local extraction on CPU may need 1,200 seconds. This is a limit, not an estimated completion time.</small></div>
+            <div className="field"><label htmlFor="registration-context-limit">{form.category === "embedding" ? "Input token limit" : "Context token limit"}</label><input id="registration-context-limit" type="number" min={1} max={defaults?.context_max} step={1} value={form.context_limit} onChange={e => change("context_limit", Number(e.target.value))} aria-describedby="registration-context-help" required /><small id="registration-context-help">{form.category === "embedding" ? "Maximum input per text chunk or query. No output tokens; embeddings return vectors." : `Total input and output budget, including instructions and history. Keep ${defaults?.headroom_tokens} tokens of headroom beyond the output limit.`} Aegis uses a conservative text estimate. Set this within the model’s supported capacity.</small></div>
+            {form.category !== "embedding" && <div className="field"><label htmlFor="registration-output-limit">Maximum output tokens</label><input id="registration-output-limit" type="number" min={1} max={defaults?.output_max} step={1} value={form.max_output_tokens} onChange={e => change("max_output_tokens", Number(e.target.value))} required /><small>Maximum tokens generated per answer or extraction. Default: {defaults?.max_output_tokens?.toLocaleString()}. Larger limits can take longer and use more memory or provider credits.</small></div>}
             {form.connection.auth_mode === "config_profile" && <div className="field"><label htmlFor="registration-profile">Server credential profile</label><input id="registration-profile" value={form.connection.profile} onChange={e => connectionChange("profile", e.target.value)} required /></div>}
           </div>
           {!!credentialFields[form.connection.auth_mode]?.length && <div className="registration-credentials"><h3>Credentials</h3><p className="muted small">{retainedCredentials ? "Leave all credential fields empty to retain the saved credentials. Enter the complete set to replace them." : "Enter credentials for this endpoint. They are never returned to the browser."}</p><div className="registration-fields">

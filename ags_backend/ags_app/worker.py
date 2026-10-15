@@ -2,12 +2,12 @@
 import time, os, uuid, io, traceback, threading, zipfile
 from sqlalchemy import select, update, or_, and_
 from .core import Session, Record, Job, store, settings, uid, init, document_lock, execution_context
-from . import core, dataset_models as routing
+from . import core, dataset_models as routing, runtime_config
 from . import providers, workflow
 from .json_documents import json_document_text
 from .relational import audit_as
 
-MAX_ATTEMPTS=3
+MAX_ATTEMPTS=runtime_config.get('AEGIS_WORKER_MAX_ATTEMPTS')
 _last_reconcile=0.0
 _last_cleanup=0.0
 _knowledge_thread=None
@@ -46,7 +46,7 @@ def claim(job_id=None):
             workflow.fail(expired.id,expired.error)
         candidate=s.scalar(claim_query(now,job_id,s.get_bind().dialect.name))
         if not candidate:return None
-        result=s.execute(update(Job).where(Job.id==candidate.id,Job.attempts<MAX_ATTEMPTS,or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now))).values(status='running',attempts=Job.attempts+1,lease_until=now+900,lease_token=token,updated_at=now))
+        result=s.execute(update(Job).where(Job.id==candidate.id,Job.attempts<MAX_ATTEMPTS,or_(Job.status=='queued',and_(Job.status=='running',Job.lease_until<now))).values(status='running',attempts=Job.attempts+1,lease_until=now+runtime_config.get('AEGIS_WORKER_LEASE_SECONDS'),lease_token=token,updated_at=now))
         if result.rowcount!=1:return None
         return candidate.id,token
 
@@ -57,7 +57,7 @@ def checkpoint(jid,token,progress):
         if not j or j.status!='running' or j.lease_token!=token:raise InterruptedError('Job cancelled or lease lost')
         r=s.get(Record,j.target_id)
         if not r or r.status=='deleting':raise InterruptedError('Target deleted')
-        j.progress=progress;j.lease_until=time.time()+900;j.updated_at=time.time()
+        j.progress=progress;j.lease_until=time.time()+runtime_config.get('AEGIS_WORKER_LEASE_SECONDS');j.updated_at=time.time()
 
 def parse_document(name,raw,*,ocr_enabled=True,progress=None,cache_id=None):
     ext=name.rsplit('.',1)[-1].lower()
@@ -326,12 +326,12 @@ def run_once():
     stop=threading.Event()
     @audit_as('worker')
     def heartbeat():
-        while not stop.wait(20):
+        while not stop.wait(runtime_config.get('AEGIS_WORKER_HEARTBEAT_SECONDS')):
             try:
                 with Session.begin() as session:
                     job=session.get(Job,jid)
                     if not job or job.lease_token!=token or job.status!='running':return
-                    job.lease_until=time.time()+900
+                    job.lease_until=time.time()+runtime_config.get('AEGIS_WORKER_LEASE_SECONDS')
                 if delivery and delivery.job_id==jid:transport.renew(delivery)
             except Exception:pass
     thread=threading.Thread(target=heartbeat,daemon=True);thread.start()
@@ -361,6 +361,7 @@ def run_once():
     return True
 
 if __name__=='__main__':
+    runtime_config.validate()
     init()
     while True:
-        if not run_once():time.sleep(2)
+        if not run_once():time.sleep(runtime_config.get('AEGIS_WORKER_POLL_SECONDS'))

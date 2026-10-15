@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, String, Integer, Float, Text, select, Fore
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from cryptography.fernet import Fernet
 from .database import database_url, engine_options, StoredString, timestamp_type
+from . import runtime_config
 
 DATA = Path(os.getenv('AEGIS_STORAGE_ROOT', os.getenv('DATA_DIR', './data'))).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
@@ -138,7 +139,7 @@ def secret_cipher():
     key=os.getenv('AEGIS_MASTER_KEY', os.getenv('MASTER_KEY'))
     if not key: raise ValueError('MASTER_KEY is required to save provider credentials (generate a Fernet key)')
     return Fernet(key.encode())
-DEFAULTS={'model_provider':os.getenv('MODEL_PROVIDER','openai'),'embedding_provider':os.getenv('EMBEDDING_PROVIDER','sentence_transformers'),'model':os.getenv('AEGIS_MODEL',os.getenv('OPENAI_MODEL','gpt-4.1-mini')),'embedding_model':os.getenv('EMBEDDING_MODEL','text-embedding-3-small'),'chunk_size':1200,'chunk_overlap':180,'top_k':5,'timeout':int(os.getenv('AEGIS_TIMEOUT','60')),'max_upload_mb':25,'search_provider':os.getenv('SEARCH_PROVIDER','qdrant'),'storage_provider':os.getenv('STORAGE_PROVIDER','local'),'oci_region':os.getenv('OCI_REGION',''),'oci_project_id':'','oci_auth_mode':'api_key','oci_profile':'DEFAULT','oci_model':'','oci_vector_store_id':'','oci_storage_namespace':os.getenv('OCI_NAMESPACE',''),'oci_storage_bucket':os.getenv('OCI_BUCKET',''),'oci_storage_prefix':os.getenv('OCI_OBJECT_PREFIX','aegis'),'oci_storage_region':os.getenv('OCI_REGION',''),'oci_storage_auth_mode':os.getenv('OCI_AUTH_MODE','config_file'),'oci_storage_profile':os.getenv('OCI_PROFILE','DEFAULT'),'queue_provider':os.getenv('QUEUE_PROVIDER','database')}
+DEFAULTS={'model_provider':os.getenv('MODEL_PROVIDER','openai'),'embedding_provider':os.getenv('EMBEDDING_PROVIDER','sentence_transformers'),'model':os.getenv('AEGIS_MODEL',os.getenv('OPENAI_MODEL','gpt-4.1-mini')),'embedding_model':os.getenv('EMBEDDING_MODEL','text-embedding-3-small'),'chunk_size':runtime_config.get('AEGIS_CHUNK_SIZE'),'chunk_overlap':runtime_config.get('AEGIS_CHUNK_OVERLAP'),'top_k':runtime_config.get('AEGIS_RETRIEVED_CHUNKS'),'timeout':runtime_config.get('AEGIS_TIMEOUT'),'max_upload_mb':runtime_config.get('AEGIS_MAX_UPLOAD_MB'),'search_provider':os.getenv('SEARCH_PROVIDER','qdrant'),'storage_provider':os.getenv('STORAGE_PROVIDER','local'),'oci_region':os.getenv('OCI_REGION',''),'oci_project_id':'','oci_auth_mode':'api_key','oci_profile':'DEFAULT','oci_model':'','oci_vector_store_id':'','oci_storage_namespace':os.getenv('OCI_NAMESPACE',''),'oci_storage_bucket':os.getenv('OCI_BUCKET',''),'oci_storage_prefix':os.getenv('OCI_OBJECT_PREFIX','aegis'),'oci_storage_region':os.getenv('OCI_REGION',''),'oci_storage_auth_mode':os.getenv('OCI_AUTH_MODE','config_file'),'oci_storage_profile':os.getenv('OCI_PROFILE','DEFAULT'),'queue_provider':os.getenv('QUEUE_PROVIDER','database')}
 _execution=ContextVar('aegis_execution',default=None)
 DEFAULTS.update(local_storage_path='',oci_storage_config_file='/run/oci/config',oci_storage_key_file='/run/oci/aegis_api_key.pem')
 @contextmanager
