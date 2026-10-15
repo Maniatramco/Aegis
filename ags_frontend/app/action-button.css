@@ -1,0 +1,13 @@
+/* One compact target size for workspace actions; names stay in accessible labels/tooltips. */
+body .shell :is(.workspace-region,.topbar,.modal) .action-icon,
+body .shell .action-icon {
+ width:36px;min-width:36px;max-width:36px;height:36px;min-height:36px;
+ padding:0;display:inline-flex;align-items:center;justify-content:center;
+ flex:0 0 36px;vertical-align:middle;
+}
+body .shell .action-icon>svg{width:17px;height:17px;flex-shrink:0}
+body .shell .extract-row-actions{display:flex;gap:6px;flex-wrap:nowrap;align-items:center}
+body .shell .prompt-library-filters{grid-template-columns:minmax(160px,.7fr) minmax(180px,1fr) 40px}
+body .shell .prompt-library-filters .prompt-library-new{width:40px;min-width:40px;max-width:40px;height:40px;min-height:40px;padding:0}
+@media(max-width:720px){body .shell .prompt-library-filters{grid-template-columns:minmax(0,1fr) 40px}}
+@media(max-width:360px){body .shell .prompt-library-filters{grid-template-columns:minmax(0,1fr) 40px}body .shell .prompt-library-new{grid-column:2;grid-row:1;width:40px}}

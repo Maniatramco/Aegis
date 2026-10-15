@@ -1,20 +1,40 @@
 "use client";
+import {ActionButton} from "./action-button";
 import {useEffect,useRef,useState} from "react";
-import {ArrowRight,CheckCircle2,Database,FileText,Search,Trash2,Settings2,X} from "lucide-react";
+import {ArrowRight,CheckCircle2,Database,FileText,MessageSquare,Search,Trash2,X} from "lucide-react";
 import "./workspace-flow.css";
 import "./home-cards.css";
+import "./dataset-directory.css";
 type Entity=Record<string,any>;
-export function DirectoryRows({datasets,documents,onChat,onOpen,onDelete}:{datasets:Entity[];documents:Entity[];onChat:(id:string)=>void;onOpen:(id:string)=>void;onDelete?:(dataset:Entity)=>void}) {
- const [search,setSearch]=useState("");
- return <div><label className="directory-search"><Search size={18}/><input aria-label="Search datasets" placeholder="Search datasets…" value={search} onChange={e=>setSearch(e.target.value)}/></label><div className="directory-table">{datasets.filter(d=>`${d.name} ${d.description||""}`.toLowerCase().includes(search.toLowerCase())).map(d=>{const docs=documents.filter(doc=>(doc.dataset_id||doc.kb_id)===d.id),ready=docs.filter(doc=>doc.status==="ready"&&!doc.requires_reindex).length,failed=docs.filter(doc=>["failed","cancelled"].includes(doc.status)).length,pending=docs.filter(doc=>["queued","processing"].includes(doc.status)).length;return <article className="directory-row" key={d.id}><a href={`#dataset/${d.id}`} className="directory-name" aria-label={`Open dataset ${d.name}`} onClick={()=>onOpen(d.id)}>{d.name}</a><span>{docs.length} documents<small>{ready} ready</small></span><span className={`directory-status ${failed?"failed":pending?"pending":"ready"}`}>{failed?`${failed} failed`:pending?`${pending} processing`:ready===docs.length&&docs.length?"Ready":docs.length?"Reindex required":"No documents"}{d.active===false&&<small>Inactive</small>}</span><div className="dataset-row-actions"><button className="btn" onClick={()=>onChat(d.id)}>Open chat<ArrowRight size={15}/></button>{onDelete&&<button type="button" className="btn icon dataset-delete" aria-label={`Delete dataset ${d.name}`} title={`Delete dataset ${d.name}`} onClick={()=>onDelete(d)}><Trash2 size={16}/></button>}</div></article>;})}{!datasets.some(d=>`${d.name} ${d.description||""}`.toLowerCase().includes(search.toLowerCase()))&&<div className="directory-empty"><h3>No matching datasets</h3><p>Try another name or description.</p><button className="btn" onClick={()=>setSearch("")}>Clear search</button></div>}</div></div>;
+export function DirectoryRows({datasets,documents,onChat,search,onClearSearch,onDelete}:{datasets:Entity[];documents:Entity[];onChat:(id:string)=>void;search:string;onClearSearch:()=>void;onDelete?:(dataset:Entity)=>void}) {
+ const visible=datasets.filter(d=>`${d.name} ${d.description||""}`.toLowerCase().includes(search.trim().toLowerCase()));
+ return <div className="dataset-directory-list">
+  <div className="dataset-directory-table" role="region" aria-label="Dataset results" tabIndex={0}>
+   <table aria-label="Registered datasets">
+    <thead><tr><th scope="col">Dataset</th><th scope="col">Description</th><th scope="col" className="dataset-count">Documents</th><th scope="col" className="dataset-count">Ready</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+    <tbody>{visible.map(d=>{
+     const docs=documents.filter(doc=>(doc.dataset_id||doc.kb_id)===d.id),ready=docs.filter(doc=>doc.status==="ready"&&!doc.requires_reindex).length,failed=docs.filter(doc=>["failed","cancelled"].includes(doc.status)).length,pending=docs.filter(doc=>["queued","processing"].includes(doc.status)).length;
+     const status=failed?`${failed} failed`:pending?`${pending} processing`:ready===docs.length&&docs.length?"Ready":docs.length?"Reindex required":"No documents";
+     const state=failed?'failed':pending||ready!==docs.length?'pending':docs.length?'ready':'empty';
+     return <tr key={d.id}>
+      <th scope="row"><span className="directory-name" title={d.name}>{d.name}</span>{d.active===false&&<small>Inactive</small>}</th>
+      <td><span className="dataset-directory-description" title={d.description||undefined}>{d.description||'—'}</span></td>
+      <td className="dataset-count">{docs.length}</td><td className="dataset-count">{ready}</td>
+      <td><span className="dataset-directory-status" data-state={state}>{status}</span></td>
+      <td><div className="dataset-row-actions"><button type="button" className="btn icon dataset-directory-chat" aria-label={`Open chat for ${d.name}`} title={`Open chat for ${d.name}`} onClick={()=>onChat(d.id)}><MessageSquare size={17}/></button>{onDelete&&<button type="button" className="btn icon dataset-delete" aria-label={`Delete dataset ${d.name}`} title={`Delete dataset ${d.name}`} onClick={()=>onDelete(d)}><Trash2 size={16}/></button>}</div></td>
+     </tr>;
+    })}{!visible.length&&<tr><td colSpan={6}><div className="directory-empty"><h3>No matching datasets</h3><p>Try another name or description.</p><ActionButton type="button" className="btn" onClick={onClearSearch} label="Clear search" action="close"/></div></td></tr>}</tbody>
+   </table>
+  </div>
+ </div>;
 }
 export function DatasetSearch({value,onChange}:{value:string;onChange:(value:string)=>void}){
  const [open,setOpen]=useState(false),container=useRef<HTMLDivElement>(null),input=useRef<HTMLInputElement>(null),button=useRef<HTMLButtonElement>(null);
  const close=()=>{setOpen(false);onChange('');button.current?.focus();};
- useEffect(()=>{if(!open)return;input.current?.focus();const outside=(event:PointerEvent)=>{if(!container.current?.contains(event.target as Node)){setOpen(false);onChange('');}};document.addEventListener('pointerdown',outside);return()=>document.removeEventListener('pointerdown',outside);},[open,onChange]);
- return <div className="home-search-control" ref={container} onKeyDown={event=>{if(event.key==='Escape'&&open){event.stopPropagation();close();}}}>
-  <button type="button" className="btn icon" ref={button} aria-label={open?'Close dataset search':'Search datasets'} title="Search datasets" aria-expanded={open} aria-controls="home-dataset-search" onClick={()=>open?close():setOpen(true)}><Search size={18}/></button>
-  {open&&<div className="home-search-popover" id="home-dataset-search"><label className="home-datasets-search"><Search size={16} aria-hidden="true"/><input ref={input} aria-label="Search datasets" placeholder="Search datasets…" value={value} onChange={event=>onChange(event.target.value)}/></label><button type="button" className="btn icon" aria-label="Clear and close dataset search" title="Close search" onClick={close}><X size={16}/></button></div>}
+ useEffect(()=>{if(!open)return;input.current?.focus();const outside=(event:MouseEvent)=>{if(!container.current?.contains(event.target as Node)){setOpen(false);onChange('');}};document.addEventListener('click',outside);return()=>document.removeEventListener('click',outside);},[open,onChange]);
+ return <div className="home-search-control" data-expanded={open} ref={container} onKeyDown={event=>{if(event.key==='Escape'&&open){event.stopPropagation();close();}}}>
+  <div className="home-search-reveal" id="home-dataset-search" aria-hidden={!open} inert={!open}><label className="home-datasets-search"><input ref={input} aria-label="Search datasets" placeholder="Search datasets…" tabIndex={open?0:-1} value={value} onChange={event=>onChange(event.target.value)}/></label></div>
+  <button type="button" className="btn icon" ref={button} aria-label={open?'Close dataset search':'Search datasets'} title={open?'Close search':'Search datasets'} aria-expanded={open} aria-controls="home-dataset-search" onClick={()=>open?close():setOpen(true)}>{open?<X size={18}/>:<Search size={18}/>}</button>
  </div>;
 }
 export function DatasetHome({datasets,loading,onBrowse,documents,onChat,canManage=true,search='',onClearSearch=()=>{}}:{datasets:Entity[];loading:boolean;onBrowse:()=>void;documents:Entity[];onChat:(id:string)=>void;canManage?:boolean;search?:string;onClearSearch?:()=>void}) {
@@ -25,11 +45,11 @@ export function DatasetHome({datasets,loading,onBrowse,documents,onChat,canManag
  const status=failed?`${failed} failed`:active?`${active} processing`:stale?`${stale} need reindex`:all.length?"Ready":"No documents";
  const state=failed?'failed':active||stale?'pending':all.length?'ready':'empty';
  return <article className="home-dataset-card" key={d.id} aria-label={`Dataset ${d.name}`}>
-   <div className="home-card-heading"><span className="home-card-icon"><Database size={18} aria-hidden="true"/></span><div className="home-card-title"><h3><a href={`#dataset/${encodeURIComponent(d.id)}`} aria-label={`Open dataset ${d.name}`} title={d.name} className="directory-name">{d.name}</a></h3>{d.active===false&&<span className="home-card-inactive">Inactive</span>}</div>{canManage&&<a className="btn icon home-card-settings" href={`#dataset/${encodeURIComponent(d.id)}`} aria-label={`Settings for ${d.name}`} title="Dataset settings"><Settings2 size={15}/></a>}</div>
+   <div className="home-card-heading"><span className="home-card-icon"><Database size={18} aria-hidden="true"/></span><div className="home-card-title"><h3><span title={d.name} className="directory-name">{d.name}</span></h3>{d.active===false&&<span className="home-card-inactive">Inactive</span>}</div></div>
    {d.description&&<p className="home-card-description" title={d.description}>{d.description}</p>}
    <div className="home-card-metrics"><span><FileText size={14} aria-hidden="true"/><strong>{all.length}</strong> document{all.length===1?'':'s'}</span><span className={ready?'home-card-ready':undefined}><CheckCircle2 size={14} aria-hidden="true"/>{ready} ready</span></div>
-   <div className="home-card-footer"><span className="home-card-status" data-state={state}>{status}</span><button type="button" className="btn home-card-chat" onClick={()=>onChat(d.id)}>Open chat<ArrowRight size={14}/></button></div>
+   <div className="home-card-footer"><span className="home-card-status" data-state={state}>{status}</span><ActionButton type="button" className="btn home-card-chat" onClick={()=>onChat(d.id)} label={`Open chat for ${d.name}`} action="chat"/></div>
  </article>;
- })}{!visible.length&&<div className="directory-empty">{datasets.length?<><p>No datasets match your search.</p><button type="button" className="btn" onClick={onClearSearch}>Clear search</button></>:<><h3>{canManage?'No registered datasets yet':'No datasets assigned'}</h3><p>{canManage?'Visit Datasets to create your first dataset.':'Ask your administrator to assign a dataset to your account.'}</p><button className="btn" onClick={onBrowse}>Browse datasets</button></>}</div>}</div>}
+ })}{!visible.length&&<div className="directory-empty">{datasets.length?<><p>No datasets match your search.</p><ActionButton type="button" className="btn" onClick={onClearSearch} label="Clear search" action="close"/></>:<><h3>{canManage?'No registered datasets yet':'No datasets assigned'}</h3><p>{canManage?'Visit Datasets to create your first dataset.':'Ask your administrator to assign a dataset to your account.'}</p><ActionButton className="btn" onClick={onBrowse} label="Browse datasets" action="documents"/></>}</div>}</div>}
  </section>;
 }

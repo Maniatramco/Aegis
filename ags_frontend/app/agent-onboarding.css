@@ -1,4 +1,9 @@
-.agent-onboarding{border:1px solid #cddffa;border-radius:14px;background:#fff;padding:14px;margin:12px 0;min-width:0}
+.agent-onboarding{border:1px solid #cddffa;border-radius:14px;background:#fff;padding:12px;margin:10px 0;min-width:0;width:100%;max-width:880px;box-sizing:border-box}
+.agent-onboarding>.workflow-frame{max-width:100%;margin:6px 0 10px}
+.agent-onboarding-model-options{margin-top:10px;padding:0 10px;border:1px solid #d6e2f5;border-radius:8px}
+.agent-onboarding-model-options>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;font-size:12px;color:#14355e;padding:8px 0}
+.agent-onboarding-model-options>summary span{color:#68788e;font-size:11px}.agent-onboarding-model-options>summary::after{content:'⌄';color:#103b76}.agent-onboarding-model-options[open]>summary::after{transform:rotate(180deg)}
+.agent-onboarding-model-options .agent-onboarding-models{margin:4px 0 10px}
 .agent-onboarding>header{display:flex;align-items:center;gap:8px;color:#103b76;margin-bottom:12px;flex-wrap:wrap}
 .agent-onboarding>header .icon{margin-left:auto}
 .agent-onboarding-fields,.agent-onboarding-models{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}

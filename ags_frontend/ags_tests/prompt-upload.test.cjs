@@ -118,10 +118,10 @@ test('download round trips complete nested schema through Upload Prompt without 
 });
 test('template list renders one row per selected dataset prompt with all row actions',()=>{
  const markup=renderToStaticMarkup(React.createElement(PromptTemplates,{templates:[{id:'a',name:'Invoice one',source_filename:'mani.json',schema,dataset_id:'one',version:2},{id:'b',name:'Other dataset',schema,dataset_id:'two'}],datasets:[{id:'one',name:'Invoices'},{id:'two',name:'Other'}],selectedDataset:'one',initialId:'',api:async()=>{},onSaved:()=>{},onUse:()=>{},onDirty:()=>{}}));
- assert.match(markup,/prompt-template-row/);assert.match(markup,/Invoice one/);assert.doesNotMatch(markup,/Prompt template Other dataset/);
- assert.match(markup,/Uploaded file: mani.json/);assert.match(markup,/Search by name or filename/);
+ assert.match(markup,/aria-label="Prompt templates"/);assert.match(markup,/Invoice one/);assert.doesNotMatch(markup,/Prompt template Other dataset/);
+ assert.match(markup,/title="mani.json">mani.json/);assert.match(markup,/Search by name or filename/);
  for(const label of ['Edit','Versions','Download','Use template'])assert.match(markup,new RegExp(label));
- assert.match(markup,/Invoices \u00b7 1 field \u00b7 Version 2/);assert.match(markup,/href="\/api\/templates\/a\/export\?version=2"/);assert.match(markup,/download="mani.json"/);assert.doesNotMatch(markup,/prompt-template-editor/);
+ assert.match(markup,/<td class="prompt-dataset-cell">Invoices<\/td><td class="prompt-number">1<\/td><td class="prompt-number">2<\/td>/);assert.match(markup,/href="\/api\/templates\/a\/export\?version=2"/);assert.match(markup,/download="mani.json"/);assert.doesNotMatch(markup,/prompt-template-editor/);
 });
 test('editing a scoped template displays its fixed dataset and existing fields',()=>{
  const markup=renderToStaticMarkup(React.createElement(PromptTemplates,{templates:[{id:'a',name:'Invoice',schema,dataset_id:'one'}],datasets:[{id:'one',name:'Invoices'}],selectedDataset:'one',initialId:'a',api:async()=>{},onSaved:()=>{},onUse:()=>{},onDirty:()=>{}}));

@@ -1,6 +1,7 @@
 "use client";
+import {ActionButton} from "./action-button";
 import {useEffect,useRef,useState} from 'react';
-import {FileSearch,X} from 'lucide-react';
+import {FileScan,X} from 'lucide-react';
 import {eligibleModels} from './dataset-workspace';
 import {JobProgress} from './operation-progress';
 import {useAgentConsent} from './agent-consent';
@@ -53,19 +54,19 @@ export function ReExtractionDialog({source,documents,datasets,templates,extracti
   }catch(err){setError((err as Error).message);}finally{submitting.current=false;setBusy(false);}
  };
  return <><dialog ref={dialog} className="reextract-dialog" aria-label="Re-extract options" onCancel={event=>{if(busy)event.preventDefault();}} onClose={onClose}>
-  <div className="panel-head"><div><h2>{run?'Re-extraction progress':'Re-extract'}</h2><p className="small muted">{dataset?.name} · {sourceDocs.map(d=>d.name).join(', ')||source.name}</p></div><button className="btn icon" disabled={busy} aria-label="Close re-extract options" onClick={()=>dialog.current?.close()}><X size={18}/></button></div>
+  <div className="panel-head"><div><h2>{run?'Re-extraction progress':'Re-extract'}</h2><p className="small muted">{dataset?.name} · {sourceDocs.map(d=>d.name).join(', ')||source.name}</p></div><button title="Close re-extract options" className="btn icon" disabled={busy} aria-label="Close re-extract options" onClick={()=>dialog.current?.close()}><X size={18}/></button></div>
   <p className="small muted">Previous extraction: <code>{source.id}</code>. Its saved results and original files are preserved.</p>
   {!run&&<><label className="field">Prompt template<select aria-label="Re-extract prompt template" value={template} onChange={e=>setTemplate(e.target.value)} disabled={busy}><option value="">Choose a prompt template</option>{prompts.map(t=><option key={t.id} value={t.id}>{t.name} · v{t.version||1}</option>)}</select></label>
   <label className="field">Extraction name<input aria-label="Re-extraction name" maxLength={200} value={name} disabled={busy} onChange={e=>setName(e.target.value)}/><span className="small muted">Edit this name if needed. The suffix uses your local date and time.</span></label>
   <p className="small muted">Uses {chosen?.name||'the dataset default extraction model'}{source.merge_records?' · keeps separate records for each original':''}.</p>
-  {!chosen&&<p role="alert" className="upload-notice">Set a default extraction model for this dataset. <button className="text-button" onClick={()=>{dialog.current?.close();onConfigure(dataset?.id||'');}}>Open Model Mapping</button></p>}
+  {!chosen&&<p role="alert" className="upload-notice">Set a default extraction model for this dataset. <ActionButton className="text-button" onClick={()=>{dialog.current?.close();onConfigure(dataset?.id||'');}} label="Open Model Mapping" action="mapping"/></p>}
   {ready&&needsReindex&&<p role="status" className="upload-notice">The embedding model changed. Confirm once to rebuild the source indexes with this dataset’s current embedding model, then re-extract. Earlier results and originals are preserved.</p>}
-  {!ready&&<p role="alert" className="upload-notice">Wait for source document processing to finish and make sure the dataset is active. <button className="text-button" onClick={()=>{dialog.current?.close();onConfigure(dataset?.id||'');}}>Open Model Mapping</button></p>}
+  {!ready&&<p role="alert" className="upload-notice">Wait for source document processing to finish and make sure the dataset is active. <ActionButton className="text-button" onClick={()=>{dialog.current?.close();onConfigure(dataset?.id||'');}} label="Open Model Mapping" action="mapping"/></p>}
   {!prompts.length&&<p role="alert">Create a prompt in Onboard → Prompt first.</p>}
   </>}
   {run?.workflow?workflowJobs.map((job:Entity)=><JobProgress key={job.id} job={job}/>):job&&<JobProgress job={job}/>}
   {job&&['queued','running','blocked'].includes(job.status)&&<p className="small muted">Processing continues if you close this dialog. Follow the new run in Review.</p>}
   {(error||workflowError||latest?.error)&&<p className="review-error" role="alert">{error||workflowError||latest?.error}</p>}
-  <div className="row wrap">{!run?<button className="btn primary" disabled={busy||!ready||!template||!chosen||!name.trim()} onClick={submit}><FileSearch size={16}/>{busy?'Starting…':needsReindex?'Reindex and re-extract':'Start re-extraction'}</button>:latest?.status==='ready'||(!run?.workflow&&job?.status==='completed')?<button className="btn primary" disabled={busy} onClick={async()=>{if(submitting.current)return;submitting.current=true;setBusy(true);try{const result=await api(`/extractions/${resultId}`);dialog.current?.close();onReview(result);}catch(err){setError((err as Error).message);}finally{submitting.current=false;setBusy(false);}}}>Review results</button>:null}<button className="btn" disabled={busy} onClick={()=>dialog.current?.close()}>{run?'Close':'Cancel'}</button></div>
+  <div className="row wrap">{!run?<button className="btn primary" disabled={busy||!ready||!template||!chosen||!name.trim()} onClick={submit}><FileScan size={16}/>{busy?'Starting…':needsReindex?'Reindex and re-extract':'Start re-extraction'}</button>:latest?.status==='ready'||(!run?.workflow&&job?.status==='completed')?<ActionButton className="btn primary" disabled={busy} onClick={async()=>{if(submitting.current)return;submitting.current=true;setBusy(true);try{const result=await api(`/extractions/${resultId}`);dialog.current?.close();onReview(result);}catch(err){setError((err as Error).message);}finally{submitting.current=false;setBusy(false);}}} label="Review results" action="review"/>:null}<button className="btn" disabled={busy} onClick={()=>dialog.current?.close()}>{run?'Close':'Cancel'}</button></div>
  </dialog>{consent.popup}</>;
 }

@@ -1,3 +1,4 @@
+const {actionButton,expandActions}=require('./support/action-button.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');const path=require('node:path');const Module=require('node:module');const ts=require('typescript');
@@ -5,6 +6,7 @@ function compile(name,overrides={}){
  const filename=path.resolve(__dirname,'../app',name);const compiled=new Module(filename,module);compiled.filename=filename;compiled.paths=module.paths;
  const original=compiled.require.bind(compiled);
  compiled.require=id=>{
+  if(id==='./action-button')return actionButton;
   if(Object.hasOwn(overrides,id))return overrides[id];
   if(id.endsWith('.css'))return {};
   if(id.startsWith('.')){const base=path.resolve(path.dirname(filename),id);const source=[base+'.tsx',base+'.ts'].find(file=>fs.existsSync(file));if(source)return compile(path.relative(path.resolve(__dirname,'../app'),source),overrides);}
@@ -38,14 +40,14 @@ test('text drags are distinct from file drags',()=>{
 
 // Exercise the real component's input handlers with persistent hooks, without
 // uploading files or running network-dependent catalog/conversation effects.
-function assistant(apiHandler,streamHandler){
+function assistant(apiHandler,streamHandler,consentHandler){
  const storage=new Map();global.sessionStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
  let index=0;const hooks=[],calls=[],savedPrompts=[];const effects=[];
  const react={useState(initial){const slot=index++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];},useRef(initial){const slot=index++;if(!(slot in hooks))hooks[slot]={current:initial};return hooks[slot];},useCallback:fn=>fn,useLayoutEffect:()=>{},useEffect:fn=>effects.push(fn)};
  const empty=new Proxy({},{get:(_target,key)=>key==='speechCapabilities'?()=>({input:false}):()=>null});
- const {AgentV2}=compile('agent-v2.tsx',{'react':react,'lucide-react':empty,'./agent-commands':compile('agent-commands.ts'),'./agent-consent':{useAgentConsent:()=>({request:async()=>({required:false,destinations:[]}),popup:null})},'./agent-attachments':helpers,'./prompt-upload':compile('prompt-upload.ts'),'./prompt-upload-preview':empty,'./agent-prompt-progress':promptProgress,'./workflow-stepper':workflowStepper,'./agent-logo':empty,'./agent-onboarding':empty,'./agent-answer-workflow':empty,'./agent-prompt-selection':compile('agent-prompt-selection.ts'),'./agent-document-selection':compile('agent-document-selection.ts'),'./agent-v2.css':{},'./agent-document-filter':empty,'./chat-stream':streamHandler?compile('chat-stream.ts'):empty,'./agent-v2-chat':empty,'./batch-progress':empty,'./agent-v2-output':empty,'./batch-workflow':empty,'./agent-voice':empty});
+ const {AgentV2}=compile('agent-v2.tsx',{'react':react,'lucide-react':empty,'./agent-commands':compile('agent-commands.ts'),'./agent-consent':{useAgentConsent:()=>({request:consentHandler|| (async()=>({required:false,destinations:[]})),popup:null})},'./agent-attachments':helpers,'./prompt-upload':compile('prompt-upload.ts'),'./prompt-upload-preview':empty,'./agent-prompt-progress':promptProgress,'./workflow-stepper':workflowStepper,'./agent-logo':empty,'./agent-onboarding':empty,'./agent-answer-workflow':empty,'./agent-prompt-selection':compile('agent-prompt-selection.ts'),'./agent-document-selection':compile('agent-document-selection.ts'),'./agent-v2.css':{},'./agent-document-filter':empty,'./chat-stream':streamHandler?compile('chat-stream.ts'):empty,'./agent-v2-chat':empty,'./batch-progress':empty,'./batch-workflow':empty,'./agent-v2-output':empty,'./agent-voice':empty});
  const props={api:(...args)=>{calls.push(args);return apiHandler?apiHandler(...args):new Promise(()=>{});},stream:streamHandler||(()=>assert.fail('Dropping files must not start an answer')),username:'attachment-test',onJobs(){},onVisibleJobs(){},onReview(){},onPromptSaved:prompt=>savedPrompts.push(prompt),maxUploadMb:2};
- let root;function render(){index=0;effects.length=0;root=AgentV2(props);return root;}
+ let root;function render(){index=0;effects.length=0;root=expandActions(AgentV2(props));return root;}
  function elements(node){if(!node||typeof node!=='object')return [];if(Array.isArray(node))return node.flatMap(elements);return [node,...elements(node.props?.children)];}
  const find=(key,value)=>elements(root).find(node=>node.props?.[key]===value);
  const names=()=>elements(root).filter(node=>node.props?.className?.split(' ').includes('agent-v2-file-card')).map(node=>elements(node).find(child=>child.type==='strong').props.children);
@@ -106,7 +108,7 @@ test('catalog failure exposes retry and a successful retry restores both selecto
   const view=assistant(async path=>{if(!path.includes('/catalog'))return [];if(++attempts===1)throw Error('Connection timed out');return selectorCatalog;});
   startCatalog(view);await flush();await flush();view.render();
   const notice=view.find('className','agent-v2-catalog-error');assert.equal(notice.props.role,'alert');
-  const retry=view.elements().find(node=>node.type==='button'&&node.props.children==='Retry datasets and models');assert.ok(retry);
+  const retry=view.elements().find(node=>node.type==='button'&&node.props['aria-label']==='Retry datasets and models');assert.ok(retry);
   retry.props.onClick();view.render();startCatalog(view);await flush();await flush();view.render();
   assert.equal(view.find('className','agent-v2-catalog-error'),undefined);
   assert.match(JSON.stringify(view.find('aria-label','Agent dataset').props.children),/Resume Extraction/);
@@ -114,6 +116,26 @@ test('catalog failure exposes retry and a successful retry restores both selecto
  }finally{global.window=previous;}
 });
 const uploadPlan=(body,id='upload-plan')=>({id,request:body.text,attached_filenames:body.attached_filenames,dataset_id:'dataset-one',document_ids:[],template_id:'',planner:{name:'Test'},calls:[{tool:'upload',title:'Upload documents',status:'pending'}]});
+
+test('ordinary questions skip consent preflight and go straight to the plan endpoint',async()=>{
+ const view=assistant(undefined,undefined,()=>assert.fail('Ordinary chat must not open processing consent'));
+ selectContext(view);setRequest(view,'How many documents are indexed?');
+ view.find('aria-label','Send agent request').props.onClick();await flush();view.render();
+ assert.equal(view.calls.length,1);assert.equal(view.calls[0][0],'/agent-v2/plans');
+ assert.equal(view.calls[0][2].allow_external,true);
+});
+
+test('processing consent is requested only when confirming the upload workflow',async()=>{
+ const notices=[];
+ const view=assistant(async(path,method,body)=>path==='/agent-v2/plans'?uploadPlan(body):{...uploadPlan({text:'@Upload'}),calls:[{tool:'upload',title:'Upload documents',status:'completed'}]},undefined,async input=>{
+  notices.push(input);return {dataset_id:'dataset-one',required:true,destinations:[{key:'oci-storage'}]};
+ });
+ selectContext(view);view.root.props.onDrop(drag([new File(['Fictional invoice'],'invoice.txt')]));view.render();setRequest(view,'@Upload');
+ view.find('aria-label','Send agent request').props.onClick();await flush();view.render();assert.equal(notices.length,0);
+ button(view,'Confirm upload').props.onClick();await flush();view.render();
+ assert.equal(notices.length,1);assert.deepEqual(notices[0].roles,['embedding']);
+ assert.equal(view.calls.find(call=>call[0].endsWith('/upload'))[2].get('allow_external'),'true');
+});
 
 test('clear chat detaches saved context and the next request starts a fresh conversation',async()=>{
  let latest,number=0;
@@ -188,10 +210,10 @@ test('partial extraction exposes successful review while a sibling fails, hiding
  const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
  const {AgentResult}=compile('agent-v2-output.tsx',{'./operation-progress':{JobProgress:()=>null},'./merged-details':compile('merged-details.tsx')});
  const html=renderToStaticMarkup(React.createElement(AgentResult,{tool:{status:'failed',result:{extractions:[{extraction_id:'good',name:'one.pdf',status:'completed',data:{owner:'Alice'}},{extraction_id:'bad',name:'two.pdf',status:'failed'},{extraction_id:'old',name:'old attempt',status:'failed',superseded:true}]}},onReview(){}}));
- assert.match(html,/one.pdf/);assert.match(html,/Alice/);assert.match(html,/two.pdf/);assert.equal((html.match(/Review result and evidence/g)||[]).length,1);assert.doesNotMatch(html,/old attempt|send a new request/);
+ assert.match(html,/one.pdf/);assert.match(html,/Alice/);assert.match(html,/two.pdf/);assert.equal((html.match(/aria-label="Review result and evidence"/g)||[]).length,1);assert.doesNotMatch(html,/old attempt|send a new request/);
 });
 const jsonFile=(name='prompt.json',body=JSON.stringify({name:'Owner',schema:promptSchema}))=>({...file(name,Buffer.byteLength(body)),text:async()=>body});
-const button=(view,name)=>view.elements().find(node=>node.type==='button'&&node.props.children===name);
+const button=(view,name)=>view.elements().find(node=>node.type==='button'&&(node.props.children===name||node.props['aria-label']===name));
 const preview=view=>view.elements().find(node=>node.props?.onConfirm&&Object.hasOwn(node.props,'prompt'));
 test('only JSON attachments ask for a role, and unresolved JSON cannot be sent',async()=>{
  const view=assistant();view.root.props.onDrop(drag([file('notes.txt'),jsonFile('data.JSON')]));view.render();

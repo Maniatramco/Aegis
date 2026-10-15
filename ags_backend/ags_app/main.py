@@ -799,8 +799,11 @@ def export_extraction(id:str,format:str='json',owner=Depends(auth)):
     except ValueError as error:raise HTTPException(400,str(error))
     return Response(payload,media_type=media,headers={'Content-Disposition':f'attachment; filename="extraction-v{r.version}.{format}"'})
 @app.get('/api/jobs')
-def jobs(owner=Depends(auth)):
-    return [job_repr(j) for j in access.jobs(owner)]
+def jobs(owner=Depends(auth),ids:str=''):
+    selected=set(ids.split(',')) if ids else None
+    if selected and (len(ids)>5000 or len(selected)>120 or any(not id or len(id)>100 or not all(c.isalnum() or c in '-_' for c in id) for id in selected)):
+        raise HTTPException(422,'Choose up to 120 job references.')
+    return [job_repr(j) for j in access.jobs(owner) if selected is None or j.id in selected]
 @app.post('/api/jobs/{id}/retry')
 def retry_job(id:str,owner=Depends(auth)):
     initial=None

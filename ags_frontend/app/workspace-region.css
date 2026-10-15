@@ -1,0 +1,81 @@
+/* The existing main keeps its sizing/scrolling contract and acts as one region. */
+body .shell .workspace-region {
+  --component-ink: #195590;
+  --component-line: rgba(120, 174, 229, .55);
+  --component-surface: rgba(225, 239, 255, .62);
+  position: relative;
+  isolation: isolate;
+}
+body .shell .modal { --component-ink: #195590; --component-line: rgba(120,174,229,.55); --component-surface: rgba(225,239,255,.62); }
+body .shell .workspace-region::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 10px;
+  border: 1px solid rgba(170, 199, 233, .6);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,.65), rgba(229,241,255,.36) 65%, rgba(224,247,251,.3));
+  pointer-events: none;
+}
+body .shell .workspace-region > .page-head { margin-bottom: 16px; }
+body .shell .workspace-region .region-actions { justify-content: flex-end; }
+body .shell .workspace-region .dataset-navigation { align-items: center; margin-bottom: 14px; }
+body .shell .workspace-region .dataset-documents-toolbar { justify-content: flex-end; }
+/* Translucent surfaces with readable text, including primary actions. */
+body .shell .modal .btn,
+body .shell .workspace-region .btn,
+body .shell .workspace-region .text-button,
+body .shell .workspace-region .storage-provider {
+  background: var(--component-surface);
+  border: 1px solid var(--component-line);
+  color: var(--component-ink);
+  box-shadow: 0 1px 2px rgba(44, 91, 149, .04);
+  border-radius: 9px;
+  transition: background-color .15s, border-color .15s;
+}
+body .shell .modal .btn.primary,
+body .shell .workspace-region .btn.primary,
+body .shell .workspace-region .btn[aria-pressed="true"],
+body .shell .workspace-region .storage-provider.selected {
+  color: #144f8d;
+  border-color: rgba(90, 151, 218, .7);
+  background: linear-gradient(120deg, rgba(197,225,255,.85), rgba(221,240,255,.72));
+}
+body .shell .modal .btn:not(:disabled):hover,
+body .shell .workspace-region :is(.btn, .text-button, .storage-provider):not(:disabled):hover {
+  background: rgba(195, 222, 252, .88);
+  border-color: #79aee1;
+}
+body .shell .modal .btn:disabled,
+body .shell .workspace-region :is(.btn, .text-button, .storage-provider):disabled {
+  background: rgba(235, 240, 247, .65);
+  border-color: rgba(187, 199, 215, .5);
+  color: #66778e;
+  box-shadow: none;
+}
+body .shell .workspace-region .btn.danger { color: #a63448; border-color: rgba(199,112,128,.5); background: rgba(255,236,240,.7); }
+body .shell .workspace-region .text-button { padding: 6px 10px; }
+body .shell .workspace-region :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
+  background-color: rgba(246, 251, 255, .84);
+  border-color: var(--component-line);
+}
+body .shell .workspace-region :is(input, textarea)[readonly] { background-color: rgba(241,245,249,.8); }
+body .shell .workspace-region :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid #226eb8;
+  outline-offset: 2px;
+}
+body .shell .workspace-region :is(input[type="checkbox"], input[type="radio"]) { accent-color: #357bbd; }
+body .shell .workspace-region .dataset-directory-table tbody th { text-transform: none; letter-spacing: normal; }
+body .shell .agent-v2-workspace > .page-head { margin-bottom: 10px; }
+body .shell .review-page-shell.has-review::before { inset: 4px 10px; }
+@media (max-width: 600px) {
+  body .shell .workspace-region::before { inset: 4px; border-radius: 12px; }
+  body .shell .workspace-region > .page-head { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .shell .workspace-region :is(.btn, .text-button, .storage-provider) { transition: none; }
+}
+@media (forced-colors: active) {
+  body .shell .workspace-region::before { background: Canvas; border-color: CanvasText; }
+  body .shell .workspace-region :is(.btn, .text-button, .storage-provider) { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
+}

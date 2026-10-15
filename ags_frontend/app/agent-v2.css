@@ -75,6 +75,7 @@ body .sidebar.agent-navigation-drawer.open{transform:translateX(0);visibility:vi
 .agent-v2-command-popover .agent-v2-document-options button{justify-content:flex-start;gap:10px}.agent-v2-command-popover .agent-v2-document-options small{display:block;font-size:11px;color:#62718b;margin-top:3px}.agent-v2-command-popover .agent-v2-document-options strong{font-size:13px}
 
 /* Full-width composer grows with content while keeping controls and chat in view. */
+.agent-v2-composer>.agent-v2-latest{position:relative;bottom:auto;left:auto;transform:none;margin:0 0 5px auto;display:flex;justify-content:center;width:max-content}
 .agent-extraction-link{display:inline-block;max-width:100%;vertical-align:baseline;color:#0667ef;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}.agent-extraction-link:focus-visible{outline:2px solid #0667ef;outline-offset:2px;border-radius:2px}
 .agent-v2-compose-box{width:100%;min-width:0;box-sizing:border-box}
 .agent-v2-footer details[open]{max-height:min(180px,15dvh);overflow:auto;overscroll-behavior:contain}

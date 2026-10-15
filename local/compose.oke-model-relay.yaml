@@ -1,0 +1,6 @@
+# Apply only to Ollama with the existing local profile files and --no-build.
+# The Windows SSH relay uses this loopback-only port; no public model listener.
+services:
+  ollama:
+    ports:
+      - '127.0.0.1:11436:11434'

@@ -1,0 +1,26 @@
+/* Review detail fits the viewport; only document/field contents scroll. */
+body:has(.review-page-shell.has-review){overflow:hidden}
+body .shell:has(>.review-page-shell.has-review){height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+body .shell:has(>.review-page-shell.has-review)>.topbar{flex-shrink:0}
+body .shell>.workspace.review-page-shell.has-review{height:auto;flex:1;min-height:0;width:100%;padding:6px 12px}
+body .shell>.workspace.review-page-shell.has-review::before{inset:4px 8px}
+body .shell .review-detail-selectorbar{display:grid;grid-template-columns:36px minmax(0,1fr);gap:8px;align-items:end}
+body .shell .review-detail-selectorbar .review-return-bar{padding:0 0 6px}
+body .shell .review-detail-selectorbar .review-filters{padding:0 0 6px;gap:8px}
+body .shell .review-detail-selectorbar .review-filters select{height:36px;min-height:36px;padding:6px 8px}
+body .shell .review-detail-browser>.review-workspace{padding:6px 8px 0;min-height:0}
+body .shell .review-controls{display:flex;justify-content:flex-end;align-items:center;gap:6px;min-height:36px;flex-shrink:0;margin-bottom:4px}
+body .shell .review-controls .download-results>summary{list-style:none}
+body .shell .review-controls .download-results>summary::-webkit-details-marker{display:none}
+body .shell .review-detail-browser .review-workspace .review-split{height:auto;flex:1;min-height:0;gap:10px}
+body .shell .review-detail-browser .review-workspace :is(.review-values,.review-source){height:auto;min-height:0}
+body .shell .review-detail-browser .review-save-footer{flex-shrink:0;margin-top:6px;min-height:48px;padding:4px 0}
+body .shell .review-detail-browser .review-save-footer .review-actions{margin-left:auto}
+body .shell .review-detail-browser .review-workspace>div[role=status]{flex:1;min-height:0;overflow:auto}
+@media(max-width:560px){
+ body .shell>.workspace.review-page-shell.has-review{padding:4px 6px}
+ body .shell .review-detail-selectorbar{grid-template-columns:36px minmax(0,1fr);gap:6px}
+ body .shell .review-detail-selectorbar .review-filters{grid-template-columns:1fr 1fr;gap:6px}
+ body .shell .review-detail-browser>.review-workspace{padding:4px 6px 0}
+ body .shell .review-detail-browser .review-workspace .review-split{min-height:0}
+}

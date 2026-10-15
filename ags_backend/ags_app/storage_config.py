@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Literal
 from . import core, dataset_access as access
 
-CONTROL = ('configuration/', 'secrets/', 'diagnostics/', 'model/', 'models/', 'locks/', 'workspace-archives/', 'storage-routes/')
+CONTROL = ('configuration/', 'secrets/', 'diagnostics/', 'model/', 'models/', 'locks/', 'workspace-archives/', 'storage-routes/', 'object-cache/')
 FIELDS = ('storage_provider','local_storage_path','oci_storage_namespace','oci_storage_bucket','oci_storage_prefix',
           'oci_storage_region','oci_storage_auth_mode','oci_storage_profile','oci_storage_config_file','oci_storage_key_file')
 ENTITIES={'documents','extraction','knowledge_base','template','conversation','agent_plan','agent_onboarding','agent-state','jobs','temporary_session','temporary_document'}
@@ -74,7 +74,9 @@ class DirectoryStorage(core.FileStorage):
 
 def backend(key,create=False):
     destination=route(key,create)
-    return core.oci_storage(destination) if destination['storage_provider']=='oci' else DirectoryStorage(destination.get('local_storage_path'))
+    if destination['storage_provider']!='oci':return DirectoryStorage(destination.get('local_storage_path'))
+    from .object_cache import CachedObjects,eligible
+    return CachedObjects(lambda:core.oci_storage(destination),destination) if eligible(key) else core.oci_storage(destination)
 
 def validate(cfg):
     core.enforce_local_only(core.settings()|cfg)

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { runtimeConnections } from '../../runtime-connections';
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 async function proxy(
@@ -35,6 +36,10 @@ async function proxy(
     output.delete("connection");
     output.delete("content-encoding");
     output.delete("content-length");
+    if (request.method === 'GET' && path.join('/') === 'storage/status' && response.ok) {
+      const destinations = await response.json();
+      return Response.json({...destinations, services:runtimeConnections(base, process.env)}, {status:response.status, headers:output});
+    }
     return new Response(response.body, {
       status: response.status,
       headers: output,

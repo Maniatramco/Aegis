@@ -1,5 +1,12 @@
 export const agentCommands=[{operation:'onboard',label:'@Onboard',description:'Set up a dataset, models, documents and prompt'},{operation:'upload',label:'@Upload',description:'Upload and index documents'},{operation:'extract',label:'@Extract',description:'Extract fields with a prompt template'},{operation:'reextract',label:'@ReExtract',description:'Re-extract saved documents and keep earlier results'}] as const;
-export function agentOperation(text:string){const directive=/^\s*@(onboard|upload|extract|reextract)(?=\s|$)/i.exec(text)?.[1].toLowerCase();return (directive||(/^re[- ]?extract[.!]?$/i.test(text.trim())?'reextract':undefined)) as 'onboard'|'upload'|'extract'|'reextract'|undefined;}
+export function agentOperation(text:string){
+ const directive=/^\s*@(onboard|upload|extract|reextract)(?=\s|$)/i.exec(text)?.[1].toLowerCase();
+ if(directive)return directive as 'onboard'|'upload'|'extract'|'reextract';
+ if(/^re[- ]?extract[.!]?$/i.test(text.trim()))return 'reextract';
+ if(/^(?:please\s+|pls\s+)?extract(?:\s+only)?[.!]?$/i.test(text.trim()))return 'extract';
+ if(/^\s*(?:(?:please|pls)\s+)?(?:(?:can|could|would|will)\s+(?:you|u)\s+(?:(?:please|pls)\s+)?)?(?:onboard|create|register)\s+(?:(?:a|an|one|new)\s+)*dataset\b/i.test(text))return 'onboard';
+ return undefined;
+}
 export function agentInputIssue(text:string){
  const value=text.trim();
  if(value.startsWith('@')&&!agentOperation(value))return 'Choose @Onboard, @Upload, @Extract or @ReExtract from the agent menu, then add your request.';

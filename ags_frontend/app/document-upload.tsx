@@ -1,4 +1,5 @@
 "use client";
+import {ActionButton} from "./action-button";
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, FileText, Loader2, RefreshCw, UploadCloud, X } from "lucide-react";
 import { BatchProgress } from "./batch-progress";
@@ -158,15 +159,15 @@ export function DocumentUploadPanel({ upload: u, attachmentOnly = false, workflo
         {row.document && <>
         {row.job?.workflow?.notice && <p className="small muted">{row.job.workflow.notice}</p>}
         {!row.processing && (row.failed || row.document.requires_reindex) && <div className="batch-document-retry"><button type="button" className="btn primary" disabled={!!u.blocked || u.retrying.includes(row.document.id) || (u.externalRequired && !u.consent)} onClick={() => u.retryIndex(row.document!)}><RefreshCw size={13}/>{u.retrying.includes(row.document.id)?"Restarting…":"Restart document workflow"}</button></div>}
-        <details className="batch-document-actions"><summary>Document actions</summary><div className="workflow-actions"><button type="button" className="btn" disabled={row.processing||u.retrying.includes(row.document.id)||!!u.blocked} onClick={()=>u.reextract(row.document!)}>Re-extract document</button>{row.document.temporary_session_id&&<button type="button" className="text-button" onClick={()=>u.keep(row.document!)}>Keep in dataset</button>}</div></details></>}
+        <details className="batch-document-actions"><summary>Document actions</summary><div className="workflow-actions"><ActionButton type="button" className="btn" disabled={row.processing||u.retrying.includes(row.document.id)||!!u.blocked} onClick={()=>u.reextract(row.document!)} label="Re-extract document" action="reextract"/>{row.document.temporary_session_id&&<ActionButton type="button" className="text-button" onClick={()=>u.keep(row.document!)} label="Keep in dataset" action="save"/>}</div></details></>}
       </div>
-      {!row.document && row.status !== "uploading" && <button type="button" className="btn icon" aria-label={`Remove ${row.name}`} disabled={u.uploading} onClick={() => u.remove(row.id)}><X size={16} /></button>}
+      {!row.document && row.status !== "uploading" && <button title={`Remove ${row.name}`} type="button" className="btn icon" aria-label={`Remove ${row.name}`} disabled={u.uploading} onClick={() => u.remove(row.id)}><X size={16} /></button>}
     </li>)}</ul>}
     {u.externalRequired && (!workflowOnly || retryUpload || rows.some(row => row.failed || row.document?.requires_reindex && !row.processing)) && <label className="check upload-consent"><input type="checkbox" checked={u.consent} disabled={u.uploading} onChange={e => u.setConsent(e.target.checked)} /><span>I approve sending original files to the configured external storage, and document text to external search or embedding providers. API usage may be billed separately.</span></label>}
     {u.notice && <p className="upload-notice" role="alert"><AlertCircle size={16} />{u.notice}</p>}
-    {u.pollError && <p className="upload-notice" role="status">Could not refresh processing status. <button type="button" className="text-button" onClick={u.refresh}>Check again</button></p>}
-    {attachmentOnly && storedCount > 0 && onWorkflow && <button type="button" className="text-button" onClick={onWorkflow}>View processing status</button>}
-    {(!workflowOnly || retryUpload) && <div className="upload-actions"><button type="button" className="text-button" onClick={u.onManage}>View dataset documents</button><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={() => { onStart?.(); void u.start(); }}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>}
+    {u.pollError && <p className="upload-notice" role="status">Could not refresh processing status. <ActionButton type="button" className="text-button" onClick={u.refresh} label="Check again" action="status"/></p>}
+    {attachmentOnly && storedCount > 0 && onWorkflow && <ActionButton type="button" className="text-button" onClick={onWorkflow} label="View processing status" action="status"/>}
+    {(!workflowOnly || retryUpload) && <div className="upload-actions"><ActionButton type="button" className="text-button" onClick={u.onManage} label="View dataset documents" action="documents"/><button type="button" className="btn primary" disabled={u.uploading || !!u.blocked || !u.pending.length || (u.externalRequired && !u.consent)} onClick={() => { onStart?.(); void u.start(); }}>{u.uploading ? <Loader2 className="animate-spin" size={16} /> : <UploadCloud size={16} />}{u.uploading ? "Uploading originals…" : `${u.pending.some(e => e.status === "failed") ? "Retry upload" : "Upload"} ${u.pending.length || ""}`}</button></div>}
     <p className="upload-footnote">{workflowOnly ? "Closing this popup does not stop processing." : "Only ready, compatible-index documents are available for questions. Hiding this popup does not cancel accepted processing. The original is retained."}</p>
   </section>;
 }

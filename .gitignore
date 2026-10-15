@@ -30,3 +30,9 @@ ags_frontend/screenshots/
 /output/
 /work/
 /docs/testing/results/
+
+# Private destination receipts from the portable application release helper.
+/ags_deploy/deployment-records/
+
+# Session-specific local design review notes.
+/design-qa.md

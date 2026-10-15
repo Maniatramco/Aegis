@@ -1,4 +1,5 @@
 "use client";
+import {ActionButton} from "./action-button";
 import {useEffect,useRef,useState} from 'react';
 import {X} from 'lucide-react';
 import {citationRequest,recordedPage,extractionCitationId,citedValues,evidenceExcerpt} from './citation-source';
@@ -45,7 +46,7 @@ export function CitationPanel({source,api,onClose,onReview}:{source:Entity;api:A
  },[base,page,origin?.excerpt,api]);
  useEffect(()=>{setImageFailed(false);},[base,page]);
  return <dialog ref={dialog} className="citation-panel" aria-labelledby="citation-panel-title" onClose={onClose} onCancel={onClose}>
-  <header><div><span className="citation-panel-eyebrow">Citation [{source.index}]</span><h2 id="citation-panel-title">Source evidence</h2></div><button className="btn icon" aria-label="Close citation source" onClick={()=>dialog.current?.close()}><X size={18}/></button></header>
+  <header><div><span className="citation-panel-eyebrow">Citation [{source.index}]</span><h2 id="citation-panel-title">Source evidence</h2></div><button title="Close citation source" className="btn icon" aria-label="Close citation source" onClick={()=>dialog.current?.close()}><X size={18}/></button></header>
   <div className="citation-panel-body">
    {loading&&<p role="status">Loading the saved source…</p>}{error&&<p className="review-error" role="alert">{error}</p>}
    {!loading&&!error&&published&&<>
@@ -61,6 +62,6 @@ export function CitationPanel({source,api,onClose,onReview}:{source:Entity;api:A
     {!origin&&<p className="citation-panel-note">This citation refers to application metadata, not a document page.</p>}
    </>}
   </div>
-  <footer>{!error&&published&&base&&<a className="btn" href={`/api${base}/${/\.(pdf|txt|json)$/i.test(origin?.document_name||'')?'source':'download'}${pdf?`#page=${page||1}`:''}`} target="_blank" rel="noopener noreferrer">{/\.(pdf|txt|json)$/i.test(origin?.document_name||'')?'Open original':'Download original'}</a>}{evidence&&onReview&&<button className="btn primary" onClick={()=>{dialog.current?.close();onReview(evidence.extraction_id);}}>Open Review</button>}<button className="btn" onClick={()=>dialog.current?.close()}>Close</button></footer>
+  <footer>{!error&&published&&base&&<a className="btn" href={`/api${base}/${/\.(pdf|txt|json)$/i.test(origin?.document_name||'')?'source':'download'}${pdf?`#page=${page||1}`:''}`} target="_blank" rel="noopener noreferrer">{/\.(pdf|txt|json)$/i.test(origin?.document_name||'')?'Open original':'Download original'}</a>}{evidence&&onReview&&<ActionButton className="btn primary" onClick={()=>{dialog.current?.close();onReview(evidence.extraction_id);}} label="Open Review" action="review"/>}<ActionButton className="btn" onClick={()=>dialog.current?.close()} label="Close" action="close"/></footer>
  </dialog>;
 }

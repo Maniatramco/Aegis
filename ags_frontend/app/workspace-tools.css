@@ -1,0 +1,58 @@
+/* The top breadcrumb names the screen; controls need no duplicate title band. */
+body .shell > .topbar .workspace-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-section);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+body .shell > .topbar .breadcrumb { flex: 1; overflow: hidden; }
+.workspace-page-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+body .shell > .topbar .workspace-page-actions .btn {
+  min-height: 36px;
+  padding: 6px 10px;
+  color: #195590;
+  background: rgba(225,239,255,.62);
+  border: 1px solid rgba(120,174,229,.55);
+  border-radius: 9px;
+  font-size: var(--text-body);
+  font-weight: 500;
+  line-height: 1.4;
+}
+body .shell > .topbar .workspace-page-actions .btn.icon { width: 36px; min-width: 36px; padding: 7px; }
+body .shell > .topbar .workspace-page-actions .btn:not(:disabled):hover { background: rgba(195,222,252,.88); border-color: #79aee1; }
+body .shell > .topbar .workspace-page-actions :is(button,input):focus-visible { outline: 2px solid #226eb8; outline-offset: 2px; }
+body .shell > .topbar .workspace-page-actions .home-datasets-search > input { outline: 0; }
+/* Review retains status, Reload and exports in an unframed compact toolbar. */
+body .shell .workspace-region .review-workspace > .review-heading {
+  min-height: 36px;
+  padding: 0;
+  margin-bottom: 8px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  isolation: auto;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+body .shell .workspace-region .review-workspace > .review-heading::before { display: none; }
+.review-status-context { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+body .shell .workspace-region .review-heading .btn { min-height: 36px; padding: 6px 10px; }
+/* Let existing directories use the space freed by removing their title bands. */
+body .shell .workspace-region .dataset-directory-table { max-height: max(220px,calc(100dvh - 210px)); }
+body .shell .workspace-region .prompt-directory-scroll { max-height: max(220px,calc(100dvh - 260px)); }
+body .shell .workspace-region .registration-table { max-height: calc(100dvh - 230px); }
+@media (max-width: 600px) {
+  body .shell > .topbar .workspace-page-actions .btn > span { display: none; }
+  body .shell > .topbar .top-actions { gap: 6px; }
+  .workspace-page-actions { gap: 6px; }
+  body .shell > .topbar:has(.home-search-control[data-expanded=true]) .breadcrumb { display: none; }
+  body .shell > .topbar:has(.home-search-control[data-expanded=true]) .top-actions { flex: 1; justify-content: flex-end; min-width: 0; }
+  body .shell > .topbar .home-search-control[data-expanded=true] .home-search-reveal { width: clamp(150px,calc(100vw - 165px),240px); }
+  body .shell > .topbar .home-datasets-search input { font-size: 16px; }
+}

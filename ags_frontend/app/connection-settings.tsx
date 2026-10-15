@@ -1,4 +1,5 @@
 "use client";
+import {ActionButton} from "./action-button";
 import {useEffect,useRef,useState} from 'react';
 import {Activity,ArrowDownToLine,Check,Layers,Plus} from 'lucide-react';
 import {WorkflowStepper} from './workflow-stepper';
@@ -36,7 +37,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
  return <details className="panel connection-settings" aria-label="Advanced connections">
   <summary>Advanced connections</summary>
   <p className="small muted">Provider defaults, processing, OCI generation, saved profiles and diagnostics.</p>
-  {!ready?<><p role="status">{error||'Loading connection settings…'}</p><button className="btn" onClick={()=>void run(()=>load())}>Retry loading connections</button></>:<>
+  {!ready?<><p role="status">{error||'Loading connection settings…'}</p><ActionButton className="btn" onClick={()=>void run(()=>load())} label="Retry loading connections" action="retry"/></>:<>
 
               <div className="section-tabs" aria-label="Advanced connection sections">{["Profiles", "Providers", "Processing", "OCI", "Diagnostics"].map(tab => <button key={tab} className={`btn ${connectionTab === tab ? "primary" : ""}`} aria-pressed={connectionTab === tab} onClick={() => setConnectionTab(tab)}>{tab}</button>)}</div>
               <div hidden={!["Providers", "Processing", "OCI"].includes(connectionTab)}><Notice tone="warn">
@@ -67,7 +68,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
                     value={profileName}
                     onChange={(e) => setProfileName(e.target.value)}
                   />
-                  <button
+                  <ActionButton
                     className="btn primary"
                     disabled={busy || !profileName.trim()}
                     onClick={() =>
@@ -82,10 +83,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
                         );
                       })
                     }
-                  >
-                    <Plus size={14} />
-                    Save current profile
-                  </button>
+                   label="Save current profile" action="save"/>
                 </div>
                 {profiles.length ? (
                   profiles.map((p) => (
@@ -100,7 +98,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
                         </span>
                       </div>
                       <div className="row wrap">
-                        {p.registration_model_id && <button className="btn" onClick={() => onModels()}>Edit in Model Registration</button>}
+                        {p.registration_model_id && <ActionButton className="btn" onClick={() => onModels()} label="Edit in Model Registration" action="edit"/>}
                         <button
                           className="btn"
                           disabled={busy || !!p.registration_model_id}
@@ -128,7 +126,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
                         >
                           Activate
                         </button>
-                        <button
+                        <ActionButton
                           className="btn"
                           disabled={busy || !!p.registration_model_id}
                           onClick={() =>
@@ -144,9 +142,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
                               },
                             })
                           }
-                        >
-                          Save new version
-                        </button>
+                         label="Save new version" action="save"/>
                         <Download path={`/settings/profiles/${p.id}/export`}>
                           Safe export
                         </Download>
@@ -385,7 +381,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
 
               </section>
               <div className="settings-actions" hidden={!["Providers", "Processing", "OCI", "Diagnostics"].includes(connectionTab)}>                  <div className="row wrap">
-                    <button
+                    <ActionButton
                       className="btn primary"
                       disabled={busy}
                       onClick={() =>
@@ -426,10 +422,7 @@ export function ConnectionSettings({api,onChanged,onModels}:{api:Api;onChanged:(
                           reload();
                         })
                       }
-                    >
-                      <Check size={14} />
-                      Save settings
-                    </button>
+                     label="Save settings" action="save"/>
                     <button
                       className="btn"
                       disabled={busy}

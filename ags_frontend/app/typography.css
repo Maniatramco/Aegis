@@ -1,0 +1,108 @@
+/* Aegis UI typography. Font and license are bundled; no external font service. */
+@font-face {
+  font-family: "Aegis Inter";
+  src: url('/ags_assets/ags_fonts/inter-variable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  --font-ui: "Aegis Inter", "Segoe UI", Arial, system-ui, sans-serif;
+  --text-small: .75rem;
+  --text-caption: .8125rem;
+  --text-body: .875rem;
+  --text-input: .875rem;
+  --text-subheading: 1rem;
+  --text-section: 1.125rem;
+  --text-page: 1.5rem;
+  --ink: #202b3c;
+  --muted: #64748b;
+}
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+body :is(h1,h2,h3,h4) { font-family: var(--font-ui); font-weight: 600; letter-spacing: -.025em; }
+body :is(button,input,select,textarea) { font-family: var(--font-ui); }
+body .shell .workspace-region :is(h2,.panel-head h2) { font-size: var(--text-section); line-height: 1.35; }
+body .shell .workspace-region :is(h3,.home-dataset-card h3) { font-size: var(--text-subheading); line-height: 1.4; }
+body .shell .workspace-region > .page-head .screen-heading,
+body .shell .workspace-region .review-heading .screen-heading {
+  font-size: var(--text-page);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -.035em;
+  color: var(--ink);
+}
+body .shell .workspace-region :is(.btn,.tabs button,.tab),
+body .shell .modal .btn { font-size: var(--text-body); font-weight: 400; line-height: 1.4; letter-spacing: 0; }
+body .shell .workspace-region > .page-head .btn,
+body .shell .workspace-region .review-heading .btn,
+body .shell .workspace-region .panel .btn { font-size: var(--text-body); }
+body .shell .workspace-region .text-button { font-size: var(--text-body); font-weight: 500; }
+body .shell .workspace-region :is(label,.control-label) { font-size: var(--text-body); font-weight: 400; line-height: 1.4; }
+body .shell .workspace-region :is(input,select,textarea) { font-size: var(--text-input); font-weight: 400; line-height: 1.5; }
+body .shell .workspace-region :is(.small,small):not(:where(.workflow-frame *, .agent-answer-workflow *, .answer-workflow-preview *)) { font-size: var(--text-small); font-weight: 400; line-height: 1.5; }
+body #workspace-navigation .nav-item { font-family: var(--font-ui); font-size: var(--text-body); font-weight: 500; letter-spacing: 0; line-height: 1.45; }
+body .breadcrumb { font-size: var(--text-caption); font-weight: 400; }
+/* Table hierarchy is shared by Datasets, prompts, models, Extract and Review. */
+body .shell .workspace-region table:not(.answer-workflow-detail-table) { font-size: var(--text-body); line-height: 1.4; }
+body .shell .workspace-region table:not(.answer-workflow-detail-table) thead th {
+  font-size: var(--text-body);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #526176;
+}
+body .shell .workspace-region table:not(.answer-workflow-detail-table) tbody th {
+  font-size: var(--text-body);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+body .shell .workspace-region table:not(.answer-workflow-detail-table) tbody td { font-size: var(--text-body); font-weight: 400; }
+body .shell .workspace-region table:not(.answer-workflow-detail-table) :is(td,th) { font-variant-numeric: tabular-nums; }
+body .shell .workspace-region table:not(.answer-workflow-detail-table) thead th button { font: inherit; line-height: 1.4; }
+/* Wrapping keeps 14 px sortable labels readable in narrow Review columns. */
+body .shell .workspace-region .extraction-directory-results thead th button { display:block; width:100%; white-space:normal; }
+body .shell .workspace-region .extraction-directory-results thead th button>svg { display:inline-block; vertical-align:middle; margin-left:4px; }
+@media(min-width:701px) {
+  body .shell .workspace-region .extraction-directory-results th:nth-child(5) { width:15%; }
+  body .shell .workspace-region .extraction-directory-results th:nth-child(6) { width:12%; }
+}
+body .shell .workspace-region table :is(.registration-model-cell strong,.mapping-table label) { font-size: var(--text-body); font-weight: 400; }
+body .shell .workspace-region :is(.directory-name,.prompt-row-details>span) { color: var(--ink); font-weight: 400; }
+body .shell .workspace-region a.directory-name:hover { color: var(--blue); }
+body .shell .workspace-region :is(.dataset-directory-description,.prompt-dataset-cell,.home-card-description) { color: var(--muted); }
+body .shell .workspace-region :is(.dataset-directory-status,.model-chip,.pill,.extraction-status,.home-card-status) { font-size: var(--text-small); font-weight: 500; }
+body .shell .workspace-region table:not(.answer-workflow-detail-table) tbody strong { font-size: var(--text-body); font-weight: 400; }
+body .shell .workspace-region .review-field .field-source { font-size: var(--text-body); font-weight: 400; text-transform: none; }
+/* Chat uses the same compact body text; progress captions retain their shared rails. */
+body .shell .workspace-region .agent-v2-exchange { font-size: var(--text-body); line-height: 1.5; }
+body .shell .workspace-region .agent-v2-response :is(p,li) { font-size: inherit; line-height: 1.6; }
+body .shell .workspace-region .agent-v2-speaker { font-size: var(--text-small); }
+body .shell .workspace-region .agent-v2-input textarea { font-size: var(--text-input); line-height: 1.5; }
+body .shell .workspace-region .agent-v2-welcome h2 { font-size: var(--text-section); }
+/* Apply the same hierarchy inside dialogs and screen-specific control bars. */
+body .shell :is(.workspace-region,.modal,dialog) :is(h2,.panel-head h2) { font-size: var(--text-section); font-weight: 600; }
+body .shell :is(.workspace-region,.modal,dialog) :is(h3,.panel-head h3):not(:where(.home-dataset-card *, .workflow-frame *, .agent-answer-workflow *)) { font-size: var(--text-section); font-weight: 600; }
+body .shell :is(.modal,dialog) :is(label,.control-label,input,select,textarea,.btn) { font-size: var(--text-body); }
+body .shell :is(.modal,dialog) :is(.small,small) { font-size: var(--text-small); }
+body .shell .workspace-region table:not(.answer-workflow-detail-table) :is(small,code,.registration-endpoint) { font-size: var(--text-small); font-weight: 400; }
+body .shell .workspace-region table:not(.answer-workflow-detail-table) code { font-family: var(--font-ui); }
+body .shell .workspace-region :is(.review-selector-row,.review-detail-selectorbar,.review-profile-picker,.agent-v2-context) :is(label,select) { font-size: var(--text-body); }
+body .shell .connection-status,
+body .shell .connection-status-caption { font-family: var(--font-ui); font-size: var(--text-small); }
+@media (max-width: 600px) {
+  body .shell .workspace-region > .page-head .screen-heading,
+  body .shell .workspace-region .review-heading .screen-heading { font-size: 20px; }
+  /* Keep mobile editing comfortable and prevent browser focus zoom. */
+  body .shell :is(.workspace-region,.modal,dialog) :is(input,select,textarea) { font-size: 16px; }
+  body .shell .workspace-region .agent-v2-input textarea { font-size: 16px; }
+  body .shell .workspace-region :is(.review-selector-row,.review-detail-selectorbar,.review-profile-picker,.agent-v2-context) select { font-size: 16px; }
+}

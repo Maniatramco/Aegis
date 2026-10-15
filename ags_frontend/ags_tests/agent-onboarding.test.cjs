@@ -1,17 +1,19 @@
+const {actionButton,expandActions}=require('./support/action-button.cjs');
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const fs=require('node:fs');const path=require('node:path');const Module=require('node:module');const ts=require('typescript');
-function view(api,initialStorage=new Map(),full=false){
+const draftFile=path.resolve(__dirname,'../app/onboarding-draft.ts');const draftModule=new Module(draftFile,module);draftModule.paths=module.paths;draftModule._compile(ts.transpileModule(fs.readFileSync(draftFile,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,draftFile);const draft=draftModule.exports;
+function view(api,initialStorage=new Map(),full=false,extra={}){
  global.sessionStorage={getItem:k=>initialStorage.get(k)??null,setItem:(k,v)=>initialStorage.set(k,v),removeItem:k=>initialStorage.delete(k)};
  let cursor=0,root;const hooks=[],effects=[],calls=[];let ready=0;const busy=[];
  const react={useState(init){const i=cursor++;if(!(i in hooks))hooks[i]=typeof init==='function'?init():init;return [hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef(init){const i=cursor++;return hooks[i]||=( {current:init});},useEffect(fn){effects.push(fn);}};
  const filename=path.resolve(__dirname,'../app/agent-onboarding.tsx');const mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
- const base=mod.require.bind(mod);const empty=new Proxy({},{get:()=>()=>null});mod.require=id=>id==='react'?react:id==='./agent-consent'?{useAgentConsent:()=>({popup:null,request:async()=>({required:false})})}:id==='lucide-react'||id==='./workflow-stepper'?empty:id.endsWith('.css')?{}:base(id);
+ const base=mod.require.bind(mod);const empty=new Proxy({},{get:()=>()=>null});mod.require=id=>id==='./action-button'?actionButton:id==='react'?react:id==='./onboarding-draft'?draft:id==='./agent-consent'?{useAgentConsent:()=>({popup:null,request:async()=>({required:false})})}:id==='lucide-react'||id==='./workflow-stepper'?empty:id.endsWith('.css')?{}:base(id);
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
  const models=[{id:'emb',name:'Embeddings',provider_model:'embed',provider:'ollama',enabled:true,credential_configured:true,capabilities:['embedding']},{id:'chat',name:'Chat and extract',provider_model:'chat',provider:'ollama',enabled:true,credential_configured:true,capabilities:['chat','extraction']}];
- const props={api:async(...args)=>{calls.push(args);return api(...args);},models,storageKey:'setup',proposal:{name:'QA dataset'},onBusy:b=>busy.push(b),onReady:()=>ready++,onUse:()=>{}};
+ const props={api:async(...args)=>{calls.push(args);return api(...args);},models,storageKey:'setup',proposal:{name:'QA dataset',process_documents:full},onBusy:b=>busy.push(b),onReady:()=>ready++,onUse:()=>{},...extra};
  const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)];
- function render(){cursor=0;effects.length=0;root=mod.exports.AgentOnboarding(props);}
- render();effects[0]();render();if(!full){nodes(root).find(n=>n.props?.['aria-label']==='Upload documents and run extraction')?.props.onChange({target:{checked:false}});render();}return {render,calls,storage:initialStorage,find:(key,v)=>nodes(root).find(n=>n.props?.[key]===v),button:()=>nodes(root).find(n=>n.type==='button'),get ready(){return ready;},busy};
+ function render(){cursor=0;effects.length=0;root=expandActions(mod.exports.AgentOnboarding(props));}
+ render();effects[0]();render();if(!full){nodes(root).find(n=>n.props?.['aria-label']==='Upload documents and run extraction')?.props.onChange({target:{checked:false}});render();}return {render,runUpdateEffects:()=>effects.slice(1).forEach(fn=>fn()),calls,storage:initialStorage,find:(key,v)=>nodes(root).find(n=>n.props?.[key]===v),button:()=>nodes(root).find(n=>n.type==='button'),get ready(){return ready;},busy};
 }
 const flush=()=>new Promise(r=>setImmediate(r));
 const settle=async(done)=>{const deadline=Date.now()+2000;while(!done()&&Date.now()<deadline)await new Promise(r=>setTimeout(r,5));assert.ok(done(),'asynchronous onboarding settled');};
@@ -70,4 +72,20 @@ test('a rejected document transfer retains the accepted workflow and confirmed r
  v.find('aria-label','Onboarding prompt schema').props.onChange({target:{value:'{"type":"object","properties":{},"required":[],"additionalProperties":false}'}});
  v.render();v.button().props.onClick();await settle(()=>v.busy.at(-1)===false);v.render();
  assert.equal(v.storage.get('setup'),'full');assert.ok(v.storage.get('setup-request'));assert.ok(v.find('aria-label','Reattach onboarding documents'));
+});
+
+test('New dataset maps defaults without offering processing and reports the completed dataset once',async()=>{
+ const completed=[];
+ const dataset={id:'new-dataset',name:'QA dataset',version:2,models_complete:true};
+ const v=view(async(path,method,body)=>path==='/agent-v2/onboarding'?{...body,id:'w',status:'pending',steps:[]}:{id:'w',status:'completed',dataset_id:dataset.id,dataset,steps:[]},new Map(),true,{datasetOnly:true,onCompleted:d=>completed.push(d)});
+ assert.equal(v.find('aria-label','Upload documents and run extraction'),undefined);
+ assert.equal(v.find('aria-label','Onboarding documents'),undefined);
+ assert.equal(v.find('aria-label','Onboarding embedding model').props.value,'emb');
+ assert.equal(v.find('aria-label','Onboarding chat model').props.value,'chat');
+ assert.equal(v.find('aria-label','Onboarding extraction model').props.value,'chat');
+ assert.equal(v.button().props.children,'Create dataset');
+ v.button().props.onClick();await flush();v.render();v.runUpdateEffects();v.render();v.runUpdateEffects();
+ assert.equal(v.calls[0][2].processing,null);
+ assert.equal(v.calls.filter(c=>c[1]==='POST').length,1);
+ assert.deepEqual(completed,[dataset]);
 });

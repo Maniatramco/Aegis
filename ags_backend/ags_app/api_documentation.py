@@ -5,6 +5,12 @@ from fastapi.routing import APIRoute
 
 # Keyed by method and path so similar operations cannot share misleading notes.
 NOTES = {
+    'GET /api/runtime-config': 'Administrator only: read validated operational settings and explicit overrides without credentials; this does not apply configuration changes.',
+    'GET /api/dataset-trash': 'Administrator only: list recoverably deleted datasets and their retained archive information.',
+    'DELETE /api/datasets/{id}': 'Administrator only: recoverably delete a dataset after confirmation while retaining its archived content for restoration.',
+    'POST /api/dataset-trash/{id}/restore': 'Administrator only: restore a recoverably deleted dataset and its retained content after confirmation.',
+    'POST /api/extractions/{id}/rerun': 'Prepare a confirmed, idempotent re-extraction using authorized saved documents and a selected prompt; rebuild stale indexes before creating a separate result and preserve prior versions.',
+    'DELETE /api/users/{user_id}': 'Administrator only: confirm the acting password and exact target username, revoke sessions and dataset access, archive private history references and preserve shared content. The current account and last administrator are protected.',
     'GET /api/agent-v2/goals': 'Read the current user\'s authorized persistent agent requests and recovery status.',
     'GET /api/agent-v2/onboarding': 'List authorized dataset onboarding workflows.',
     'GET /api/agent-v2/onboarding/{id}': 'Read an authorized onboarding workflow and its saved input requirements.',

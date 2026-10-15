@@ -1,4 +1,5 @@
 "use client";
+import {ActionButton} from "./action-button";
 import { useEffect, useState } from "react";
 import { Check, Layers, Plus, Search, X, Pencil } from "lucide-react";
 import "./model-configuration.css";
@@ -86,7 +87,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
   return <div className="model-registration">
     {settings.local_only && <div className="notice"><Layers size={17} /><div>This deployment runs in local-only mode. You can register cloud connections, but testing and applying them require cloud use to be enabled by the deployment administrator.</div></div>}
     {!open ? <section className="panel registration-directory">
-      <div className="panel-head"><div><h2>Registered models</h2><p className="muted small">Register a model once, then use it across your datasets.</p></div><button className="btn primary" disabled={busy || !defaults} onClick={() => start()}><Plus size={15} />Register model</button></div>
+      <div className="panel-head"><span className="pill">{models.length} models</span><ActionButton className="btn primary" disabled={busy || !defaults} onClick={() => start()} label="Register model" action="add"/></div>
       {!!models.length && <label className="registration-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search registered models" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}} placeholder="Search models or categories" />{search&&<button className="btn icon" type="button" title="Clear search" aria-label="Clear model search" onClick={()=>setSearch('')}><X size={14}/></button>}</label>}
       {!!models.length && <div className="registration-table" role="region" aria-label="Registered models table" tabIndex={0}>
         <table aria-label="Registered models"><thead><tr><th scope="col">Model</th><th scope="col">Category</th><th scope="col">Provider</th><th scope="col">Endpoint</th><th scope="col" className="registration-tokens" title="Configured input limit for embeddings; total context limit for chat and extraction">Input / context</th><th scope="col" className="registration-tokens" title="Configured maximum output tokens">Output</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
@@ -103,10 +104,10 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
         </table>
       </div>}
       {!models.length && <div className="empty"><Layers size={30} /><h3>Start with your models</h3><p>Register an Embedding, Chat, and Extraction model. Each dataset needs all three categories.</p></div>}
-      <div className="registration-footer"><button className="btn" onClick={onMapping}>Open Model Mapping</button></div>
+      <div className="registration-footer"><ActionButton className="btn" onClick={onMapping} label="Open Model Mapping" action="mapping"/></div>
     </section> : <section className="panel registration-form-panel">
       <form onSubmit={e => { e.preventDefault(); if (!test) return; run(async () => { const saved = await api(`/model-registrations${editing ? "/" + editing.id : ""}`, editing ? "PUT" : "POST", payload()); onSaved(saved); close(); }); }}>
-        <div className="panel-head"><div><h2>{editing ? "Edit model" : "Register model"}</h2><p className="muted small">Connection details stay with this model. Credentials are encrypted on the server.</p></div><button className="btn icon" type="button" aria-label="Cancel model registration" disabled={busy} onClick={close}><X size={16} /></button></div>
+        <div className="panel-head"><h2>{editing ? "Edit model" : "Register model"}</h2><button title="Cancel model registration" className="btn icon" type="button" aria-label="Cancel model registration" disabled={busy} onClick={close}><X size={16} /></button></div>
         <fieldset disabled={busy}>
           <div className="registration-fields">
             <div className="field"><label htmlFor="registration-name">Name</label><input id="registration-name" autoFocus value={form.name} onChange={e => change("name", e.target.value)} required maxLength={120} placeholder="e.g. Document extraction" /></div>
@@ -138,7 +139,7 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
           {remote && <label className="check registration-test-consent"><input type="checkbox" checked={form.allow_external} onChange={e => change("allow_external", e.target.checked)} />Allow a small synthetic test request to this external model. Provider usage may be billed.</label>}
         </fieldset>
         {test && <div className="notice" role="status"><Check size={17} /><div>Connection passed in {(test.elapsed_ms / 1000).toFixed(2)}s.{test.dimensions && ` Embedding dimensions: ${test.dimensions}.`}{test.schema_validated && " Extraction schema validated."}{test.agent_tool_call_validated && " Agent function calling validated."}</div></div>}
-        <div className="registration-actions"><button className="btn" type="button" disabled={busy || !!parameterError || !form.name.trim() || !form.provider_model.trim() || !form.connection.endpoint || remote && (!form.allow_external || settings.local_only)} onClick={e => { if (!e.currentTarget.form?.reportValidity()) return; setTest(null); setTesting(true); run(async () => { try { setTest(await api("/model-registrations/test", "POST", payload())); } finally { setTesting(false); } }); }}>{testing ? "Testing connection…" : "Test Connection"}</button><div className="row wrap"><button className="btn" type="button" disabled={busy} onClick={close}>Cancel</button><button className="btn primary" disabled={busy || !!parameterError || !test}><Check size={15} />Save Model</button></div></div>
+        <div className="registration-actions"><button className="btn" type="button" disabled={busy || !!parameterError || !form.name.trim() || !form.provider_model.trim() || !form.connection.endpoint || remote && (!form.allow_external || settings.local_only)} onClick={e => { if (!e.currentTarget.form?.reportValidity()) return; setTest(null); setTesting(true); run(async () => { try { setTest(await api("/model-registrations/test", "POST", payload())); } finally { setTesting(false); } }); }}>{testing ? "Testing connection…" : "Test Connection"}</button><div className="row wrap"><button className="btn" type="button" disabled={busy} onClick={close}>Cancel</button><ActionButton className="btn primary" disabled={busy || !!parameterError || !test} label="Save Model" action="save"/></div></div>
         <p className="muted small">Test the connection before saving. Chat tests verify Agent function calling. New chat and extraction runs use the latest saved connection. Embedding changes require applying the dataset mapping and reindexing its documents. Work already queued keeps its saved version.</p>
       </form>
     </section>}

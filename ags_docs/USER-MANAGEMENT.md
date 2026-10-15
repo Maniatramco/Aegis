@@ -28,10 +28,18 @@ The initial account is migrated to Administrator once when the role column is in
 - Click **Dataset access** for an ordinary user to assign datasets. Assigned users share documents and extraction results; conversations remain private. See [Dataset access](DATASET-ACCESS.md).
 - Anonymous recovery is disabled in the shared Oracle installation. Contact an administrator; operator recovery is needed if no administrator can sign in.
 
+## Delete a user and remove access
+
+An administrator can use the trash action beside a user in **Manage workspace > Users & passwords**. Enter the acting administrator password and type the exact target username, then select **Delete user and remove access**. Cancel leaves the account unchanged.
+
+Deletion removes the account, every sign-in session and all enabled or disabled dataset assignments in one database transaction. Shared datasets, documents, model mappings and extraction results are preserved. Private conversation and agent-workflow metadata is removed from the active catalog and retained with its original artifact references in a protected operator archive under `/data/account-archives/`; private payload files are not purged. The archive excludes passwords, password hashes and session credentials. Historical database audit references are cleared to avoid dangling foreign keys, with their original references retained in that archive. There is no user-facing archive restore action.
+
+The signed-in account and last administrator cannot be deleted. Accounts owning shared content or processing jobs must resolve that ownership first; deletion rejects the request without removing access. Ordinary users cannot delete accounts. The server rechecks administrator rights under the account mutation lock and requires both the current password and username confirmation for HTTP requests.
+
 ## API
 
-`GET /api/users`, `POST /api/users`, `PATCH /api/users/{user_id}/role`, `POST /api/users/{user_id}/password`, and `POST /api/auth/password`.
+`GET /api/users`, `POST /api/users`, `DELETE /api/users/{user_id}`, `PATCH /api/users/{user_id}/role`, `POST /api/users/{user_id}/password`, and `POST /api/auth/password`.
 
 Role changes accept `{"role":"administrator","current_password":"<acting administrator password>"}` or role `user`. Cookie-authenticated mutations require the session CSRF token. Incorrect password checks are rate limited. Validation responses omit submitted values. The role endpoint returns the updated public account and whether sessions were revoked; an unchanged role leaves sessions intact.
 
-Cluster deployment has not been performed as part of this change.
+The delete action was deployed and its confirmation/cancel flow verified on the OCI Users screen on 15 October 2026.

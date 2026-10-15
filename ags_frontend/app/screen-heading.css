@@ -1,0 +1,102 @@
+/* One full-width translucent surface contains the title and page actions. */
+body .screen-heading,
+body .workspace > .page-head,
+body .review-workspace > .review-heading {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 12px 20px;
+  border: 1px solid rgba(190, 199, 244, .65);
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, .22);
+  color: #102744;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+body .screen-heading::before,
+body .workspace > .page-head::before,
+body .review-workspace > .review-heading::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url('/ags_assets/heading-blend.png');
+  background-position: center;
+  background-size: 100% 240%;
+  background-repeat: no-repeat;
+  opacity: .32;
+  pointer-events: none;
+}
+body .screen-heading { display: inline-flex; align-items: center; gap: 9px; }
+body .workspace > .page-head,
+body .review-workspace > .review-heading { align-items: center; }
+body .workspace > .page-head > div:first-child { min-width: 0; }
+body .workspace > .page-head > .row { flex: 0 0 auto; max-width: 100%; }
+body .workspace > .page-head .screen-heading,
+body .review-workspace > .review-heading .screen-heading {
+  width: auto;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  isolation: auto;
+}
+body .workspace > .page-head .screen-heading::before,
+body .review-workspace > .review-heading .screen-heading::before { display: none; }
+body .workspace > .page-head p { margin: 4px 0 0; }
+/* Screen regions share one heading scale; Agent intentionally has no ribbon. */
+body .shell .workspace-region > .page-head,
+body .shell .workspace-region .review-workspace > .review-heading {
+  min-height: 68px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 14px;
+}
+body .shell .workspace-region > .page-head .screen-heading,
+body .shell .workspace-region .review-heading .screen-heading {
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: -.4px;
+  font-weight: 600;
+}
+body .shell .workspace-region > .page-head > .row,
+body .shell .workspace-region .review-heading > .row { flex-wrap: nowrap; }
+body .shell .workspace-region > .page-head .btn,
+body .shell .workspace-region .review-heading .btn {
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+body .shell .workspace-region > .page-head .btn.icon { width: 40px; min-width: 40px; padding: 8px; }
+@media (max-width: 600px) {
+  body .screen-heading,
+  body .workspace > .page-head,
+  body .review-workspace > .review-heading {
+    padding: 9px 14px;
+    border-radius: 10px;
+  }
+  body .shell .workspace-region > .page-head,
+  body .shell .workspace-region .review-workspace > .review-heading { min-height: 64px; padding: 10px 14px; border-radius: 10px; gap: 10px; }
+  body .shell .workspace-region > .page-head .screen-heading,
+  body .shell .workspace-region .review-heading .screen-heading { font-size: 20px; }
+  body .shell .workspace-region > .page-head .btn > span,
+  body .shell .workspace-region .review-heading .btn > span { display: none; }
+  body .shell .workspace-region > .page-head:has(.home-search-control[data-expanded=true]) > div:first-child { position: absolute; opacity: 0; pointer-events: none; }
+  body .shell .workspace-region > .page-head:has(.home-search-control[data-expanded=true]) > .row { width: 100%; justify-content: flex-end; }
+}
+@media (forced-colors: active) {
+  body .screen-heading,
+  body .workspace > .page-head,
+  body .review-workspace > .review-heading { border-color: CanvasText; background: Canvas; color: CanvasText; }
+  body .screen-heading::before,
+  body .workspace > .page-head::before,
+  body .review-workspace > .review-heading::before { display: none; }
+}

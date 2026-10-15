@@ -1,132 +1,91 @@
 # Aegis
 
-A document knowledge and structured extraction workspace with a Next.js web app,
-FastAPI API, LangGraph agents and a durable Python worker. Administrators configure
-local or OCI file storage, database and vector knowledge destinations.
+Aegis turns documents into searchable knowledge and structured, reviewable results. It combines a Next.js workspace, a FastAPI API, LangGraph agents and a durable Python worker. Users upload files, extract fields with saved JSON Schema prompts, compare results with originals, export saved data and ask questions with source citations.
 
-## Project layout
+**Manager handover:** prepared for Swamy on 15 October 2026. Use tag **`aegis-freeze-2026-10-15`** for this complete source snapshot. Publishing this snapshot does not deploy it or change the running application. See [freeze and validation](ags_docs/RELEASE-FREEZE.md).
 
-| Directory | Contents |
+## Start here
+
+| Read | What it explains |
 | --- | --- |
-| `ags_backend/ags_app/` | API, agents, worker, authorization and provider/storage adapters |
-| `ags_backend/ags_tests/` | Automated backend regression and integration tests |
-| `ags_frontend/app/` | Web pages, shared components and styles |
-| `ags_frontend/ags_tests/` | Unit tests and Playwright browser scenarios |
-| `ags_database/` | Oracle schema, generated DDL, migrations and SQL queries |
-| `ags_deploy/` | Kubernetes manifests and deployment preparation |
-| `ags_scripts/` | Backup, restore, migration and shared verification utilities |
-| `ags_scripts/ags_qa/` | Manual benchmarks and recorded verification helpers |
-| `ags_docs/` | Architecture, configuration, runbooks and historical verification |
-| `local/` | Laptop Compose configurations, templates, VS Code workspace and launch helpers |
+| [Word handover](ags_docs/Aegis_Architecture_and_Deployment_Handover.docx) | End to end architecture, workflows, versions, installation, release and support |
+| [Architecture](ags_docs/ARCHITECTURE.md) | Browser to API, worker, data and model boundaries |
+| [Technology versions](ags_docs/TECH-STACK.md) | Exact source-declared versions and image/model reproducibility limits |
+| [Deployment and onboarding](ags_docs/DEPLOYMENT.md) | Fresh installation prerequisites, local setup, OCI code release and rollback |
+| [Maintainer skill](.agents/skills/aegis-release/SKILL.md) | Reusable repository-specific release and support instructions |
+| [Source manifest](ags_docs/RELEASE-MANIFEST.json) | Frozen application input hashes |
 
-Laptop Compose files, environment templates, the VS Code workspace and launch
-helpers live in [local](local/README.md). Runtime data, credentials, model weights
-and generated verification output are ignored by Git.
+## Architecture
 
-Frontend `public` contains only the three production images. The editable Agent
-logo master is kept with design documentation. Retired artwork, session-specific
-probes and previous source versions remain in Git history. Obsolete local files
-are collected under ignored `ags_runtime/delete/` for manual deletion.
+![Aegis deployment architecture](ags_docs/ags_assets/aegis-architecture.png)
 
-Custom source folders use `ags_` prefixes. Next.js `app`, `public` and URL route
-folders, `.github/workflows` and dependency/cache directories retain their required
-names. The requested `local/` folder groups laptop tools. New screenshots go
-under ignored `ags_runtime/ags_screenshots`; existing data, credentials and model
-destinations keep their original paths. This reorganization does not change saved
-storage references.
+The browser talks to Next.js. Its same-origin API proxy calls internal FastAPI; the API enforces access and delegates confirmed processing to the worker. The recorded OCI pilot places web/API/worker on OKE, metadata and native vectors in external Oracle, and durable content in OCI Object Storage. Laptop-hosted Ollama models are reached through a restricted private SSH relay. Local Docker uses PostgreSQL/Qdrant, or the optional Oracle profile.
 
-## Component branches and integration
+The recorded OKE deployment is a single-instance pilot with shared state and Recreate rollouts. Cloud services, model providers and model registrations are configuration choices; a supported adapter does not prove that service is currently deployed.
 
-All three component branches contain this complete repository:
+## End to end workflow
 
-| Branch | Primary responsibility |
+1. Bootstrap an administrator; create users and dataset assignments.
+2. Register Embedding, Chat and Extraction models, then create a dataset and map its roles.
+3. Save a JSON Schema prompt and upload documents after confirming the workflow and any required processing consent.
+4. The worker saves originals, parses or OCRs content, chunks, embeds and indexes it.
+5. Extraction retrieves and reranks evidence, generates schema-conforming fields and saves versioned JSON/Parquet.
+6. Review compares fields with the source. Marking **Reviewed** saves and locks that result. Re-extract preserves earlier results.
+7. Export saved results or ask a cited question over authorized knowledge.
+
+**Unified Chat contract:** access and scope → hybrid vector/keyword retrieval → CPU reranking → model answer → answer and citation validation. This applies to every question, including Aegis help and catalog questions. Exact counts require complete authorized catalog facts. Questions do not authorize processing. See [AGENTS.md](AGENTS.md).
+
+## Technology at this freeze
+
+| Area | Declared versions |
 | --- | --- |
-| `database` | `ags_database`: schema, indexes, migrations and SQL administration |
-| `python` | `ags_backend`: FastAPI, agents, worker and database/provider access |
-| `webui` | `ags_frontend`: screens, components and FastAPI proxy |
+| Web | Node 22.x, Next.js 15.5.27, React 19.3.0, TypeScript 5.9.3 |
+| API and agents | Python 3.12 image, FastAPI 0.142.2, LangGraph 1.2.14, SQLAlchemy 2.1.2 |
+| Data | Oracle driver 26.0.1; local PostgreSQL 17.11, Qdrant 1.19.1; PyArrow 26.0.0 |
+| Models | Recorded pilot: qwen3:4b, nomic-embed-text, qwen2.5vl:3b via Ollama |
+| Verification | pytest 9.1.1, Node unit tests, Playwright 1.63.0, TypeScript and Next build |
 
-Merge component changes into `feat/aegis-assistant-oracle-docker` before an
-integrated release. Shared Compose, CI, deployment and documentation changes must
-be reconciled there. Branch names do not limit which folders Git contains; use
-the component Docker build contexts below to separate application images.
+Use lockfiles for exact dependencies. Base-image tags do not pin runtime patch versions; future release receipts must record image digests and actual model identities. See the [full inventory](ags_docs/TECH-STACK.md).
+
+## Run a separate local installation
+
+Requires Docker with Compose v2 and Python 3 for the default secret-generation helper. Use a POSIX shell or WSL:
 
 ```sh
-docker build -t aegis-api ./ags_backend
-docker build -t aegis-worker ./ags_backend
-docker build -t aegis-web ./ags_frontend
-```
-
-API and worker share the Python image and run different commands (`uvicorn
-ags_app.main:app --host 0.0.0.0 --port 8000` and `python -m ags_app.worker`).
-Neither image includes `ags_database` installation scripts. Oracle drivers,
-connections, ORM mappings, runtime queries and existing automatic schema setup
-remain in Python. Storage's table-creation action remains available.
-
-The connection boundary stays WebUI → FastAPI → OCI Oracle. OKE application
-hosting should use the external OCI database, object storage and vectors; do not
-deploy the local database services from the development Kubernetes base to OKE.
-Cloud provisioning and schema migration remain separate operator actions.
-
-## Run locally
-
-Requirements: Docker Engine/Desktop with Compose v2 and Python 3 for one-time
-secret generation. Windows users can run shell setup in WSL or follow
-[the Windows/Ollama guide](ags_docs/OLLAMA.md).
-
-```sh
-git clone https://github.com/Maniatramco/Aegis.git
+git clone --branch python https://github.com/Maniatramco/Aegis.git
 cd Aegis
+git checkout aegis-freeze-2026-10-15
 ./local/ags_scripts/setup.sh
 docker compose --project-directory . --env-file .env -f local/compose.yaml up --build -d
 ```
 
-Open **http://localhost:3000**. Read `AEGIS_BOOTSTRAP_TOKEN` from your private `.env`
-and create the first administrator. The Oracle/Ollama Compose variant has a
-separate [setup guide](ags_docs/ORACLE.md); use that guide's port and Compose arguments.
-Credentials are encrypted with `AEGIS_MASTER_KEY`; keep that key and wallet/key
-mounts with your private deployment backups.
+Open `http://localhost:3000` and create the first administrator using the private installation bootstrap token. Configure reachable models and a reranker before real processing. Generic default reranking is disabled; the `local` and `oci` runtime profiles expect local reranker files. For the Windows Oracle/Ollama option, follow [Oracle setup](ags_docs/ORACLE.md); its launcher defaults to port 3003. Keep any new installation isolated from deployed data.
 
-## Onboard and use a dataset
+## Deployment and operations
 
-1. Register Embedding, Chat and Extraction models in **Manage workspace → Model Registration**.
-2. Create a dataset in **Onboard → Dataset**, then assign its three roles in
-   **Manage workspace → Model Mapping**.
-3. Upload a JSON-schema prompt in **Onboard → Prompt** and documents into the
-   dataset. Indexing must finish before retrieval or extraction.
-4. Ask questions in **Aegis Agent**, or use `@Onboard`, `@Upload`, `@Extract` and
-   `@ReExtract` for explicit workflows. Confirm the proposed inputs; external
-   processing approval appears when the configured providers require it.
-5. **Review** compares saved fields with the original. Marking a result
-   **Reviewed** locks that version. **Extract** displays rows/columns and exports.
+Read [DEPLOYMENT.md](ags_docs/DEPLOYMENT.md) before running commands. `ags_deploy/deploy-aegis-code.ps1` updates already prepared OKE application workloads. It is not an empty-cluster installer. The historical provisioning/renderer helpers are pilot-specific and require private state; do not reuse them unchanged for another tenancy.
 
-Dataset creation, model mapping, prompt setup and upload/extraction can also run
-directly from Aegis Agent. See [onboarding](ags_docs/AGENT-ONBOARDING.md) and
-[model configuration](ags_docs/MODEL_CONFIGURATION.md).
+Runtime limits and profiles live in [runtime.toml](ags_backend/ags_app/ags_config/runtime.toml), explained in [runtime configuration](ags_docs/RUNTIME-CONFIG.md). Model registrations remain authoritative for model-specific limits. Keep encryption keys, bootstrap tokens, wallets and credentials outside Git and images. The laptop relay must remain online for the recorded local models.
 
-## Data and agents
+Use the same Compose configuration arguments for stop/start operations and preserve volumes. [Backup and restore](ags_docs/BACKUP_RESTORE.md) explains coordinated recovery; its local scripts are not a cloud Oracle backup system. Image rollback does not roll back data or schema changes.
 
-The workspace has eleven menu pages: Home, Aegis Agent, Dataset, Prompt, Extract,
-Review, Model Registration, Model Mapping, Storage, Users & passwords, and
-Jobs & activity. The separate results/PDF Review detail is the twelfth screen.
-Login and password recovery remain available outside the workspace. Old Document
-Chat links open Aegis Agent; Connections and Services & migration links open
-Storage, whose Advanced connections section retains required provider and
-processing controls. Dashboard links open Home.
+## Repository map
 
-SQL holds control/access metadata and file references. Originals, parsed text,
-prompts and extraction JSON/Parquet artifacts use their pinned file destination.
-Published unified knowledge contains metadata, source chunks and extracted values,
-with embedding vectors in Oracle native vectors or Qdrant. Chat retrieves scoped
-evidence with current authorization and revision checks. Only the current question
-and required evidence enter the model.
+| Path | Responsibility |
+| --- | --- |
+| `ags_backend/ags_app/` | FastAPI, authorization, agents, worker and provider/storage adapters |
+| `ags_backend/ags_tests/` | Backend regression and opt-in integration checks |
+| `ags_frontend/app/` | Next.js screens, components, styling and API proxy |
+| `ags_frontend/ags_tests/` | Frontend unit and browser checks |
+| `ags_database/` | Oracle schema, migrations and SQL administration |
+| `ags_deploy/` | Image release script, Kubernetes and recorded OKE pilot tooling |
+| `ags_scripts/` | Backup, restore, smoke and QA utilities |
+| `ags_docs/` | Architecture, Word handover, deployment and operating guides |
+| `local/` | Laptop Compose profiles, environment templates and launchers |
 
-Write workflows save artifacts and publish knowledge before announcing completion.
-Embedding model changes require reindexing. File/database/knowledge destinations
-are configured in **Manage workspace → Storage**. See
-[storage configuration](ags_docs/STORAGE-CONFIGURATION.md),
-[unified knowledge](ags_docs/UNIFIED-KNOWLEDGE.md) and [Chat Agent](ags_docs/CHAT-AGENT.md).
+The `python`, `webui` and `database` branches contain the full repository; their names do not filter folders. This handover freezes `python`. It does not merge component branches or change `main`.
 
-## Development and verification
+## Development checks
 
 ```sh
 python3 -m venv .venv
@@ -134,26 +93,6 @@ python3 -m venv .venv
 pip install -r ags_backend/requirements-dev.txt
 (cd ags_backend && pytest -q)
 (cd ags_frontend && npm ci && npm run test:unit && npm run typecheck && npm run build)
-./local/ags_scripts/local-smoke.sh
 ```
 
-CI runs backend tests, all frontend unit tests, type checking/build, a real CPU
-embedding image check and isolated Compose/browser scenarios. Mock tests verify
-workflow behavior; real-model benchmarks are separate manual checks in
-[manual QA tools](ags_scripts/ags_qa/README.md). Historical reports do not guarantee the current
-revision passes; consult current CI results.
-
-## Operations and deployment
-
-Use `docker compose --project-directory . stop` and `docker compose --project-directory . start` with the same configuration
-arguments to preserve data. The [backup runbook](ags_docs/BACKUP_RESTORE.md) covers
-consistent backups and explicit destructive restore. Keep volumes when stopping
-an installation you intend to retain.
-
-OCI storage/database/vector adapters are implemented. OKE hosting still requires
-operator-provisioned infrastructure, identity policies, shared runtime storage and
-an OCI-specific configuration. The existing Kubernetes base includes local
-dependencies. AI model hosting remains a separate configuration decision. See
-[Kubernetes](ags_docs/KUBERNETES.md) and the [documentation index](ags_docs/README.md).
-
-Do not include passwords, private keys or confidential documents in public issues.
+Compose/browser and real-model tests require a separate authorized environment. Current CI auto-runs on `main` pushes and pull requests; a direct `python` push is not a fresh CI result. Consult [freeze evidence](ags_docs/RELEASE-FREEZE.md) for this snapshot's checks and [all documentation](ags_docs/README.md) for deeper references.

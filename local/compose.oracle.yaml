@@ -51,6 +51,10 @@ services:
     restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:8000
+      AEGIS_DEPLOYMENT_TARGET: local
+      AEGIS_API_LOCATION: local
+      AEGIS_WORKER_LOCATION: local
+      AEGIS_MODEL_LOCATION: ${AEGIS_MODEL_LOCATION:-local}
     ports:
       - '${AEGIS_BIND_ADDRESS:-127.0.0.1}:${AEGIS_PORT:-3003}:3000'
     depends_on:

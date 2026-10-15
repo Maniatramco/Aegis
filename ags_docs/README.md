@@ -1,5 +1,7 @@
 # Documentation
 
+For the 15 October 2026 manager handover, start with [architecture](ARCHITECTURE.md), [Word handover](Aegis_Architecture_and_Deployment_Handover.docx), [technology versions](TECH-STACK.md), [deployment](DEPLOYMENT.md) and [freeze evidence](RELEASE-FREEZE.md).
+
 | Topic | Start here |
 | --- | --- |
 | Architecture | [Architecture](ARCHITECTURE.md), [LangGraph](AGENT-LANGGRAPH.md) |

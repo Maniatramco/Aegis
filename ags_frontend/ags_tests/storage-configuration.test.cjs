@@ -1,15 +1,16 @@
+const {actionButton,expandActions}=require('./support/action-button.cjs');
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const Module=require('node:module');const ts=require('typescript');
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 async function screen(handler,component="StorageConfiguration"){
  let cursor=0,root;const hooks=[],effects=[],calls=[];let changed=0;
  const react={useState(initial){const i=cursor++;if(!(i in hooks))hooks[i]=initial;return [hooks[i],value=>hooks[i]=typeof value==='function'?value(hooks[i]):value];},useEffect(fn){effects.push(fn);}};
  const filename=path.resolve(__dirname,'../app/storage-configuration.tsx');const mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;const base=mod.require.bind(mod);
- mod.require=id=>id==='react'?react:id==='lucide-react'||id==='./workflow-stepper'?new Proxy({},{get:()=>()=>null}):id.endsWith('.css')?{}:base(id);
+ mod.require=id=>id==='./action-button'?actionButton:id==='react'?react:id==='lucide-react'||id==='./workflow-stepper'?new Proxy({},{get:()=>()=>null}):id.endsWith('.css')?{}:base(id);
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
  const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)];
  const props={api:async(...args)=>{calls.push(args);if(args[0]==='/storage'&&!args[1])return {destination:{storage_provider:'local',oci_storage_namespace:'ns',oci_storage_bucket:'bucket',oci_storage_region:'region'},local_root:'/data',credential_mount:'/run/oci'};if(args[0]==='/workspace/reset-preview')return {counts:{knowledge_base:1},active_jobs:0,index_collections:[]};return handler(...args);},onChanged:()=>changed++};
- const render=()=>{cursor=0;root=mod.exports[component](props);};render();effects[0]();await flush();render();
- return {render,calls,get changed(){return changed;},field:label=>nodes(root).find(n=>n.props?.['aria-label']===label),button:text=>nodes(root).find(n=>n.type==='button'&&nodes(n.props.children).length>=0&&JSON.stringify(n.props.children).includes(text)),all:()=>nodes(root)};
+ const render=()=>{cursor=0;root=expandActions(mod.exports[component](props));};render();effects[0]();await flush();render();
+ return {render,calls,get changed(){return changed;},field:label=>nodes(root).find(n=>n.props?.['aria-label']===label),button:text=>nodes(root).find(n=>n.type==='button'&&nodes(n.props.children).length>=0&&(n.props['aria-label']?.includes(text)||JSON.stringify(n.props.children).includes(text))),all:()=>nodes(root)};
 }
 test('OCI connection test does not change active storage; save sends mounted file paths',async()=>{
  const s=await screen(async(path,method,body)=>path==='/storage/test'?{message:'Read verified'}:{destination:body,test:{message:'Saved'}});

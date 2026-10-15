@@ -45,6 +45,12 @@ class DatasetAssignments(BaseModel):
     dataset_ids: list[str] = Field(max_length=1000)
 
 
+class DeleteUser(BaseModel):
+    model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
+    username: str = Field(min_length=1, max_length=120)
+    current_password: SecretStr = Field(min_length=1, max_length=200)
+
+
 def public_user(user):
     return {key: getattr(user, key) for key in (
         'id', 'username', 'role', 'created_at', 'updated_at', 'created_by', 'updated_by')
@@ -67,6 +73,72 @@ def account_audit(owner):
     finally:
         relational.source.reset(source)
         relational.actor_override.reset(token)
+
+
+def remove_account(user_id, owner, username, *, current_password=None):
+    """Remove an account and grants without deleting shared workspace content.
+
+    HTTP callers supply the acting administrator's password. Trusted operators
+    can call this function directly after authorizing the exact account removal.
+    Historical private artifacts remain archived outside normal application APIs.
+    """
+    from .dataset_access import PRIVATE
+    with core.document_lock('administrator-auth'), core.document_lock('dataset-access'), account_audit(owner):
+        with core.Session.begin() as session:
+            accounts = list(session.scalars(select(core.User).order_by(core.User.id).with_for_update()))
+            actor = next((user for user in accounts if user.id == owner), None)
+            if not actor or actor.role != 'administrator':
+                raise HTTPException(403, 'Administrator access required.')
+            if current_password is not None:
+                verify_password(actor, current_password)
+            user = next((user for user in accounts if user.id == user_id), None)
+            if not user:
+                raise HTTPException(404, 'User not found.')
+            if username != user.username:
+                raise HTTPException(400, 'Type the exact username to confirm deletion. Nothing changed.')
+            if user.role == 'administrator' and sum(account.role == 'administrator' for account in accounts) <= 1:
+                raise HTTPException(409, 'Keep at least one administrator. This account cannot be deleted.')
+            if user.id == owner:
+                raise HTTPException(400, 'You cannot delete your signed-in account. Ask another administrator.')
+            records = list(session.scalars(select(core.Record).where(core.Record.owner == user.id)))
+            if any(record.kind not in PRIVATE for record in records):
+                raise HTTPException(409, 'This account owns workspace content. Transfer its ownership before deleting the user. Nothing changed.')
+            if session.scalar(select(core.Job.id).where(core.Job.owner == user.id).limit(1)):
+                raise HTTPException(409, 'This account owns processing jobs. Resolve their ownership before deleting the user. Nothing changed.')
+
+            connection = session.connection()
+            grants = list(session.scalars(select(relational.UserDataset).where(relational.UserDataset.user_id == user.id)))
+            sessions = list(session.scalars(select(core.Login.id).where(core.Login.owner == user.id)))
+            # Save only account/record metadata, never password hashes or session
+            # credentials. The payload files remain in their original storage.
+            archive = {
+                'user': public_user(user), 'deleted_by': owner, 'deleted_at': time.time(),
+                'records': [{column.name: getattr(record, column.name) for column in core.Record.__table__.columns} for record in records],
+                'dataset_ids': [grant.dataset_id for grant in grants], 'audit_references': [],
+            }
+            for table in core.Base.metadata.sorted_tables:
+                for name in ('created_by', 'updated_by'):
+                    if name not in table.c:
+                        continue
+                    column = table.c[name]
+                    references = list(connection.execute(select(*table.primary_key.columns).where(column == user.id)).mappings())
+                    if references:
+                        archive['audit_references'].append({'table': table.name, 'column': name, 'rows': [dict(row) for row in references]})
+            archive_ref = f'account-archives/{user.id}/{core.uid()}.json'
+            core.local_store.put_json(archive_ref, archive)
+            session.execute(delete(core.Login).where(core.Login.owner == user.id))
+            session.execute(delete(relational.UserDataset).where(relational.UserDataset.user_id == user.id))
+            connection.execute(core.Record.__table__.delete().where(core.Record.owner == user.id))
+            # Historical attribution is retained in the protected archive;
+            # nullable FK fields cannot continue to point at a removed account.
+            for table in core.Base.metadata.sorted_tables:
+                for name in ('created_by', 'updated_by'):
+                    if name in table.c:
+                        connection.execute(table.update().where(table.c[name] == user.id).values({name: None}))
+            session.delete(user)
+    return {'ok': True, 'user_id': user_id, 'username': username,
+            'sessions_revoked': len(sessions), 'assignments_removed': len(grants),
+            'private_records_archived': len(records), 'shared_content_preserved': True}
 
 
 def install(app, auth):
@@ -121,6 +193,11 @@ def install(app, auth):
                 user.password_hash = core.password_hash(password)
                 session.execute(delete(core.Login).where(core.Login.owner == user.id))
         return {'ok': True, 'sessions_revoked': True}
+
+    @router.delete('/api/users/{user_id}')
+    def delete_user(user_id: str, body: DeleteUser, owner=Depends(administrator)):
+        return remove_account(user_id, owner, body.username,
+                              current_password=body.current_password.get_secret_value())
 
     @router.patch('/api/users/{user_id}/role')
     def change_role(user_id: str, body: ChangeRole, response: Response, owner=Depends(administrator)):

@@ -1,4 +1,5 @@
 "use client";
+import {ActionButton} from "./action-button";
 import { useEffect, useRef, useState } from "react";
 type Dataset={id:string;name:string;description?:string;active?:boolean};
 export function DatasetAssignments({api,account,onClose}:{api:(path:string,method?:string,body?:any)=>Promise<any>;account:{id:string;username:string};onClose:()=>void}){
@@ -21,6 +22,6 @@ export function DatasetAssignments({api,account,onClose}:{api:(path:string,metho
   </>}
   {error&&<div className="notice error" role="alert">{error}</div>}
   {notice&&<div className="notice" role="status">{notice}</div>}
-  <div className="row"><button className="btn primary" disabled={loading||saving||!loaded} onClick={()=>void save()}>{saving?'Saving…':'Save dataset access'}</button>{!loaded&&!loading&&<button className="btn" onClick={()=>setRevision(value=>value+1)}>Retry</button>}<button className="btn" disabled={saving} onClick={onClose}>Close</button></div>
+  <div className="row"><button className="btn primary" disabled={loading||saving||!loaded} onClick={()=>void save()}>{saving?'Saving…':'Save dataset access'}</button>{!loaded&&!loading&&<ActionButton className="btn" onClick={()=>setRevision(value=>value+1)} label="Retry" action="retry"/>}<ActionButton className="btn" disabled={saving} onClick={onClose} label="Close" action="close"/></div>
  </section>;
 }
