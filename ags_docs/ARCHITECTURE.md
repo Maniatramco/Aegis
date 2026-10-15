@@ -1,233 +1,164 @@
-# Aegis architecture and engineering handover
+# Aegis live OCI architecture
 
-Freeze reference: `aegis-freeze-2026-10-15`. Prepared for Swamy on 15 October 2026.
+Verified 15 October 2026 at 22:26 IST. Current documentation branch: `ags_sprint1`.
 
-## Aegis architecture and engineering handover
+## Aegis live OCI architecture
 
-Prepared for Swamy on 15 October 2026. This handover explains what Aegis does, how its components work together, the versions declared by the frozen source, and how an operator can install, release and support it.
+Prepared for Swamy. The live environment was inspected using authenticated OCI access and read-only Kubernetes and application queries on 15 October 2026 at 22:26 IST. This document describes the deployed Aegis system and its current cloud and local connections.
 
-Aegis is a document knowledge and structured extraction workspace. Users upload documents, map models to datasets, extract fields with a saved JSON Schema, review saved results against the original, export them, and ask questions with source citations.
+Aegis is running on Oracle Cloud Infrastructure in Mumbai. The web application, API, agents, worker and CPU reranker run on OKE. Oracle Autonomous AI Database 26ai stores application records, the durable job queue and native vector knowledge. OCI Object Storage holds the documents and saved result files.
 
-The handover freezes the existing python branch under tag aegis-freeze-2026-10-15. The Git tag identifies the complete source snapshot. Application source hashes are recorded in RELEASE-MANIFEST.json. This repository push does not deploy code or change the running OCI application.
+The three active datasets currently use Google Gemini for embeddings, chat, extraction and OCR. These model calls leave the OKE backend for the configured Google API. The older laptop Ollama option remains registered, but its containers are stopped and the relay endpoint did not respond during this inspection.
 
-The documented OCI topology runs the web app, API and worker on OKE, with Oracle metadata and vectors and OCI Object Storage outside the cluster. The recorded pilot uses laptop-hosted Ollama models through a private SSH relay. Other registered providers are configuration options, not evidence that those services are deployed.
-
-| Reading order | Purpose |
+| Runs where | Components currently used |
 | --- | --- |
-| Architecture diagram and components | Understand hosting boundaries and responsibilities |
-| Workflow and version inventory | Understand document processing, answers and dependencies |
-| Deployment and operations | Install or release safely and recover failures |
-| Release evidence and source map | Inspect validation and find the implementation |
+| OCI OKE | Next.js web app, Caddy HTTPS, FastAPI, LangGraph agents, durable worker and CPU reranker |
+| OCI Autonomous AI Database | Application records, access, durable job queue and Oracle native vector knowledge |
+| OCI Object Storage | Original documents, prompts, parsed content and saved JSON / Parquet results |
+| Google cloud API | Gemini embeddings, chat, extraction and dataset-aware OCR for all three active datasets |
+| Local laptop | Retained Ollama / Qwen / Nomic option; containers stopped and relay endpoint unreachable at the check |
 
-Scope of evidence: source, lockfiles and existing deployment records. This handover does not claim a new live deployment, current cloud billing, current provider availability, or a fresh cloud installation test.
+The public HTTPS application returned 200. Both application deployments had one ready replica, and all five application containers were ready with zero restarts. The inspection did not deploy, restart, reconfigure, upload documents or invoke model inference.
 
-## Application architecture
+## Live application architecture
 
-![Aegis deployment architecture](ags_assets/aegis-architecture.png)
+![Live OCI and model architecture](ags_assets/aegis-architecture.png)
 
-The browser uses the web application. Its same-origin /api proxy forwards to internal FastAPI. Application code, rather than the browser, accesses the database, content storage and model endpoints.
+Users open https://aegis.92.4.67.183.sslip.io/. The OCI load balancer forwards HTTP and HTTPS to Caddy, which provides TLS and forwards to the Next.js web application. The web application proxies authenticated API requests to the internal FastAPI service.
 
-The OCI renderer defines two one-replica Recreate deployments. The web deployment contains Next.js and the Caddy TLS sidecar. The backend deployment contains API, worker and model-relay containers sharing persistent application state. This arrangement is a single-instance pilot and is not a high-availability design.
+FastAPI and the worker use the external Autonomous AI Database and Object Storage. Dataset mappings select Gemini for model execution. The CPU reranker runs inside OCI; its configuration value local means execution in the backend environment, not execution on the laptop.
 
-In the recorded pilot, one ARM64 A1 worker has 2 OCPUs and 12 GB RAM. Application and HTTPS PVCs each request 50 Gi. These are dated deployment facts, not general sizing requirements or confirmation of current live capacity.
+The live namespace is aegis-oci. Application services run on one ARM64 OKE worker node. The retained SSH sidecar does not make the stopped laptop models available.
 
-## Components and data responsibilities
+## Verified OCI resources
 
-SQL metadata and durable content are authoritative. A vector hit is a discovery result; the application rehydrates and verifies the current authorized source before using it. Saved result versions and original files remain available for review.
+These values were read from OCI and Kubernetes during the inspection. The database is the managed Autonomous AI Database service, not the stopped Oracle Free container on the laptop. Its live database version is 26ai and its compute allocation is 1 ECPU.
 
-The OCI object cache is bounded to 64 MiB, 2048 entries and 4 MiB per entry. It caches eligible application JSON and guards uncertain writes. Original bytes and Parquet bypass it. It relies on the current shared-volume and single-writer deployment contract.
+The two persistent claims each report 50 Gi in Kubernetes and are backed by OCI block volumes reporting 50 GB each. The worker also has a 50 GB boot volume, for 150 GB of allocated boot and block volumes. Database storage is a separate 20 GB allocation.
 
-| Component | Responsibility and boundary |
-| --- | --- |
-| Next.js web app | Login, workspace navigation, agents, uploads, templates, Review, exports and administration. Server API routes proxy to FastAPI. |
-| FastAPI | Authentication, authorization, request validation, dataset and document scope, model registration, workflow planning and persisted result access. |
-| LangGraph agents | Coordinate read tools and confirmed processing proposals. Uploaded text cannot grant tool permissions or change system rules. |
-| Durable Python worker | Claims persisted jobs, parses or OCRs documents, embeds and indexes content, performs extraction and publishes results. Browser closure does not cancel accepted work. |
-| Relational database | Users, sessions, datasets, model mappings, document and prompt references, extraction/review metadata and durable job state. |
-| Content storage | Original documents, parsed text, schemas, versioned JSON and Parquet results, conversations and graph checkpoints. Routes pin the destination. |
-| Knowledge index | Published document, catalog and saved-result knowledge. Oracle native vectors in the recorded OCI setup; Qdrant in local profiles. |
-| Reranker | CPU ONNX inference over retrieved candidates. Production chat requires the configured local model files. |
-| Models | Embedding, Chat and Extraction registrations map to each dataset. OCR is separately configured or follows a supported dataset provider path. |
-| Shared state and cache | Encrypted configuration, locks, routes, archives, model files and bounded OCI JSON cache. API and worker must share the state volume. |
-
-## End to end document workflow
-
-A ready indexed document means it can be searched; it does not mean extraction has completed. A completed result must have its durable artifacts and knowledge publication saved before the application announces completion.
-
-Independent mode preserves a separate result per document. Combined processing retains source associations and can preserve separate records inside a merged result. Selecting only one original must not expose an unrelated merged result.
-
-1. **Create access.** Create the first administrator with the installation bootstrap token. Administrators create users and dataset assignments; ordinary users see authorized datasets.
-
-2. **Register and map models.** Test and save Embedding, Chat and Extraction registrations. Create a dataset and assign its roles. Registration identity, limits and provider settings determine execution.
-
-3. **Save a prompt.** Upload or edit a prompt with a valid JSON Schema. Uploading the same filename saves a new version. A prompt file is distinct from a document to process.
-
-4. **Confirm processing.** Select dataset, documents, prompt and independent or combined mode. Review the workflow proposal and any required external-processing consent before submitting.
-
-5. **Persist and index.** Save unchanged original bytes, create job metadata and let the worker parse text or perform configured OCR. Preserve page and source references, chunk text, embed and publish knowledge.
-
-6. **Extract fields.** Retrieve and rerank evidence for the saved schema, call the mapped Extraction model, validate the response, and save versioned JSON and Parquet with result and provenance references.
-
-7. **Review and export.** Open saved fields alongside the original. Correct values and mark Reviewed to save and lock that result. Export saved JSON, CSV, Excel or Parquet. Unsaved edits are not export data.
-
-8. **Reextract or recover.** Re-extract creates a separate result and retains earlier versions. Retry accepted processing instead of submitting duplicate work. Stale embeddings require a rebuild before reuse.
-
-## How Unified Chat answers a question
-
-Question answering does not authorize uploads, extraction, onboarding or other writes. Processing proposals keep the existing confirmation and consent boundaries. Conversation text is not published as unified knowledge.
-
-Hybrid ranking is not a complete catalog. A ranked subset cannot establish an exact total. The current production chat contract in AGENTS.md takes precedence over older design documents describing earlier answer routes.
-
-The runtime file sets application ceilings of 262144 context tokens, 1000000 UTF-8 evidence bytes and 1024 answer tokens. A saved model registration may impose smaller limits. These ceilings do not enlarge the provider model context window or guarantee that every maximum fits one request.
-
-1. **Resolve access and scope.** Authenticate, determine question intent and enforce dataset, document and current user access before retrieving anything.
-
-2. **Retrieve hybrid evidence.** Search published unified knowledge with both semantic vectors and keyword ranking. Aegis help also retrieves application guidance through this path.
-
-3. **Rerank candidates.** Run configured CPU reranking while retaining access and scope filters. If required retrieval or reranking is unavailable, return the actual failure.
-
-4. **Generate a grounded answer.** Pass the current question and required authorized evidence to the mapped model. Supplement exact lists and counts with complete authorized catalog facts.
-
-5. **Validate and show sources.** Validate the generated answer and citations, resolve source identity and revision, and show recorded evidence. Do not invent field coordinates, stages or successful processing.
-
-## Frontend and core backend versions
-
-These are source-declared versions from package-lock.json, requirements.txt and the Dockerfiles. They are not a report of packages introspected from the running production containers. Use npm ci and the committed Python lockfiles for a release build.
-
-The frontend package version is 1.0.0 and backend package version is 0.1.0. Neither package version alone identifies this release; use the Git freeze tag and the immutable image digest created by a future deployment.
-
-| Layer | Version or release | Role |
+| OCI resource | Live configuration | Observed state |
 | --- | --- | --- |
-| Frontend package | 1.0.0 | Workspace UI |
-| Node.js | 22.x Alpine base | Frontend build and server; patch floats |
-| Next.js | 15.5.27 | App Router and API proxy |
-| React and React DOM | 19.3.0 | Interactive screens |
-| TypeScript | 5.9.3 | Static checking |
-| Lucide React | 0.468.0 | Icons |
-| PostCSS | 8.5.28 | CSS processing |
-| Playwright | 1.63.0 | Browser checks |
-| Backend package | 0.1.0 | API and durable worker |
-| Python | 3.12 slim base; project >=3.11 | Backend runtime; image patch floats |
-| FastAPI | 0.142.2 | HTTP API |
-| Uvicorn | 0.54.0 | ASGI server |
-| SQLAlchemy | 2.1.2 | Relational persistence |
-| Pydantic | 2.13.5 | Input and response validation |
-| LangGraph | 1.2.14 | Agent orchestration |
-| LangGraph Checkpoint | 4.2.0 | Agent checkpoints |
-| LangChain Core | 1.6.9 | Model and message contracts |
-| PyArrow | 26.0.0 | Parquet artifacts and export |
-| JSON Schema | 4.26.0 | Extraction contract validation |
+| Region and tenancy | Mumbai ap-mumbai-1; maniatramco | Authenticated access |
+| OKE cluster | ags-aegis-basic; Basic; Kubernetes v1.36.4 | ACTIVE |
+| Node pool | ags-aegis-a1-node-pool; 1 node | ACTIVE |
+| Compute | VM.Standard.A1.Flex; ARM64; 2 OCPUs; 12 GB RAM | RUNNING / Ready |
+| Autonomous AI Database | ags_ora_db / agsora; Oracle 26ai; 1 ECPU; 20 GB | AVAILABLE |
+| Database configuration | Free Tier flag true; compute/storage autoscaling off; mTLS required | Read connection verified |
+| Object Storage | mk-aegis; Standard; namespace bmyljaecivrj | Read configuration verified |
+| Public load balancer | 92.4.67.183; flexible 10 Mbps minimum and maximum | ACTIVE |
+| Application state | application-state; 50 Gi claim; 50 GB OCI volume | Bound / AVAILABLE |
+| HTTPS state | https-state; 50 Gi claim; 50 GB OCI volume | Bound / AVAILABLE |
+| Node boot volume | 50 GB; 10 VPUs per GB | AVAILABLE |
+| Private image registry | ags-aegis-web, ags-aegis-backend, ags-aegis-ssh | All private |
 
-## Storage platform and model versions
+The bucket currently reports ObjectRead public access and versioning Disabled. Those existing settings were observed and left unchanged. The database Free Tier flag does not establish that the complete OKE environment has zero cost.
 
-Default local Docker uses PostgreSQL and Qdrant. The Oracle local profile uses Oracle AI Database Free and Qdrant. The recorded OCI pilot uses an external Oracle database for metadata, the database job queue and native vectors; content lives in OCI Object Storage.
+## Running containers and storage connections
 
-The recorded Ollama models are qwen3:4b for chat and extraction, nomic-embed-text for embeddings, and qwen2.5vl:3b for vision OCR. Model names and tags can move. Preserve each model registration, model digest, embedding dimension and indexing profile when reproducing results.
+Deployment aegis-web contains web and https. Deployment aegis-api-worker contains api, worker and model-relay. Each deployment has one desired replica and one ready replica. Both use Recreate for updates.
 
-Optional local embeddings declare sentence-transformers 6.1.0, torch 2.14.1 and transformers 5.18.0. Optional native model adapters declare boto3 1.43.109 and google-auth 2.61.0. Build flags determine which optional packages enter the image.
+The table shows configured resource requests and limits. A CPU value of 250m means one quarter of a core. These values are not current utilization; the cluster Metrics API was unavailable during the inspection.
 
-Node 22 Alpine and Python 3.12 slim are moving image tags. Caddy and deployed app images are selected by digest in the private deployment release record. Capture digests and runtime patch versions during the next authorized release for byte-for-byte image provenance.
-
-| Layer | Version or release | Role |
+| Container | CPU and memory request | CPU and memory limit |
 | --- | --- | --- |
-| Oracle Python driver | 26.0.1 | Optional thin Oracle connectivity |
-| OCI SDK | 2.187.2 | Optional OCI adapters |
-| ONNX Runtime and tokenizers | 1.30.0 and 0.23.2 | Local CPU reranking |
-| PostgreSQL local image | 17.11 Alpine | Default local metadata and queue |
-| Qdrant local image | 1.19.1 | Local vector index |
-| Oracle Free local image | 23.26.3.0 | Optional Oracle 26ai local profile |
-| Ollama local image | 0.35.1 | Local model server |
-| OKE pilot Kubernetes | v1.36.4 recorded 14 Oct | Historical platform record; verify before a future rollout |
-| Caddy and SSH relay | Deployment digest / Alpine 3.23 relay base | TLS entry and restricted model tunnel |
+| api | 250m CPU; 768Mi | 1 CPU; 2Gi |
+| worker | 500m CPU; 2Gi | 1500m CPU; 4Gi |
+| model-relay | 25m CPU; 32Mi | 100m CPU; 128Mi |
+| web | 150m CPU; 512Mi | 1 CPU; 1536Mi |
+| https | 50m CPU; 64Mi | 250m CPU; 256Mi |
 
-## Local setup and first onboarding
+1. **Database connection.** The active destination is OCI database agsora through wallet alias agsora_low, using mTLS. The configured search provider is oracle and the queue provider is database.
 
-1. **Choose one isolated environment.** For default local Docker, use local/compose.yaml. For the Windows Oracle and Ollama profile, run local/ags_scripts/start-oracle.ps1. Do not point a test installation at the deployed database or storage.
+2. **Content connection.** The active content destination is OCI Object Storage bucket mk-aegis in namespace bmyljaecivrj. Originals, parsed content, prompts and versioned results keep their saved storage routes.
 
-2. **Create private installation settings.** The default setup.sh creates a private .env with unique database, session, encryption and bootstrap secrets. The Oracle launcher creates its own .env.oracle and private credential files. Never commit those values.
+3. **Persistent application state.** API and worker share /data on application-state. It holds protected configuration, routes, locks, archives, model files and bounded application cache. Wallet and OCI credential mounts are separate.
 
-3. **Start and inspect services.** Use the same Compose files, project directory and env file for every command. The default app listens on localhost:3000; the Oracle launcher defaults to localhost:3003. Check API, worker and database readiness.
+4. **HTTPS state.** Caddy uses the separate https-state claim for persistent certificate state. Only the public entry is exposed for normal user access; FastAPI is an internal ClusterIP service on port 8000.
 
-4. **Configure real processing.** Supply a reachable supported model endpoint and local reranker files. Default generic reranking is disabled; local and oci runtime profiles expect /data/models/reranker. Test provider connections before a real document run.
+One node and one replica per deployment describe the current installation. A future application rollout can interrupt service; no rollout was performed for this documentation update.
 
-5. **Bootstrap the administrator.** On the empty initialized application database, use the installation bootstrap token to create the first administrator. An existing sign-in page means users may already exist; verify the destination before changing state.
+## Current AI models and local connections
 
-6. **Complete one onboarding check.** Register models, create and map a dataset, save a small schema prompt, upload harmless test content, wait for indexing, extract, review, export and ask a cited question.
+All three active datasets map their Embedding, Chat and Extraction defaults to the Gemini registrations below. Dataset-aware OCR also resolves to the mapped Gemini extraction registration. Global Ollama defaults remain in configuration, but they do not override these saved dataset mappings.
 
-```text
-git clone --branch python https://github.com/Maniatramco/Aegis.git
-cd Aegis
-git checkout aegis-freeze-2026-10-15
-# POSIX shell or WSL for the default local profile
-./local/ags_scripts/setup.sh
-docker compose --project-directory . --env-file .env -f local/compose.yaml up --build -d
-```
+| Role | Mapped model | Where it executes |
+| --- | --- | --- |
+| Embedding | gemini-embedding-2 | Google Gemini API |
+| Chat | gemini-3.5-flash-lite | Google Gemini API |
+| Extraction | gemini-3.5-flash-lite | Google Gemini API |
+| OCR for mapped datasets | gemini-3.5-flash-lite | Google Gemini API |
+| Candidate reranking | Configured CPU reranker | OCI API / worker; model files on shared state |
 
-The commands above start a separate local environment. They are documented instructions only; they were not executed against the existing deployment during this handover.
+1. **Gemini connection.** The saved endpoint host is generativelanguage.googleapis.com. Embedding uses gemini-embedding-2; chat and extraction use gemini-3.5-flash-lite.
 
-## OCI installation and application releases
+2. **Saved model limits.** The embedding registration has an 8192-token context limit. Chat has 32768 context tokens and 512 output tokens; extraction has 32768 context tokens and 8192 output tokens. These are saved application settings, not a vendor capacity claim.
 
-A new OCI environment needs an explicit platform and application installation handoff before the release script can be used. Required items include cluster access, namespace, registry and pull credentials, database/schema, bucket, application encryption and bootstrap secrets, wallet, reranker files, persistent state and an HTTPS endpoint.
+3. **Reranker location.** The configured reranker is enabled in local CPU mode inside the OCI backend, with files at /data/models/reranker. Embeddings and generated answers still use the mapped Gemini API.
 
-The historical ags_oke provisioning and rendering helpers are specific to the recorded pilot. They contain Mumbai and resource assumptions, read private runtime records, and the renderer verifies seeded existing OCI state. They are not a portable empty-cluster installer. Do not run them unchanged for a new tenancy.
+4. **Retained laptop option.** Qwen3 chat/extraction and Nomic embeddings remain enabled registrations. The local Ollama container and earlier laptop application/database/index containers are stopped. The internal Ollama relay endpoint was unreachable.
 
-For a prepared destination, ags_deploy/deploy-aegis-code.ps1 checks kubeconfig/context and expected deployments, builds the web and backend images for the selected architecture, pushes them, records previous image references, then rolls backend and frontend out by immutable digest. API and worker use the same backend digest.
+5. **OCR behavior.** For these Gemini-mapped datasets, OCR uses the saved Gemini extraction model. The retained Qwen vision setting belongs to the local alternative path; it is not the current dataset OCR model.
 
-The deployment script updates existing workloads. It does not create infrastructure, install secrets, initialize an empty application or run schema migrations. Its backend build disables local embedding and optional cloud-model packages, and enables Oracle/OCI packages. A native provider requiring additional model adapters needs a separately verified image build.
+This check read registrations and mappings without issuing a new Gemini inference request or restarting local models. Model availability and provider quota were not tested by making a paid processing call.
 
-The backend uses Recreate, so an authorized future release can interrupt service. Finish active jobs and take a coordinated backup first. A failed release stops; it does not automatically undo earlier successful changes. Use the recorded previous image references for a compatible rollback.
+## Developed document and answer workflows
 
-```text
-# From repository root, after destination preparation
-$taskSource = (Get-Location).Path
-$taskKubeconfig = 'C:\secure\destination-kubeconfig.yaml'
-$taskContext = 'DESTINATION_CONTEXT'
-# Full copyable deployment and rollback commands:
-# ags_docs/DEPLOYMENT.md
-```
+1. **Workspace and access.** Administrators manage users, passwords, roles and dataset assignments. The API checks the signed-in user and selected dataset/document scope before access.
 
-Current handover constraint: preserve the deployed installation. No release script, kubectl apply/set image/scale, runtime apply, service restart, infrastructure provisioning or data mutation is part of this freeze.
+2. **Dataset and prompt setup.** A dataset maps its model roles. Prompt templates define the fields and validation rules for extraction. Template versions remain associated with saved results.
 
-## Configuration security and operations
+3. **Confirmed document upload.** The user confirms the target dataset, documents and required external-processing consent. Original bytes are saved in OCI Object Storage and durable jobs are recorded in Autonomous AI Database.
 
-Operational defaults live in ags_backend/ags_app/ags_config/runtime.toml. It defines units, bounds and default/local/oci profiles for chat, retrieval, reranking, OCR, uploads and worker retries. Saved per-model settings and explicit environment overrides can take precedence. Inspect effective values before a future configuration change.
+4. **Parsing and indexing.** The OCI worker reads the originals, parses text and uses the mapped Gemini model for OCR when needed. Gemini embeddings are published into Oracle native vector knowledge with document and page references.
 
-Model registrations and dataset mappings are saved application settings. Encryption keys, database passwords, OCI credentials, wallets, session secrets and bootstrap tokens remain outside Git and images. Keep the installation master key stable across releases so saved credentials remain decryptable.
+5. **Structured extraction.** The worker retrieves and reranks evidence, calls Gemini with the saved prompt, validates the structured response, then saves versioned JSON and Parquet results and publishes result knowledge.
 
-Account changes require administrator authorization and confirmation in the application. Deletion revokes sessions and dataset access, protects the current account and last administrator, retains shared content, and archives private history references under the protected shared state directory.
+6. **Review and export.** Users compare saved fields with original documents, correct values and mark a result Reviewed to save and lock it. Exports use saved data. Re-extract creates another result while preserving earlier versions.
 
-The laptop model relay pins the SSH host key and permits restricted reverse forwarding. The recorded destination is the internal ollama service on port 11434. Laptop Docker/Ollama and the tunnel must remain online for those models. Do not expose an unauthenticated model port publicly.
+7. **Unified Chat.** Every question follows access and scope checks, hybrid vector and keyword retrieval, CPU reranking, Gemini answer generation, and answer/citation validation. Aegis help follows the same retrieval path. Exact counts use complete authorized catalog facts.
 
-Back up relational state, durable objects, shared runtime state, model and route configuration, and separately protected encryption material. The local backup.sh script supports the local PostgreSQL/file profile; it is not an OCI Oracle restore solution. Test cloud recovery in an isolated destination.
+8. **Recovery.** Accepted worker jobs persist beyond the browser. Progress comes from saved job state. Retries recover the accepted workflow and knowledge publication rather than silently submitting duplicate processing.
 
-An image rollback restores code only. It does not reverse schema, configuration or content changes. Restore only a compatible code and data combination. Preserve embedding profiles and rebuild derived indexes from verified durable sources when needed.
+The inspection verified configuration and service readiness. It did not run a new upload, extraction, chat question, account change or recovery action.
 
-| Symptom | First diagnostic |
+## Versions observed in running services
+
+The application versions below were read from the running containers. Kubernetes and Oracle Database versions were read from live OCI and node information. This page intentionally focuses on deployed technologies and omits package and library dependency inventories.
+
+| Running technology | Observed version | Location |
+| --- | --- | --- |
+| Oracle Autonomous AI Database | 26ai | OCI managed database |
+| OKE Kubernetes | v1.36.4 | OCI Mumbai |
+| Worker operating system | Oracle Linux Server 9.8 | OCI ARM64 node |
+| Node.js | 22.23.3 | OCI web container |
+| Next.js | 15.5.27 | OCI web container |
+| React | 19.3.0 | OCI web container |
+| Python | 3.12.15 | OCI API and worker image |
+| FastAPI | 0.142.2 | OCI API container |
+| LangGraph | 1.2.14 | OCI backend agent runtime |
+| Caddy | 2.10.2 | OCI HTTPS sidecar |
+
+The currently mapped model identifiers are gemini-embedding-2 and gemini-3.5-flash-lite. Cloud model identifiers are saved provider selections rather than installed weight versions. Full deployed image references are preserved in the live resource record.
+
+## Network operations and verification record
+
+The VCN is ags-aegis-vcn with CIDR 10.42.0.0/16. Its API, worker and load-balancer subnets are 10.42.0.0/24, 10.42.1.0/24 and 10.42.2.0/24. The load balancer exposes ports 80 and 443 at 92.4.67.183. The application uses HTTPS and returned the HSTS header.
+
+The internal API service uses port 8000. The retained Ollama service uses port 11434, and the restricted SSH relay service uses NodePort 32022. The relay sidecar is ready, while the laptop model endpoint is unavailable. No model port was opened or network policy changed during the inspection.
+
+The database is available, mTLS is required, and both database compute and storage autoscaling are disabled. The database records the queue and native vectors in the same managed service. The bucket is Standard storage; original documents and complete result files remain in Object Storage.
+
+OCI API calls were GET/list operations. Kubernetes reads inspected nodes, deployments, pods, services and persistent claims; read-only commands inside existing containers checked versions and configuration. The application catalog query explicitly used a read-only database transaction and bypassed cache writes.
+
+The resource record includes current resource names, allocated capacity, container requests/limits, active model mappings, observed versions and deployed image digests. Credentials, wallet files, private keys, user documents and result payloads are excluded.
+
+| Repository reference | Purpose |
 | --- | --- |
-| Image pull or startup error | Check target architecture, registry pull secret, pod events and image digest |
-| API or worker not ready | Check DB/wallet, encryption key, shared state and reranker mount |
-| Model unavailable | Check registration, protocol, limits, endpoint and laptop relay |
-| Document not searchable | Check indexing job, OCR and embedding profile; ready is separate from extraction |
-| Result saved but workflow incomplete | Inspect publication failure; retry knowledge publication before rerunning inference |
+| ags_docs/OCI-LIVE-RESOURCES.md | Readable live resource inventory |
+| ags_docs/OCI-LIVE-SNAPSHOT.json | Sanitized inspection snapshot and image references |
+| ags_docs/ARCHITECTURE.md | Text companion to this Word architecture document |
+| ags_docs/TECH-STACK.md | Observed running technologies and model placement |
+| ags_docs/DEPLOYMENT.md | Instructions for a future authorized application release |
+| Branch ags_sprint1 | Current manager handover and documentation updates |
 
-## Release evidence and source navigation
-
-The release evidence document records the actual checks for this snapshot. Historical screenshots and OCI deployment notes are dated observations, not a claim that this freeze was deployed. This handover does not run live extraction, user management, cloud rollout or restore drills.
-
-A source freeze is represented by an immutable Git tag, not by preventing future development on the branch. Future work can advance the branch while this tag remains the handover reference. The source manifest fingerprints application and deployment inputs without including credentials or runtime data.
-
-| Repository entry | What to inspect |
-| --- | --- |
-| README.md | Manager introduction, diagrams, workflow and documentation links |
-| ags_docs/ARCHITECTURE.md | Text companion to this Word document |
-| ags_docs/TECH-STACK.md | Exact declared dependencies and reproducibility limits |
-| ags_docs/DEPLOYMENT.md | Fresh destination handoff, code release, onboarding and rollback |
-| .agents/skills/aegis-release/SKILL.md | Reusable workflow for future Aegis maintainers |
-| ags_docs/RELEASE-FREEZE.md | Freeze scope and actual validation results |
-| ags_docs/RELEASE-MANIFEST.json | Source file hashes and aggregate fingerprint |
-| ags_backend/ags_app/ags_agent/ | Chat graph, evidence, retrieval and validation |
-| ags_backend/ags_app/worker.py | Durable processing execution |
-| ags_database/ | Schema, migrations and relational model |
-| ags_deploy/ags_oke/ | Existing OCI pilot tooling and runtime-config adapter |
-
-Share the GitHub link with the freeze tag selected. Read the README first, then open the diagram and this Word document. Keep private installation configuration and deployment receipts in the operator handoff rather than the repository.
+The deployed image references were recorded before and after the documentation work. The existing source freeze tag is preserved; this update changes documentation on ags_sprint1 and does not redeploy the application.

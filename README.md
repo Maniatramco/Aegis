@@ -2,15 +2,16 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It combines a Next.js workspace, a FastAPI API, LangGraph agents and a durable Python worker. Users upload files, extract fields with saved JSON Schema prompts, compare results with originals, export saved data and ask questions with source citations.
 
-**Manager handover:** prepared for Swamy on 15 October 2026. Use tag **`aegis-freeze-2026-10-15`** for this complete source snapshot. Publishing this snapshot does not deploy it or change the running application. See [freeze and validation](ags_docs/RELEASE-FREEZE.md).
+**Manager handover:** use branch **`ags_sprint1`** for the updated live OCI architecture, verified 15 October 2026 at 22:26 IST. The original code freeze remains tagged `aegis-freeze-2026-10-15`. Documentation updates do not change the deployed application. See [live resources](ags_docs/OCI-LIVE-RESOURCES.md) and [freeze evidence](ags_docs/RELEASE-FREEZE.md).
 
 ## Start here
 
 | Read | What it explains |
 | --- | --- |
-| [Word handover](ags_docs/Aegis_Architecture_and_Deployment_Handover.docx) | End to end architecture, workflows, versions, installation, release and support |
+| [Word architecture handover](ags_docs/Aegis_Architecture_and_Deployment_Handover.docx) | Current cloud/local placement, OCI resources, deployed versions and workflows |
 | [Architecture](ags_docs/ARCHITECTURE.md) | Browser to API, worker, data and model boundaries |
-| [Technology versions](ags_docs/TECH-STACK.md) | Exact source-declared versions and image/model reproducibility limits |
+| [Running technologies](ags_docs/TECH-STACK.md) | Versions observed in running containers and live model mappings |
+| [Live OCI resources](ags_docs/OCI-LIVE-RESOURCES.md) | Cluster, compute, Autonomous AI Database, storage, networking and resource limits |
 | [Deployment and onboarding](ags_docs/DEPLOYMENT.md) | Fresh installation prerequisites, local setup, OCI code release and rollback |
 | [Maintainer skill](.agents/skills/aegis-release/SKILL.md) | Reusable repository-specific release and support instructions |
 | [Source manifest](ags_docs/RELEASE-MANIFEST.json) | Frozen application input hashes |
@@ -19,9 +20,11 @@ Aegis turns documents into searchable knowledge and structured, reviewable resul
 
 ![Aegis deployment architecture](ags_docs/ags_assets/aegis-architecture.png)
 
-The browser talks to Next.js. Its same-origin API proxy calls internal FastAPI; the API enforces access and delegates confirmed processing to the worker. The recorded OCI pilot places web/API/worker on OKE, metadata and native vectors in external Oracle, and durable content in OCI Object Storage. Laptop-hosted Ollama models are reached through a restricted private SSH relay. Local Docker uses PostgreSQL/Qdrant, or the optional Oracle profile.
+The browser uses Next.js on OCI OKE through the OCI load balancer and Caddy HTTPS. FastAPI, LangGraph agents, the worker and CPU reranker also run on OKE. **Oracle Autonomous AI Database 26ai** (`agsora`) stores application records, the durable job queue and native vectors. OCI Object Storage (`mk-aegis`) stores documents and saved results.
 
-The recorded OKE deployment is a single-instance pilot with shared state and Recreate rollouts. Cloud services, model providers and model registrations are configuration choices; a supported adapter does not prove that service is currently deployed.
+**Current model placement:** all three active datasets use Google Gemini (`gemini-embedding-2` and `gemini-3.5-flash-lite`) for embeddings, chat, extraction and OCR. The retained laptop Ollama container is stopped and its relay endpoint is unreachable. The CPU reranker's `local` mode means execution inside the OCI backend.
+
+The live cluster has one ARM64 A1 node with 2 OCPUs and 12 GB RAM. Both application deployments have one ready replica. See the [verified resource inventory](ags_docs/OCI-LIVE-RESOURCES.md) for allocations and the [snapshot](ags_docs/OCI-LIVE-SNAPSHOT.json) for deployed image references.
 
 ## End to end workflow
 
@@ -35,17 +38,20 @@ The recorded OKE deployment is a single-instance pilot with shared state and Rec
 
 **Unified Chat contract:** access and scope → hybrid vector/keyword retrieval → CPU reranking → model answer → answer and citation validation. This applies to every question, including Aegis help and catalog questions. Exact counts require complete authorized catalog facts. Questions do not authorize processing. See [AGENTS.md](AGENTS.md).
 
-## Technology at this freeze
+## Technologies observed live
 
-| Area | Declared versions |
-| --- | --- |
-| Web | Node 22.x, Next.js 15.5.27, React 19.3.0, TypeScript 5.9.3 |
-| API and agents | Python 3.12 image, FastAPI 0.142.2, LangGraph 1.2.14, SQLAlchemy 2.1.2 |
-| Data | Oracle driver 26.0.1; local PostgreSQL 17.11, Qdrant 1.19.1; PyArrow 26.0.0 |
-| Models | Recorded pilot: qwen3:4b, nomic-embed-text, qwen2.5vl:3b via Ollama |
-| Verification | pytest 9.1.1, Node unit tests, Playwright 1.63.0, TypeScript and Next build |
+| Running technology | Observed version | Location |
+| --- | --- | --- |
+| Oracle Autonomous AI Database | 26ai | OCI managed database |
+| OKE Kubernetes | v1.36.4 | OCI Mumbai |
+| Node.js | 22.23.3 | OCI web container |
+| Next.js | 15.5.27 | OCI web container |
+| Python | 3.12.15 | OCI API and worker image |
+| FastAPI | 0.142.2 | OCI API container |
+| LangGraph | 1.2.14 | OCI backend agent runtime |
+| Caddy | 2.10.2 | OCI HTTPS sidecar |
 
-Use lockfiles for exact dependencies. Base-image tags do not pin runtime patch versions; future release receipts must record image digests and actual model identities. See the [full inventory](ags_docs/TECH-STACK.md).
+These versions were read from the running deployment. See [running technologies and models](ags_docs/TECH-STACK.md).
 
 ## Run a separate local installation
 
@@ -65,7 +71,7 @@ Open `http://localhost:3000` and create the first administrator using the privat
 
 Read [DEPLOYMENT.md](ags_docs/DEPLOYMENT.md) before running commands. `ags_deploy/deploy-aegis-code.ps1` updates already prepared OKE application workloads. It is not an empty-cluster installer. The historical provisioning/renderer helpers are pilot-specific and require private state; do not reuse them unchanged for another tenancy.
 
-Runtime limits and profiles live in [runtime.toml](ags_backend/ags_app/ags_config/runtime.toml), explained in [runtime configuration](ags_docs/RUNTIME-CONFIG.md). Model registrations remain authoritative for model-specific limits. Keep encryption keys, bootstrap tokens, wallets and credentials outside Git and images. The laptop relay must remain online for the recorded local models.
+Runtime limits and profiles live in [runtime.toml](ags_backend/ags_app/ags_config/runtime.toml), explained in [runtime configuration](ags_docs/RUNTIME-CONFIG.md). Model registrations remain authoritative for model-specific limits. Keep encryption keys, bootstrap tokens, wallets and credentials outside Git and images. The retained laptop model option requires its relay; the three currently active datasets use cloud Gemini mappings.
 
 Use the same Compose configuration arguments for stop/start operations and preserve volumes. [Backup and restore](ags_docs/BACKUP_RESTORE.md) explains coordinated recovery; its local scripts are not a cloud Oracle backup system. Image rollback does not roll back data or schema changes.
 

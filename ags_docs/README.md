@@ -1,6 +1,6 @@
 # Documentation
 
-For the 15 October 2026 manager handover, start with [architecture](ARCHITECTURE.md), [Word handover](Aegis_Architecture_and_Deployment_Handover.docx), [technology versions](TECH-STACK.md), [deployment](DEPLOYMENT.md) and [freeze evidence](RELEASE-FREEZE.md).
+For the live OCI manager handover on branch `ags_sprint1`, start with [architecture](ARCHITECTURE.md), [Word handover](Aegis_Architecture_and_Deployment_Handover.docx), [running technologies](TECH-STACK.md), [verified OCI resources](OCI-LIVE-RESOURCES.md), [deployment](DEPLOYMENT.md) and [freeze evidence](RELEASE-FREEZE.md).
 
 | Topic | Start here |
 | --- | --- |

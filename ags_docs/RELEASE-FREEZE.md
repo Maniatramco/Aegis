@@ -55,3 +55,8 @@ git checkout aegis-freeze-2026-10-15
 ```
 
 Follow [deployment and onboarding](DEPLOYMENT.md) for a separate environment or a future application release. Read [the maintainer skill](../.agents/skills/aegis-release/SKILL.md) before changing the application contracts.
+
+
+## Live architecture documentation update
+
+On 15 October 2026 at 22:26 IST, the architecture, technology inventory, diagram and Word handover were revised on `ags_sprint1` using live read-only OCI and application inspection. The updated handover focuses on OCI resources and current Gemini mappings, with stopped laptop models identified separately. The original freeze tag and application source hashes remain unchanged. See [live resource evidence](OCI-LIVE-RESOURCES.md).
