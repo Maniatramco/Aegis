@@ -66,6 +66,7 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
  const [voiceSupported,setVoiceSupported]=useState(false); const [listening,setListening]=useState(false);
  const fileInput=useRef<HTMLInputElement>(null); const end=useRef<HTMLDivElement>(null); const composer=useRef<HTMLTextAreaElement>(null);
  const composerContainer=useRef<HTMLDivElement>(null);
+ const composerHighlight=useRef<HTMLDivElement>(null);
  const thread=useRef<HTMLDivElement>(null);const followBottom=useRef(true);const [showLatest,setShowLatest]=useState(false);
  const lock=useRef(false); const mounted=useRef(true); const recognition=useRef<any>(null);
  const onJobsRef=useRef(onJobs); onJobsRef.current=onJobs;
@@ -206,6 +207,7 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
   input.style.height='auto';input.style.overflowY='hidden';
   const height=Math.max(minimum,Math.min(input.scrollHeight,maximum));
   input.style.height=`${height}px`;input.style.overflowY=input.scrollHeight>height?'auto':'hidden';
+  if(composerHighlight.current){composerHighlight.current.style.width=`${input.clientWidth}px`;composerHighlight.current.scrollTop=input.scrollTop;}
  },[]);
  useLayoutEffect(resizeComposer,[text,resizeComposer]);
  useEffect(()=>{
@@ -384,6 +386,8 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
   setText(next);setCaret(position);setMentionClosed(true);setMentionIndex(0);
   requestAnimationFrame(()=>{composer.current?.focus();composer.current?.setSelectionRange(position,position);});
  };
+ const commandToken=/^(\s*)(@\S+)(?=\s|$)/.exec(text);
+ const highlightedCommand=commandToken&&agentCommands.some(command=>command.label.toLowerCase()===commandToken[2].toLowerCase())?commandToken:null;
  return <section className={`agent-v2${dragging?' agent-v2-dragging':''}`} aria-label="Aegis Agent conversation" onDragEnter={onFileDragEnter} onDragOver={onFileDragOver} onDragLeave={onFileDragLeave} onDrop={onFileDrop}>
   {dragging&&<div className="agent-v2-drop-overlay" role="status"><UploadCloud size={36}/><strong>{attachmentsBlocked?'Finish the current workflow first':'Drop documents here'}</strong><span>{attachmentsBlocked?'You can attach files when it finishes.':`PDF, DOCX, TXT, JSON · up to 20 files · ${maxUploadMb} MB each`}</span></div>}
   <header className="agent-v2-context">
@@ -468,7 +472,9 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
      const id=attachmentKey(file);const json=isJsonAttachment(file);const prompt=promptAttachment?.fileKey===id;
      return <div className={`agent-v2-file-card${json?' agent-v2-json-card':''}`} key={id}><FileText size={20}/><span><strong title={file.name}>{file.name}</strong><small>{attachmentSize(file.size)}{json?` · ${prompt?(promptAttachment.savedId?'Saved prompt':'Prompt template'):jsonDocuments[id]?'Document':'Choose file type'}`:''}</small>{json&&<span className="agent-v2-json-choice" role="group" aria-label={`Use ${file.name} as`}><button type="button" aria-pressed={prompt} disabled={attachmentsBlocked} onClick={()=>void chooseJsonPrompt(file)}>Prompt template</button><button type="button" aria-pressed={Boolean(jsonDocuments[id])} disabled={attachmentsBlocked} onClick={()=>chooseJsonDocument(file)}>Document</button></span>}{attachmentErrors[id]&&<span className="agent-v2-attachment-error" role="alert">{attachmentErrors[id]}</span>}</span><button aria-label={`Remove attachment ${file.name}`} disabled={attachmentsBlocked} onClick={()=>removeAttachment(file)}><X size={14}/></button></div>;
     })}<button className="text-button" disabled={attachmentsBlocked} onClick={()=>{setFiles([]);setJsonDocuments({});setAttachmentErrors({});setPromptAttachment(null);clearSavedPrompt();cancelPrompt();}}>Clear files</button></div>}
-    <div className="agent-v2-input"><textarea ref={composer} aria-label="Message Aegis Agent" placeholder="Ask anything · @ agents · # documents" value={text} rows={1} aria-autocomplete="list" aria-expanded={Boolean(mention||commandMention)} aria-controls={commandMention?'agent-command-mentions':mention?'agent-document-mentions':undefined} aria-activedescendant={commandMention&&commandOptions[mentionIndex]?`agent-command-${commandOptions[mentionIndex].operation}`:mentionDocuments[mentionIndex]?`agent-document-option-${mentionDocuments[mentionIndex].id}`:undefined} onSelect={e=>setCaret(e.currentTarget.selectionStart)} onChange={e=>{setText(e.target.value);setCaret(e.target.selectionStart);setMentionClosed(false);setMentionIndex(0);}} onKeyDown={e=>{
+    <div className="agent-v2-input"><div className="agent-v2-editor">
+    <div ref={composerHighlight} className="agent-v2-input-highlight" aria-hidden="true">{highlightedCommand?<>{highlightedCommand[1]}<span className="agent-v2-command-token">{highlightedCommand[2]}</span>{text.slice(highlightedCommand[0].length)}</>:text}{text.endsWith('\n')?' ':''}</div>
+    <textarea ref={composer} aria-label="Message Aegis Agent" placeholder="Ask anything · @ agents · # documents" value={text} rows={1} aria-autocomplete="list" aria-expanded={Boolean(mention||commandMention)} aria-controls={commandMention?'agent-command-mentions':mention?'agent-document-mentions':undefined} aria-activedescendant={commandMention&&commandOptions[mentionIndex]?`agent-command-${commandOptions[mentionIndex].operation}`:mentionDocuments[mentionIndex]?`agent-document-option-${mentionDocuments[mentionIndex].id}`:undefined} onScroll={e=>{if(composerHighlight.current){composerHighlight.current.scrollTop=e.currentTarget.scrollTop;composerHighlight.current.scrollLeft=e.currentTarget.scrollLeft;}}} onSelect={e=>setCaret(e.currentTarget.selectionStart)} onChange={e=>{setText(e.target.value);setCaret(e.target.selectionStart);setMentionClosed(false);setMentionIndex(0);}} onKeyDown={e=>{
      if(commandMention){
       if(e.key==='Escape'){e.preventDefault();setMentionClosed(true);return;}
       if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();setMentionIndex(index=>commandOptions.length?(index+(e.key==='ArrowDown'?1:-1)+commandOptions.length)%commandOptions.length:0);return;}
@@ -480,7 +486,7 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
       if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(mentionDocuments[mentionIndex])chooseMention(mentionDocuments[mentionIndex]);return;}
      }
      if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void send();}
-    }}/></div>
+    }}/></div></div>
     <div className="agent-v2-compose-controls">
      <input ref={fileInput} type="file" hidden multiple accept=".pdf,.docx,.txt,.json" onChange={e=>{attachFiles(Array.from(e.target.files||[]));e.target.value='';}}/>
      <button className="btn icon" aria-label="Attach documents for agent" title="Attach PDF, DOCX, TXT or JSON" disabled={attachmentsBlocked} onClick={()=>fileInput.current?.click()}><Plus size={21}/></button>

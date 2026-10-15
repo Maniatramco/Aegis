@@ -81,3 +81,13 @@ body .sidebar.agent-navigation-drawer.open{transform:translateX(0);visibility:vi
 .agent-v2-workspace .agent-v2-files{max-height:min(140px,18dvh)}
 .agent-v2-selected-documents{max-height:min(66px,8dvh)}
 @media(max-width:640px){.agent-v2-workspace .agent-v2-mention-popover{left:8px;max-width:calc(100% - 16px)}.agent-v2-workspace .agent-v2-files{max-height:min(100px,16dvh)}}
+
+/* Keep native editing and mirror its text underneath for colored agent names. */
+.agent-v2-editor{position:relative;min-width:0}
+body .shell .workspace .agent-v2-composer .agent-v2-compose-box .agent-v2-input .agent-v2-editor :is(textarea,.agent-v2-input-highlight){box-sizing:border-box;margin:0;border:0;border-radius:0;padding:0;font:inherit;font-size:var(--text-input,16px);font-weight:400;line-height:1.5;letter-spacing:normal;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;tab-size:8;background:transparent;box-shadow:none}
+body .shell .workspace .agent-v2-composer .agent-v2-compose-box .agent-v2-input .agent-v2-editor textarea{position:relative;z-index:1;color:transparent;caret-color:#202123;outline:none;outline-offset:0}
+body .shell .workspace .agent-v2-composer .agent-v2-compose-box .agent-v2-input .agent-v2-editor textarea:is(:focus,:focus-visible){border:0;background:transparent;outline:none;box-shadow:none}
+.agent-v2-input-highlight{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:#202123}
+.agent-v2-command-token{color:#0667ef}
+body .shell .workspace .agent-v2-compose-box:focus-within{border-color:#6397ce;box-shadow:0 0 0 1px #dbeafe}
+@media(max-width:560px){body .shell .workspace .agent-v2-composer .agent-v2-compose-box .agent-v2-input .agent-v2-editor :is(textarea,.agent-v2-input-highlight){font-size:16px}}
