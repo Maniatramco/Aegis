@@ -6,7 +6,6 @@ COPY ags_backend/ags_app ./ags_backend/ags_app
 COPY ags_backend/ags_tests ./ags_backend/ags_tests
 COPY ags_local_use/ags_scripts/setup_oracle.py ./ags_local_use/ags_scripts/
 COPY ags_local_use/ags_scripts/oracle_check.py ags_local_use/ags_scripts/oracle_model_check.py ags_local_use/ags_scripts/reset_admin_password.py ./ags_local_use/ags_scripts/
-COPY ags_scripts/migrate_storage.py ./ags_scripts/
 COPY ags_local_use/.env.oracle.example ./ags_local_use/
 ENV PYTHONPATH=/app/ags_backend PYTHONUNBUFFERED=1
 CMD ["python", "ags_local_use/ags_scripts/oracle_check.py"]
