@@ -6,11 +6,13 @@ One command for an Aegis database/schema and frontend/API/worker code release.
 .DESCRIPTION
 Without arguments, prompts for missing non-secret inputs. -Inputs accepts a JSON
 file based on deployment-inputs.example.json. Requires prepared OCI resources,
-existing authentication and Python 3.10+. JSON DeployFrontend/DeployBackend booleans
-select application images; DatabaseAction is skip, verify or install. Application
-releases need Docker and kubectl. Fresh table installation needs SQLcl and an empty
-application owner; database-only installation needs no Docker or Kubernetes. Creates no OCI
-database instance, users, OKE resources, Secrets or configuration. Prompts CONNECT
+existing authentication and Python 3.10+. DB_Object, DeployFrontend and DeployBackend
+use Y/N. DB_ReleaseFile selects the ordered database release JSON. DB_Object=Y needs
+python-oracledb, a wallet and existing database access. The release file can permit
+a missing application user/schema, with private passwords; matching objects are
+preserved. Database-only releases need no Docker or Kubernetes. Application releases
+need Docker and kubectl. Creates no OCI database instance, OKE resources or Secrets.
+Existing configuration and users/grants are preserved. Prompts CONNECT
 before remote inspection and PUBLISH before DDL/image publication. Passwords stay
 in private SQLcl prompts. -CheckOnly makes no database or deployment changes.
 .EXAMPLE

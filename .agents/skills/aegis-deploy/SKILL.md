@@ -13,6 +13,14 @@ before publication. A general deployment request authorizes preparation; it does
 not replace the final review below. Credential sharing, access permission and
 preflight completion do not authorize image pushes, database DDL or pod updates.
 
+The user also authorized a release-file workflow: `DB_Object: "Y"` plus
+`DB_ReleaseFile` selects ordered object-creation scripts. That file can explicitly
+permit a missing application user/schema inside an existing OCI database. Show
+the account, minimum grants, existing tablespace/quota and missing objects in the
+final plan and obtain PUBLISH approval before creating them. Existing accounts,
+passwords, grants, quotas, objects, data and application configuration stay intact;
+this exception does not authorize OCI database/infrastructure provisioning.
+
 ## Clarify inputs and obtain connection permission
 
 Ask the user which environment they intend and what they already know: repository
@@ -42,7 +50,7 @@ After permission, use existing authenticated list/get/metadata access to discove
 and verify the missing details. Keep discovery within the approved scope; do not
 scan unrelated accounts/regions or fetch application document contents. Reuse
 existing authentication and secure credential paths; do not print private keys,
-passwords or tokens, and do not create credentials, users or pull Secrets.
+passwords or tokens. During discovery do not create credentials, users or pull Secrets.
 
 ## Resolve the release
 
@@ -52,15 +60,22 @@ For an operator running directly in PowerShell, the repository now provides
 keep filled destination files outside Git. The CLI exports committed source,
 prompts CONNECT before discovery and PUBLISH after local builds and the detailed
 plan, then uses the maintained schema/release helpers and configuration guard.
-JSON `DeployFrontend` and `DeployBackend` booleans independently select web and
-API/worker images, defaulting to both for older input files. `DatabaseAction=skip`
-skips database scripts; a backend release still requires read-only compatibility
-and active-job checks. Frontend-only with skip makes no Oracle queries.
-`verify` compares the existing schema; `install` is only for the explicit prepared
-empty-owner case below. Both image flags false with install runs only the guarded
-schema installer/postchecks, requiring no cluster or Docker. Verify-only still
-uses the existing API's saved connection and cluster access; it has no PUBLISH
-step. Reject skip with both flags false. It never provisions or configures OCI.
+JSON `DB_Object`, `DeployFrontend` and `DeployBackend` use `"Y"`/`"N"`.
+`DB_Object=Y` reads `DB_ReleaseFile` (default `ags_database/release.json`): the
+ordered Scripts list selects committed SQL files, and CreateSchemaIfMissing Y
+allows the explicitly reviewed missing account/schema. Only maintained table/index
+creation scripts are supported; this is not a migration/DML runner. Verify script
+order, source hashes, existing-object compatibility and listed missing objects;
+skip matches and stop on incompatible definitions. Use the existing Oracle Python
+driver and private password prompts; never put passwords into JSON, SQL files,
+argv or logs. The record freezes the release file and lists completed objects on
+failure. New-schema defaults are DATA/256 MB, CREATE SESSION and CREATE TABLE;
+existing grants/quota are never changed. Database-only release needs no cluster
+or Docker. DB_Object N skips DDL; a backend release still requires read-only
+compatibility and active-job checks. Frontend-only with N makes no Oracle queries.
+Older boolean flags/DatabaseAction still work when DB_Object is absent; do not mix
+them. All N is an empty selection. The legacy verify/install procedures below
+remain available for earlier input files and the fresh empty-owner SQLcl method.
 It records operator regression/backup references, and does not run regression,
 inference or write-workflow tests. An AI using it must still complete the evidence
 and detailed target review required here; never supply approval tokens without
@@ -83,7 +98,9 @@ The current handover branch is `ags_sprint1`; the pilot namespace is `aegis-oci`
 and its platform is `linux/arm64`. Confirm these against the selected destination.
 Credentials and wallet files stay outside Git and prompts/logs. Use existing
 authentication and registry login; obtain missing secrets through a private
-credential mechanism. Do not create users, grants, Secrets or pull credentials.
+credential mechanism. Preserve existing users/grants and do not create Secrets or
+pull credentials. A missing application user and its minimum new grants require
+DB_Object Y, release-file permission and the final plan approval described above.
 
 Discover an unknown URL from existing Service/Ingress/load-balancer addresses and
 configured hostnames. Report whether DNS/HTTPS and application reachability are
@@ -142,14 +159,17 @@ previous release's approval as authorization for a different target or release.
 | --- | --- | --- |
 | Existing Aegis schema; ordinary code release | Read-only schema verification | Update web, API and worker images |
 | Explicit fresh schema request; DB and empty owner already prepared | Run the guarded schema installer once, then verify | Release only when the existing OKE app state is also prepared |
+| DB_Object Y with reviewed release file | Create only listed missing table/index objects; optionally create missing app user/schema when the file permits it | Release only selected images after saved-connection/schema checks |
 | Existing schema differs from the supplied scripts | Report exact differences; stop the release | Wait for an explicitly reviewed migration |
 | Missing infrastructure, credentials, volumes, wallet or app configuration | Report the missing prerequisite | Stop; do not provision or repair configuration |
 
-The thirteen `ags_tables/*.sql` files are a **fresh-schema installer**, not
-incremental migrations. Never replay them against an initialized database, drop
-objects, truncate data, regenerate them from local SQLAlchemy tools, or invent
-migration SQL. This repository currently has no versioned OCI upgrade migrations.
-An existing database that matches the release needs no DDL during a code update.
+The thirteen `ags_tables/*.sql` files define the current objects, not incremental
+migrations. The legacy `install.sql` replays all thirteen and therefore requires
+an empty owner. The release-file engine compares existing definitions first and
+executes only listed missing CREATE statements, preserving matching objects.
+Never drop objects, truncate data, regenerate templates from local SQLAlchemy
+tools, or invent migration SQL. This repository currently has no versioned OCI
+upgrade migrations. A matching existing database needs no object DDL.
 
 For existing schemas, run `ags_database/ags_schema/verify_live_schema.sql` in a
 read-only connection as the existing owner, checking the actual owner/service,

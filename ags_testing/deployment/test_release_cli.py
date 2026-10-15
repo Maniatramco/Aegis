@@ -254,6 +254,85 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertFalse({'build', 'install', 'publish', 'approval'} & set(self.runner.events))
         self.assertFalse(any(call[0] in ('kubectl', 'docker') for call in self.runner.calls))
 
+    def release_file_manager(self, populated=False):
+        fixtures = cli.module_from(Path(__file__).with_name('test_oracle_release.py'), 'oracle_test_fixtures')
+        database = fixtures.Database(exists=True, populated=populated)
+        release = cli.ORACLE_RELEASE.ReleaseFile(self.source,self.source/'ags_database/release.json')
+        manager = object.__new__(cli.ORACLE_RELEASE.DatabaseRelease)
+        manager.schema, manager.release = cli.SCHEMA, release
+        manager.owner, manager.admin = 'TEST_OWNER','ADMIN'
+        manager.alias, manager.service = 'test_low','test_low.adb.oraclecloud.com'
+        manager.tablespace, manager.quota = 'DATA',256
+        manager.password_fn = lambda prompt: fixtures.SECRET
+        manager.passwords, manager.connections, manager.applied = {},{},[]
+        manager.driver, manager.wallet_dir = database,self.directory
+        manager.temporary = SimpleNamespace(cleanup=lambda:None)
+        self.workflow.db_release = manager
+        return database
+
+    def test_release_file_check_only_and_denied_approval_never_create_objects(self):
+        self.select(False,False,'release')
+        database = self.release_file_manager()
+        self.workflow.check_only = True
+        self.responses = ['CONNECT']
+        self.assertEqual(self.run_quietly()['state'],'preflight-only')
+        self.assertEqual(database.writes,[])
+        self.assertFalse(self.runner.calls)
+
+    def test_release_file_denied_publish_never_creates_objects(self):
+        self.select(False,False,'release')
+        database = self.release_file_manager()
+        self.responses = ['CONNECT','no']
+        with self.assertRaises(cli.DeploymentStopped):
+            self.run_quietly()
+        self.assertEqual(database.writes,[])
+        self.assertFalse(self.runner.calls)
+
+    def test_y_flag_preparation_does_not_connect_before_permission(self):
+        self.workflow.prepare = cli.Workflow.prepare.__get__(self.workflow)
+        wallet = self.directory/'wallet.zip'
+        wallet.write_text('constructor is stubbed; this is never opened')
+        self.workflow.values.update(SourcePath=str(self.source),DB_Object='Y',DB_ReleaseFile='ags_database/release.json',
+                                    DeployFrontend='N',DeployBackend='N',WalletPath=str(wallet),DatabaseOwner='TEST_OWNER',
+                                    ServiceAlias='test_low',ExpectedService='test_low.adb.oraclecloud.com')
+        self.workflow.frontend,self.workflow.backend,self.workflow.components=False,False,[]
+        self.responses=['no']
+        with patch.object(cli,'export_commit',return_value=(self.source,'a'*40)), \
+             patch.object(cli.ORACLE_RELEASE,'DatabaseRelease') as manager:
+            manager.return_value.admin='ADMIN'
+            manager.return_value.applied=[]
+            with self.assertRaises(cli.DeploymentStopped):
+                self.run_quietly()
+            manager.return_value.discover.assert_not_called()
+            manager.return_value.apply.assert_not_called()
+            manager.return_value.close.assert_called_once()
+
+    def test_release_file_database_only_executes_its_scripts_without_images(self):
+        self.select(False,False,'release')
+        database = self.release_file_manager()
+        result = self.run_quietly()
+        self.assertEqual(result['state'],'complete')
+        self.assertEqual(len(database.writes),33)
+        self.assertEqual(len(result['database_completed_objects']),33)
+        self.assertFalse(self.runner.calls)
+        self.http.assert_not_called()
+
+    def test_release_file_with_matching_objects_does_not_ask_to_publish_database_only(self):
+        self.select(False,False,'release')
+        database = self.release_file_manager(populated=True)
+        self.responses = ['CONNECT']
+        self.assertEqual(self.run_quietly()['state'],'verified-only')
+        self.assertEqual(database.writes,[])
+
+    def test_release_file_applies_objects_then_releases_selected_backend(self):
+        self.select(False,True,'release')
+        database = self.release_file_manager()
+        result = self.run_quietly()
+        self.assertEqual(result['state'],'complete')
+        self.assertEqual(len(database.writes),33)
+        self.assertEqual(self.runner.events.count('build'),1)
+        self.assertEqual(self.runner.after['deployments']['aegis-web'],self.runner.before['deployments']['aegis-web'])
+
     def test_connection_denial_does_not_contact_target(self):
         self.responses = ['no']
         with self.assertRaises(cli.DeploymentStopped):
@@ -368,6 +447,18 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
 
 class InputAndSchemaTests(unittest.TestCase):
+    def test_y_n_flags_select_components_and_reject_ambiguous_values(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'target.json'
+            path.write_text('{"DB_Object":"N","DB_ReleaseFile":"ags_database/release.json","DeployFrontend":"Y","DeployBackend":"N"}')
+            workflow=cli.Workflow(cli.load_inputs(path))
+            self.assertEqual(workflow.components,['frontend'])
+            for invalid in ('yes','true','0',''):
+                with self.assertRaises(cli.DeploymentStopped):
+                    cli.flag(invalid,'DB_Object')
+            self.assertFalse(cli.flag('N','DB_Object'))
+            self.assertTrue(cli.flag('Y','DB_Object'))
+
     def test_component_flags_require_real_booleans_and_noop_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary)/'inputs.json'

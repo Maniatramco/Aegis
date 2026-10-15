@@ -34,19 +34,36 @@ Answer the prompts, or copy [the non-secret input example](ags_deploy/deployment
 
 The command exports the selected committed source (`ags_sprint1` by default), discovers missing target details through existing access, builds only selected application images locally, and shows the release plan. Type `CONNECT` to permit read-only discovery, then `PUBLISH` to approve the displayed changes. Add `-CheckOnly` for read-only preflight without builds, table creation, publishing or rollout. Uncommitted changes are excluded.
 
-Choose the components in the same JSON file. `DeployFrontend` and `DeployBackend` must be JSON `true`/`false` values, not quoted strings; both default to `true` for existing input files. Backend includes API and worker. Unselected images are not built, pushed or updated.
+Use three `"Y"`/`"N"` switches and a database release-file path in the same input JSON:
 
-| Selection | `DatabaseAction` | `DeployFrontend` | `DeployBackend` |
+```json
+{
+  "DB_Object": "Y",
+  "DB_ReleaseFile": "ags_database/release.json",
+  "DeployFrontend": "Y",
+  "DeployBackend": "Y"
+}
+```
+
+These are the selection fields; keep the destination/access values from the input template too. Backend includes API and worker. Unselected images are not built, pushed or updated.
+
+| Selection | `DB_Object` | `DeployFrontend` | `DeployBackend` |
 | --- | --- | --- | --- |
-| Frontend only | `skip` | `true` | `false` |
-| Backend only | `skip` | `false` | `true` |
-| Both application components, existing DB | `verify` | `true` | `true` |
-| Fresh database tables only | `install` | `false` | `false` |
-| Read-only existing database verification | `verify` | `false` | `false` |
+| Database release + application code | `Y` | `Y` | `Y` |
+| Frontend only | `N` | `Y` | `N` |
+| Backend only | `N` | `N` | `Y` |
+| Both application components, no DB scripts | `N` | `Y` | `Y` |
+| Database release only | `Y` | `N` | `N` |
 
-`DatabaseAction: "skip"` skips database scripts. A backend release still requires read-only schema compatibility and active-job checks; frontend-only with `skip` makes no Oracle queries. `"verify"` compares all thirteen OCI table definitions and makes no schema changes. `"install"` creates tables in a **prepared empty owner**: also supply `WalletPath`, `DatabaseOwner`, `ServiceAlias` and the full `ExpectedService`. SQLcl privately prompts for the password. With application components selected, schema, saved connection and app readiness checks must pass before publishing images. With both flags `false`, installation runs only the guarded database installer and its schema postchecks; it needs no Docker, Kubernetes, registry or application URL. Existing-schema verification uses the prepared API's saved OCI connection and therefore still requires cluster access. Verification without application components is read-only and has no PUBLISH step. Installing a schema does not migrate an existing schema or copy documents, users or application data. Selecting `skip` with both flags `false` is rejected as an empty selection.
+`DB_Object: "Y"` reads [the database release file](ags_database/release.json). Its `Scripts` array is the execution order; only listed scripts participate, with no folder scanning or extra provisioning scripts. The supplied file lists the thirteen maintained Oracle table scripts in dependency order. Paths are relative to the repository root and refer to the selected committed source. Point `DB_ReleaseFile` to another repository-relative manifest or an absolute manifest path; an external manifest is frozen into the private release record and still selects SQL from the committed source. Current object releases support the maintained `ags_database/ags_tables/` CREATE TABLE/INDEX definitions; arbitrary migrations need separate review.
 
-Prerequisites: PowerShell, Python 3.10+ (3.12 recommended; the repository `.venv` is preferred), Git and existing destination access. Application releases also need Docker, kubectl, registry login, prepared OKE Deployments, persistent state, database connection, routing and credentials. Fresh table installation needs SQLcl and the destination wallet. The OCI database instance, owner, privileges/quota and application configuration must already exist. Existing code releases require a backup/restore reference; code releases and schema installations request validation/CI evidence for the exact source. The command records this operator evidence; it does not run regression or inference tests. For application releases, it discovers an existing HTTPS URL; it does not create one. Selective application releases require a source commit containing the updated component-aware release helper; older commits stop before target access.
+The release file's `CreateSchemaIfMissing: "Y"` permits a missing application user/schema inside the **existing OCI database**. The plan lists that account, `CREATE SESSION`/`CREATE TABLE` grants, existing `DATA` tablespace and a 256 MB quota for the new account (`SchemaTablespace`/`SchemaQuotaMB` can select different existing-space settings). Existing users, passwords, grants and quotas are preserved. Matching tables/indexes are skipped; missing objects are created in the listed order; incompatible existing definitions stop the release. No object is dropped or altered and no application rows are copied or changed by this object release. Oracle creates the schema with its user; see [Oracle schema documentation](https://docs.oracle.com/en/database/oracle/oracle-database/26/admin/managing-schema-objects.html).
+
+Supply `WalletPath`, `DatabaseOwner`, `ServiceAlias`, full `ExpectedService` and existing `DBAdminUser` (default `ADMIN`). Wallet/admin/owner passwords are prompted privately in an interactive terminal and never saved in JSON, argv, generated SQL or receipts. A new schema password is confirmed privately; the database enforces its password rules. Read-only preflight discovers exactly what is missing before PUBLISH approval. Database-only execution needs no Docker, Kubernetes, registry or application URL. If everything listed already matches and no images are selected, it completes read-only without a PUBLISH prompt. With images selected, saved database connection, schema and application checks must pass before image publication.
+
+`DB_Object: "N"` skips the release file and database DDL. A backend release still performs read-only schema compatibility and active-job checks. Frontend-only with DB_Object N makes no Oracle queries. All three N is rejected as an empty selection. Older boolean frontend/backend values and `DatabaseAction` remain supported for existing input files; do not mix legacy DatabaseAction with DB_Object.
+
+Prerequisites: PowerShell, Python 3.10+ (3.12 recommended; the repository `.venv` is preferred), Git and existing destination access. DB_Object Y needs `python-oracledb` from the existing `ags_backend/requirements-oracle.txt`, the destination wallet and an existing inspection/admin account; missing-schema creation requires account-creation/grant privileges. It does not create the physical database or tablespaces. Application releases also need Docker, kubectl, registry login, prepared OKE Deployments, persistent state, database connection, routing and credentials. Existing-data changes require an existing backup/restore reference; releases request validation/CI evidence for the exact source. The command records this operator evidence; it does not run regression or inference tests. For application releases it discovers an existing HTTPS URL, without creating routing or changing configuration. Selective application releases require a source commit containing the component-aware release helper.
 
 Infrastructure, configuration, models and existing data are preserved. The current `Recreate` strategy can cause a brief restart window when you actually release. Private plans/results and the exact release receipt are stored under ignored `ags_deploy/deployment-records/`. On any failure, inspect the reported phase and receipt before retrying: schema DDL can commit partially, and no automatic rollback is attempted. Missing prerequisites stop the command.
 

@@ -3,28 +3,12 @@
 The remote script runs inside the already configured API container. It imports
 no Aegis application modules and emits no credentials or application row data.
 """
+import inspect
 import re
 
 
-REMOTE_INSPECTION = r'''
-import json,os
-from pathlib import Path
-from cryptography.fernet import Fernet
-import oracledb
-root=Path(os.environ.get('AEGIS_STORAGE_ROOT','/data')).resolve()
-state=json.loads((root/'configuration/database.json').read_text())
-if state.get('active_provider')!='oci':raise RuntimeError('Expected an existing OCI database connection')
-cfg=state['active_connection']
-secret_path=(root/cfg['secret_ref']).resolve()
-if root not in secret_path.parents:raise RuntimeError('Invalid saved credential path')
-key=os.environ.get('AEGIS_MASTER_KEY',os.environ.get('MASTER_KEY'))
-encrypted=json.loads(secret_path.read_text())['encrypted']
-secret=json.loads(Fernet(key.encode()).decrypt(encrypted.encode()))
-args=dict(user=cfg['username'],password=secret['password'],dsn=cfg['dsn'],tcp_connect_timeout=10,retry_count=0,ssl_server_dn_match=True)
-if cfg['auth_mode']=='mtls':args.update(config_dir=cfg['wallet_directory'],wallet_location=cfg['wallet_directory'],wallet_password=secret['wallet_password'])
-names=TABLE_NAMES
-result={'wallet_alias':cfg['dsn'],'tables':[]}
-with oracledb.connect(**args) as connection:
+def inspect_connection(connection, names):
+    result = {'tables': []}
     with connection.cursor() as cursor:
         cursor.execute('SET TRANSACTION READ ONLY')
         cursor.execute("SELECT USER,SYS_CONTEXT('USERENV','SERVICE_NAME') FROM dual")
@@ -60,6 +44,30 @@ with oracledb.connect(**args) as connection:
         cursor.execute("SELECT VECTOR_DISTANCE(TO_VECTOR('[1,0]'),TO_VECTOR('[1,0]'),COSINE) FROM dual")
         result['vector_distance']=cursor.fetchone()[0]
     connection.rollback()
+    return result
+
+
+REMOTE_INSPECTION = r'''
+INSPECT_CONNECTION_SOURCE
+
+import json,os
+from pathlib import Path
+from cryptography.fernet import Fernet
+import oracledb
+root=Path(os.environ.get('AEGIS_STORAGE_ROOT','/data')).resolve()
+state=json.loads((root/'configuration/database.json').read_text())
+if state.get('active_provider')!='oci':raise RuntimeError('Expected an existing OCI database connection')
+cfg=state['active_connection']
+secret_path=(root/cfg['secret_ref']).resolve()
+if root not in secret_path.parents:raise RuntimeError('Invalid saved credential path')
+key=os.environ.get('AEGIS_MASTER_KEY',os.environ.get('MASTER_KEY'))
+encrypted=json.loads(secret_path.read_text())['encrypted']
+secret=json.loads(Fernet(key.encode()).decrypt(encrypted.encode()))
+args=dict(user=cfg['username'],password=secret['password'],dsn=cfg['dsn'],tcp_connect_timeout=10,retry_count=0,ssl_server_dn_match=True)
+if cfg['auth_mode']=='mtls':args.update(config_dir=cfg['wallet_directory'],wallet_location=cfg['wallet_directory'],wallet_password=secret['wallet_password'])
+with oracledb.connect(**args) as connection:
+    result=inspect_connection(connection,TABLE_NAMES)
+result['wallet_alias']=cfg['dsn']
 print(json.dumps(result))
 '''
 
@@ -82,7 +90,7 @@ def table_definitions(source):
 
 
 def inspection_script(source):
-    return REMOTE_INSPECTION.replace('TABLE_NAMES', repr(sorted(table_definitions(source))))
+    return REMOTE_INSPECTION.replace('INSPECT_CONNECTION_SOURCE', inspect.getsource(inspect_connection)).replace('TABLE_NAMES', repr(sorted(table_definitions(source))))
 
 
 def normalize(text):
@@ -95,10 +103,10 @@ def quoted_columns(text):
     return re.findall(r'"([A-Za-z0-9_]+)"', text)
 
 
-def verify_schema(source, metadata):
+def verify_schema(source, metadata, allow_missing=False):
     expected = table_definitions(source)
     actual = {table['name']: table for table in metadata['tables']}
-    if set(actual) != set(expected):
+    if (not set(actual) <= set(expected)) or (not allow_missing and set(actual) != set(expected)):
         raise SchemaMismatch('Application tables do not match the thirteen-table release; no upgrade was attempted')
     constraints = {item['name']: (table, item) for table in actual.values() for item in table['constraints']}
     totals = {'tables': 13, 'columns': 0, 'foreign_keys': 0, 'indexes': 0}
@@ -111,6 +119,8 @@ def verify_schema(source, metadata):
         return [item['column'] for item in table['constraint_columns'] if item['constraint'] == constraint]
 
     for name, text in expected.items():
+        if name not in actual:
+            continue
         table = actual[name]
         clauses = [line.strip().rstrip(',') for line in text.splitlines() if line.startswith('  ')]
         declarations = {match[1]: match[2] for line in clauses if (match := re.match(r'^"([A-Za-z0-9_]+)" (.+)$', line))}
@@ -172,7 +182,7 @@ def verify_schema(source, metadata):
             if index['name'].startswith('IX_'):
                 require(index['type'] == 'NORMAL' and index['status'] == 'VALID' and index['unique'] == 'NONUNIQUE', name+': application index is invalid')
                 observed_indexes[index['name']] = [value['column'] for value in table['index_columns'] if value['index'] == index['name']]
-        require(declared_indexes == observed_indexes, name+': application indexes differ')
+        require((all(key in declared_indexes and declared_indexes[key] == value for key, value in observed_indexes.items()) if allow_missing else declared_indexes == observed_indexes), name+': application indexes differ')
         totals['indexes'] += len(declared_indexes)
     require(metadata.get('vector_distance') == 0, 'Native vector capability check failed')
     return totals

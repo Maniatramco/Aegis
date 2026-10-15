@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIELDS = {'SourcePath', 'Ref', 'Kubeconfig', 'Context', 'Namespace', 'Registry',
           'RegistryNamespace', 'Platform', 'AppUrl', 'DatabaseAction', 'WalletPath',
           'DatabaseOwner', 'ServiceAlias', 'ExpectedService', 'SqlclPath',
-          'BackupReference', 'ValidationReference', 'DeployFrontend', 'DeployBackend'}
+          'BackupReference', 'ValidationReference', 'DeployFrontend', 'DeployBackend',
+          'DB_Object', 'DB_ReleaseFile', 'DBAdminUser', 'SchemaTablespace', 'SchemaQuotaMB'}
 BOOLEAN_FIELDS = {'DeployFrontend', 'DeployBackend'}
 
 
@@ -37,6 +38,7 @@ def module_from(path, name):
 
 GUARD = module_from(ROOT/'ags_deploy/check-code-release.py', 'release_guard')
 SCHEMA = module_from(ROOT/'ags_deploy/oci_schema_check.py', 'oci_schema_check')
+ORACLE_RELEASE = module_from(ROOT/'ags_deploy/oracle_release.py', 'oracle_release')
 
 
 class DeploymentStopped(RuntimeError):
@@ -95,6 +97,14 @@ def require_pattern(value, pattern, label):
     return value
 
 
+def flag(value, label, legacy_bool=False):
+    if legacy_bool and isinstance(value, bool):
+        return value
+    if not isinstance(value, str) or value.strip().upper() not in ('Y', 'N'):
+        raise DeploymentStopped(label+' must be Y or N')
+    return value.strip().upper() == 'Y'
+
+
 def load_inputs(path):
     if path is None:
         return {}
@@ -103,8 +113,10 @@ def load_inputs(path):
     if not isinstance(data, dict) or set(data)-FIELDS:
         raise DeploymentStopped('Input JSON contains unsupported fields. Use the non-secret example; passwords/tokens are not accepted in this file')
     for key, value in data.items():
-        if not isinstance(value, bool if key in BOOLEAN_FIELDS else str):
-            raise DeploymentStopped(key+' must be a JSON boolean' if key in BOOLEAN_FIELDS else key+' must be a string')
+        if key in BOOLEAN_FIELDS or key == 'DB_Object':
+            flag(value, key, key in BOOLEAN_FIELDS)
+        elif not isinstance(value, str):
+            raise DeploymentStopped(key+' must be a string')
     for field in ('SourcePath', 'Kubeconfig', 'WalletPath'):
         if data.get(field):
             candidate = Path(data[field]).expanduser()
@@ -254,11 +266,10 @@ EXIT SUCCESS
 class Workflow:
     def __init__(self, values, check_only=False, runner=None, input_fn=input):
         self.values = dict(values)
-        for field in BOOLEAN_FIELDS:
-            if field in values and not isinstance(values[field], bool):
-                raise DeploymentStopped(field+' must be a JSON boolean')
-        self.frontend = values.get('DeployFrontend', True)
-        self.backend = values.get('DeployBackend', True)
+        self.frontend = flag(values.get('DeployFrontend', 'Y'), 'DeployFrontend', True)
+        self.backend = flag(values.get('DeployBackend', 'Y'), 'DeployBackend', True)
+        self.db_release = None
+        self.db_release_done = False
         self.components = [name for name, selected in (('frontend', self.frontend), ('backend', self.backend)) if selected]
         self.check_only = check_only
         self.runner = runner or Runner()
@@ -303,9 +314,12 @@ class Workflow:
 
     def prepare(self):
         action = self.values.get('DatabaseAction', '').lower()
-        if not action:
-            action = ask('Database action: skip, verify existing schema, or install into a prepared empty owner', 'verify', self.input).lower()
-        if action not in ('skip', 'verify', 'install'):
+        if 'DB_Object' in self.values and action:
+            raise DeploymentStopped('Use DB_Object and DB_ReleaseFile, or legacy DatabaseAction; do not mix them')
+        if 'DB_Object' in self.values or not action:
+            selected = self.values.get('DB_Object') or ask('DB_Object: run database release file? Y/N', 'N', self.input)
+            action = 'release' if flag(selected, 'DB_Object') else 'skip'
+        if action not in ('skip', 'verify', 'install', 'release'):
             raise DeploymentStopped('DatabaseAction must be skip, verify or install')
         if action == 'skip' and not self.components:
             raise DeploymentStopped('Nothing selected: enable frontend/backend or choose a database action')
@@ -327,18 +341,32 @@ class Workflow:
         self.record.update(source_commit=self.commit, source_fingerprint=self.source_hash,
                            database_action=action, components=self.components, release=self.release,
                            regression_tests='Not run by this CLI; operator evidence required')
-        if action == 'install':
+        if action in ('install', 'release'):
             self.wallet = Path(self.value('WalletPath', 'Destination wallet ZIP path')).expanduser().resolve(strict=True)
-            self.db_owner = self.value('DatabaseOwner', 'Prepared EMPTY database owner').upper()
+            self.db_owner = self.value('DatabaseOwner', 'Destination application schema/owner').upper()
             self.alias = self.value('ServiceAlias', 'Destination wallet service alias')
             self.service = self.value('ExpectedService', 'Full server database service name')
-            self.sqlcl = shutil.which(self.values.get('SqlclPath') or 'sql')
-            if not self.sqlcl:
-                raise DeploymentStopped('SQLcl must already be installed for a fresh schema installation')
-            self.database_args = ['-WalletPath', str(self.wallet), '-UserName', self.db_owner,
+            if action == 'release':
+                release_name = self.value('DB_ReleaseFile', 'Database release JSON path', 'ags_database/release.json')
+                release_path = Path(release_name).expanduser()
+                if release_path.is_absolute():
+                    if release_path.is_relative_to(self.source_root):
+                        release_path = self.source/release_path.relative_to(self.source_root)
+                else:
+                    release_path = self.source/release_path
+                manifest = ORACLE_RELEASE.ReleaseFile(self.source, release_path.resolve(strict=True))
+                (self.directory/'database-release.json').write_text(release_path.read_text(encoding='utf-8-sig'), encoding='utf-8')
+                self.db_release = ORACLE_RELEASE.DatabaseRelease(SCHEMA, manifest, self.wallet, self.db_owner, self.alias, self.service,
+                    self.values.get('DBAdminUser') or 'ADMIN', self.values.get('SchemaTablespace') or 'DATA', self.values.get('SchemaQuotaMB') or '256')
+                self.record.update(database_release_file=release_name, database_release_sha256=manifest.fingerprint)
+            else:
+                self.sqlcl = shutil.which(self.values.get('SqlclPath') or 'sql')
+                if not self.sqlcl:
+                    raise DeploymentStopped('SQLcl must already be installed for a fresh schema installation')
+                self.database_args = ['-WalletPath', str(self.wallet), '-UserName', self.db_owner,
                                   '-ServiceAlias', self.alias, '-ExpectedService', self.service,
                                   '-SqlclPath', self.sqlcl]
-            self.ps_helper(self.source/'ags_database/deploy-oci-database.ps1', self.database_args+['-CheckOnly'])
+                self.ps_helper(self.source/'ags_database/deploy-oci-database.ps1', self.database_args+['-CheckOnly'])
             if not self.components:
                 self.record.update(owner=self.db_owner, service_name=self.service, wallet_alias=self.alias)
                 return
@@ -373,14 +401,17 @@ class Workflow:
         return self.runner.stream(command) if stream else self.runner.interactive(command)
 
     def approve_connection(self):
-        if self.action == 'install' and not self.components:
-            confirm('CONNECT', 'Read-only SQLcl access requested: '+self.db_owner+'@'+self.service+
+        if self.action in ('install', 'release') and not self.components:
+            confirm('CONNECT', 'Read-only database access requested: '+self.db_owner+'@'+self.service+
+                    ('; existing administrator '+self.db_release.admin if self.action == 'release' else '')+
                     ' (wallet alias '+self.alias+'). No Kubernetes access or table creation during discovery.', self.input)
             self.connect_approved = True
             return
         self.check_target_file()
+        database_scope = ('; owner '+self.db_owner+'@'+self.service+'; existing administrator '+self.db_release.admin if self.action == 'release' else '')
         confirm('CONNECT', 'Read-only access requested: '+self.record['context']+' / '+self.record['server']+
                 ' / namespace '+self.record['namespace']+'. Database action: '+self.action+
+                database_scope+
                 '. No table creation, image publishing or configuration changes during discovery.', self.input)
         self.connect_approved = True
 
@@ -434,7 +465,7 @@ class Workflow:
             expected = self.values.get(input_key, '')
             if expected and expected.casefold() != result[result_key].casefold():
                 raise DeploymentStopped('Saved application database differs from the requested '+input_key)
-        if self.action == 'install' and (result['owner'].upper() != self.db_owner or result['service_name'].casefold() != self.service.casefold()):
+        if self.action in ('install', 'release') and (result['owner'].upper() != self.db_owner or result['service_name'].casefold() != self.service.casefold()):
             raise DeploymentStopped('Prepared application connection does not point to the installed database; no configuration was changed')
         if result['active_jobs'] and self.backend:
             raise DeploymentStopped('Active database jobs exist; let them finish before releasing')
@@ -486,6 +517,15 @@ class Workflow:
         if not self.publish_approved:
             raise DeploymentStopped('PUBLISH approval is required before schema installation')
         self.record['database_install_attempted'] = True
+        if self.action == 'release':
+            self.save('Running only the approved database release file; DDL may commit partially')
+            def checkpoint(phase):
+                self.record['database_completed_objects'] = list(self.db_release.applied)
+                self.save(phase)
+            result = self.db_release.apply(self.db_plan, self.publish_approved, checkpoint)
+            self.db_release_done = True
+            self.record.update(database_release_result=result, database_completed_objects=list(self.db_release.applied))
+            return
         self.save('Running the guarded schema installer; DDL can commit partially on failure')
         self.ps_helper(self.source/'ags_database/deploy-oci-database.ps1', self.database_args)
         self.record['database_installed'] = True
@@ -515,6 +555,11 @@ class Workflow:
         return snapshot
 
     def check_database_selection(self):
+        if self.action == 'release' and not self.db_release_done:
+            current = self.db_release.discover()
+            if current['fingerprint'] != self.db_plan['fingerprint']:
+                raise DeploymentStopped('Database changed during preparation; review a new database plan')
+            return current['summary']
         if self.action != 'skip' or self.backend:
             result = self.verify_database()
             if self.action == 'skip':
@@ -533,38 +578,61 @@ class Workflow:
         self.save('Awaiting read-only database connection approval')
         self.approve_connection()
         self.save('Read-only empty database owner preflight')
-        database = self.verify_empty_owner(1)
+        if self.action == 'release':
+            self.db_plan = self.db_release.discover()
+            database = self.db_plan['summary']
+        else:
+            database = self.verify_empty_owner(1)
         self.record.update(database=database, components=[], application_release='Not selected')
         if self.check_only:
             self.record.update(state='preflight-only', builds='Not run', publication='Not attempted')
             self.save('Read-only database preflight completed; no changes made')
+            print(json.dumps(self.record, indent=2)+'\nRecord: '+str(self.directory/'result.json'))
+            return self.record
+        if self.action == 'release' and not self.db_plan['actions'] and not database['create_schema']:
+            self.record.update(state='verified-only', publication='Nothing missing; no DDL required')
+            self.save('All listed database objects already match; no changes needed')
+            print(json.dumps(self.record, indent=2)+'\nRecord: '+str(self.directory/'result.json'))
             return self.record
         self.record.update(state='awaiting-publication-approval',
-                           planned_actions=['Install thirteen tables in the verified empty owner using the guarded installer',
-                                            'Require the installer completed-schema success marker; no image build, push or Kubernetes commands'],
+                           planned_actions=(['Execute only missing objects from the reviewed release file in its listed order',
+                                             'Create the application schema/user only if missing and explicitly enabled in the release file',
+                                             'Preserve matching objects; stop on conflicts; verify every listed object'] if self.action == 'release' else
+                                            ['Install thirteen tables in the verified empty owner using the guarded installer',
+                                             'Require the installer completed-schema success marker; no image build, push or Kubernetes commands']),
                            validation_reference=self.value('ValidationReference', 'Schema script validation/CI evidence for this source (operator reference)'),
-                           backup_reference='New verified empty owner; no existing database data')
+                           backup_reference=(self.value('BackupReference', 'Existing backup/restore point reference')
+                               if self.action == 'release' and self.db_plan['snapshot']['metadata']['present_tables'] else 'New verified empty owner; no existing database data'))
         self.present_plan()
         if source_fingerprint(self.source) != self.source_hash:
             raise DeploymentStopped('Approved source changed; approval is no longer valid')
-        self.verify_empty_owner(2)
+        if self.action == 'install':
+            self.verify_empty_owner(2)
         self.install_database()
-        self.record.update(state='complete', database_verification='Guarded installer completed all schema postchecks and success marker',
+        self.record.update(state='complete', database_verification=('Every listed release object verified; matching objects preserved' if self.action == 'release' else 'Guarded installer completed all schema postchecks and success marker'),
                            application_checks='Not selected; no application deployment was performed')
-        self.save('Database schema installation completed; frontend and backend untouched')
+        self.save('Database release file completed; frontend and backend untouched' if self.action == 'release' else 'Database schema installation completed; frontend and backend untouched')
         print('Record: '+str(self.directory/'result.json'))
         return self.record
 
     def run(self):
         try:
             self.prepare()
-            if self.action == 'install' and not self.components:
+            if self.action in ('install', 'release') and not self.components:
                 return self.run_schema_only()
             self.save('Awaiting read-only connection approval')
             self.approve_connection()
             self.save('Read-only target and database preflight')
             self.initial_metadata = self.metadata_preflight()
-            if self.action != 'install':
+            if self.action == 'release':
+                self.db_plan = self.db_release.discover()
+                self.database = self.db_plan['summary']
+                if self.backend and self.database['active_jobs']:
+                    raise DeploymentStopped('Active database jobs exist; let them finish before releasing')
+                self.baseline = None if self.db_plan['actions'] or self.database['create_schema'] else self.snapshot()
+                if self.baseline:
+                    compare_protected(self.initial_metadata, self.baseline)
+            elif self.action != 'install':
                 self.baseline = self.snapshot()
                 compare_protected(self.initial_metadata, self.baseline)
                 self.database = self.check_database_selection()
@@ -592,7 +660,7 @@ class Workflow:
             if source_fingerprint(self.source) != self.source_hash:
                 raise DeploymentStopped('Exported source changed during preparation')
             self.record.update(images=self.image_ids, backup_reference=self.backup, validation_reference=self.validation,
-                               planned_actions=[('Install thirteen tables in the verified empty owner' if self.action == 'install' else 'Database scripts skipped; compatibility verification required for backend' if self.action == 'skip' else 'Verify existing schema; no DDL'),
+                               planned_actions=[('Apply only the reviewed release-file objects; skip matching objects; create missing schema if enabled' if self.action == 'release' else 'Install thirteen tables in the verified empty owner' if self.action == 'install' else 'Database scripts skipped; compatibility verification required for backend' if self.action == 'skip' else 'Verify existing schema; no DDL'),
                                                 'Verify preserved app configuration/readiness before publishing',
                                                 'Push only selected images: '+', '.join(self.components),
                                                 'Update api and worker images, await readiness' if self.backend else 'Backend images unchanged',
@@ -609,8 +677,9 @@ class Workflow:
             if source_fingerprint(self.source) != self.source_hash or self.inspect_image_ids() != self.image_ids:
                 raise DeploymentStopped('Approved source/images changed; approval is no longer valid')
             compare_protected(self.initial_metadata, self.metadata_preflight())
-            if self.action == 'install':
-                self.verify_empty_owner(2)
+            if self.action in ('install', 'release'):
+                if self.action == 'install':
+                    self.verify_empty_owner(2)
                 self.save('Installing the explicitly approved empty-owner schema')
                 self.install_database()
                 self.save('Checking app readiness and saved connection after schema installation')
@@ -638,6 +707,8 @@ class Workflow:
             return self.record
         except (Exception, KeyboardInterrupt) as error:
             self.record.update(state='stopped', stopped_at_phase=self.phase, error=type(error).__name__)
+            if self.db_release:
+                self.record['database_completed_objects'] = list(self.db_release.applied)
             if getattr(self.runner, 'last_receipt', None):
                 self.record['reported_receipt'] = str(self.runner.last_receipt)
             if self.directory:
@@ -646,8 +717,11 @@ class Workflow:
                 if self.record.get('database_installed'):
                     print('The approved schema was installed before the failure. Do not rerun a fresh install over it.', file=sys.stderr)
                 elif self.record.get('database_install_attempted'):
-                    print('Schema DDL was attempted and may have committed partially. Inspect the SQLcl log and owner before any retry.', file=sys.stderr)
+                    print('Schema DDL was attempted and may have committed partially. Inspect the result record and owner before any retry.', file=sys.stderr)
             raise
+        finally:
+            if self.db_release:
+                self.db_release.close()
 
 
 def main():
@@ -657,7 +731,7 @@ def main():
     options = parser.parse_args()
     try:
         Workflow(load_inputs(options.inputs), options.check_only).run()
-    except (DeploymentStopped, GUARD.ReleaseCheckError, SCHEMA.SchemaMismatch, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+    except (DeploymentStopped, ORACLE_RELEASE.OracleReleaseError, GUARD.ReleaseCheckError, SCHEMA.SchemaMismatch, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print('Aegis deployment stopped: '+str(error), file=sys.stderr)
         return 1
     except (KeyboardInterrupt, EOFError):

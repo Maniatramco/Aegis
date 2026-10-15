@@ -1,7 +1,8 @@
 {
-  "DatabaseAction": "verify",
-  "DeployFrontend": true,
-  "DeployBackend": true,
+  "DB_Object": "Y",
+  "DB_ReleaseFile": "ags_database/release.json",
+  "DeployFrontend": "Y",
+  "DeployBackend": "Y",
   "SourcePath": "",
   "Ref": "ags_sprint1",
   "Kubeconfig": "C:\\aegis-target\\kubeconfig.yaml",
@@ -13,9 +14,9 @@
   "AppUrl": "",
   "WalletPath": "",
   "DatabaseOwner": "",
+  "DBAdminUser": "ADMIN",
   "ServiceAlias": "",
   "ExpectedService": "",
-  "SqlclPath": "sql",
   "BackupReference": "",
   "ValidationReference": ""
 }

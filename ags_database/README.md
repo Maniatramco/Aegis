@@ -22,12 +22,24 @@ local tooling does not remove or replace that runtime dependency.
 | Folder or file | Purpose |
 | --- | --- |
 | `ags_tables/` | Thirteen Oracle table definitions read from live metadata, including native vectors |
+| `release.json` | Ordered object-release file for `DB_Object: "Y"`; permits creation of a missing application user/schema, skips matching objects and stops on incompatible definitions |
 | `deploy-oci-database.ps1` | SQLcl deployment launcher using an explicit destination wallet, account, alias and full service |
 | `install.sql` | Guarded fresh installer with target, capability and completed-schema checks |
 | `ags_schema/verify_live_schema.sql` | Read-only connection, table, column, constraint and vector checks |
 | `ags_queries/` | Read-only workflow, account and dataset-access inspection using the connected owner |
 
 ## Deploy the schema to another OCI database
+
+For the current one-command workflow, use `ags_deploy/deploy.ps1` with `DB_Object:
+"Y"` and `DB_ReleaseFile: "ags_database/release.json"` in the destination JSON.
+Set frontend/backend to `"N"` for database-only execution. The root
+[one-command instructions](../README.md#deploy-with-one-command) describe private
+credentials, missing-schema creation, release-file paths, approval and matching
+object checks. That workflow uses the existing Oracle Python driver and the
+explicit script list; it creates no OCI database instance or infrastructure.
+
+The SQLcl commands below remain the alternative **fresh, empty-owner** installer;
+they do not create users or replay an initialized schema.
 
 These scripts install the current thirteen-table application schema in a
 **separate, empty owner on a prepared Oracle Autonomous AI Database 26ai**.
