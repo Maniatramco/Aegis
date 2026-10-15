@@ -1122,6 +1122,8 @@ temporary_chat.install(app,auth)
 
 from . import agent_workspace
 agent_workspace.install(app, auth, __import__(__name__, fromlist=['app']))
+from .ags_agent import extraction_rerun
+extraction_rerun.install(app, auth, __import__(__name__, fromlist=['app']))
 from . import agent_onboarding
 agent_onboarding.install(app, auth)
 

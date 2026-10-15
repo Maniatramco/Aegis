@@ -406,3 +406,13 @@ test('re-extract publication failure retries saved knowledge without another ext
  assert.equal(view.calls.filter(c=>/\/calls\/|\/restart$/.test(c[0])).length,0);
  assert.equal(button(view,'Retry knowledge update'),undefined);
 });
+
+
+test('extraction name is prefilled, editable and retained when a server progress update arrives',async()=>{
+ const initial={id:'named-plan',request:'extract',created_at:1792080004,dataset_id:'dataset-one',document_ids:[],attached_filenames:['credit.pdf'],template_id:'prompt-id',planner:{id:'chat-model',name:'Chat'},calls:[{tool:'upload',title:'Upload',status:'pending'},{tool:'extract',title:'Extract',status:'pending'}]};
+ const v=assistant(async(path,method,body)=>path==='/agent-v2/plans'?initial:{...initial,calls:[{tool:'upload',status:'waiting'},{tool:'extract',status:'pending'}]});
+ selectContext(v);v.root.props.onDrop(drag([new File(['Original'],'credit.pdf')]));v.render();setRequest(v);v.find('aria-label','Send agent request').props.onClick();await flush();v.render();
+ const name=v.find('aria-label','Extraction name').props.value;assert.match(name,/^credit_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/);
+ v.find('aria-label','Extraction name').props.onChange({target:{value:'Edited extraction'}});v.render();button(v,'Confirm upload and extraction').props.onClick();await flush();v.render();
+ assert.equal(v.calls.find(c=>c[0].endsWith('/upload'))[2].get('display_name'),'Edited extraction');
+});

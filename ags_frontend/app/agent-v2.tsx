@@ -17,6 +17,7 @@ import {AgentLogo} from './agent-logo';
 import {AgentOnboarding} from './agent-onboarding';
 import {AgentAnswerWorkflow} from './agent-answer-workflow';
 import {useAgentConsent,type ConsentReceipt} from './agent-consent';
+import {withExtractionName} from './extraction-name';
 import {AgentJobProgress,AgentResult} from './agent-v2-output';
 import {currentUploadStep, type UploadProgressItem} from './batch-workflow';
 import './agent-v2.css';
@@ -40,6 +41,7 @@ export const explainPlan=(plan:Entity)=>{
 
 export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPromptSaved,onDatasetChange,onWorkspaceChanged,maxUploadMb=25,catalogRevision=0}:{api:Api;stream:(path:string,body:unknown,signal:AbortSignal)=>Promise<Response>;username:string;onJobs:(jobs:Entity[])=>void;onVisibleJobs:(ids:string[])=>void;onReview:(id:string)=>void;onPromptSaved?:(template:Entity)=>void;onDatasetChange?:(id:string)=>void;onWorkspaceChanged?:()=>void;maxUploadMb?:number;catalogRevision?:number}) {
  const [catalog,setCatalog]=useState<Entity>({datasets:[],documents:[],templates:[],models:[]});
+ const catalogRef=useRef(catalog);catalogRef.current=catalog;
  const [catalogLoading,setCatalogLoading]=useState(true);const [catalogError,setCatalogError]=useState('');const [catalogAttempt,setCatalogAttempt]=useState(0);
  const [plans,setPlans]=useState<Entity[]>([]);
  const [history,setHistory]=useState<Entity[]>([]); const [historyOpen,setHistoryOpen]=useState(false);
@@ -154,7 +156,8 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
  const replacePlan=useCallback((plan:Entity)=>{
   if(!mounted.current)return;
   if(plan.conversation_id)conversations.current[conversationScope(plan)]=plan.conversation_id;
-  setPlans(previous=>previous.some(p=>p.id===plan.id)?previous.map(p=>p.id===plan.id?{...plan,messageAttachments:plan.messageAttachments||p.messageAttachments}:p):[...previous,plan]);
+  const named=withExtractionName(plan,catalogRef.current.documents);
+  setPlans(previous=>previous.some(p=>p.id===plan.id)?previous.map(p=>p.id===plan.id?{...named,display_name:p.display_name??named.display_name,messageAttachments:plan.messageAttachments||p.messageAttachments}:p):[...previous,named]);
   // Publish ownership before publishing jobs, so the global popup cannot flash
   // a second workflow during the first render of a newly submitted tool.
   onVisibleJobsRef.current(plan.calls.flatMap((call:Entity)=>call.status==='waiting'?(call.job_ids||[]):[]));
@@ -226,7 +229,9 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
  };
  const perform=useCallback(async(plan:Entity,index:number)=>{
   if(lock.current)return; lock.current=true;
-  const call=plan.calls[index];setWorking(call.tool==='upload'?'Uploading documents…':'Starting extraction…');setError('');
+  const call=plan.calls[index];
+  if(plan.calls.some((c:Entity)=>c.tool==='extract'||c.tool==='reextract')&&!plan.display_name?.trim()){lock.current=false;setError('Enter an extraction name before confirming.');return;}
+  setWorking(call.tool==='upload'?'Uploading documents…':'Starting extraction…');setError('');
   try {
    const permission=await consent.request({dataset_id:plan.dataset_id,roles:call.tool==='upload'&&!plan.calls.some((c:Entity)=>c.tool==='extract'||c.tool==='reextract')?['embedding']:['embedding','extraction']},approvals.current[plan.id]);
    if(!permission){consentPaused.current.add(plan.id);return;}consentPaused.current.delete(plan.id);approvals.current[plan.id]=permission;const external=permission.required;
@@ -446,7 +451,7 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
       {call.tool==='upload'&&<p className="small">{uploadFiles.length?`${uploadFiles.length} files attached to this request.`:'Attach the original files again to confirm upload.'}</p>}
       {hasExtraction&&count>1&&<label>How should these {count} documents be extracted?<select aria-label="Extraction mode" value={plan.extraction_mode||''} onChange={e=>update(plan.id,{extraction_mode:e.target.value})}><option value="">Choose single or independent extraction</option><option value="merge">Single extraction — merge files into one result</option><option value="independent">Extract independently - one result per document</option></select><span className="small muted">Merge creates one extraction ID and retains every original file. Independent creates a separate extraction ID per document.</span></label>}
       {hasExtraction&&plan.extraction_mode==='merge'&&<label>What do the merged files contain?<select aria-label="Merged content" value={plan.merge_strategy||'records'} onChange={e=>update(plan.id,{merge_strategy:e.target.value})}><option value="records">Different profiles or items — keep every file's fields</option><option value="single">Parts of the same profile or item — combine fields</option></select><span className="small muted">Separate profiles are extracted one source at a time and collected into one result, so one person's name cannot replace the others. Each source still follows your template.</span></label>}
-      {hasExtraction&&<label>Extraction name<input aria-label="Extraction name" maxLength={200} placeholder={count>1?`Merged extraction - ${count} documents`:(uploadFiles[0]?.name?.replace(/\.[^.]+$/, '')||'Document extraction')} value={plan.display_name||''} onChange={e=>update(plan.id,{display_name:e.target.value})}/><span className="small muted">Leave blank to use the suggested name.</span></label>}
+      {hasExtraction&&<label>Extraction name<input aria-label="Extraction name" maxLength={200} placeholder={count>1?`Merged extraction - ${count} documents`:(uploadFiles[0]?.name?.replace(/\.[^.]+$/, '')||'Document extraction')} value={plan.display_name||''} onChange={e=>update(plan.id,{display_name:e.target.value})}/><span className="small muted">Edit this name if needed. The suffix uses your local date and time.</span></label>}
       <p className="small muted">{call.tool==='upload'&&hasExtraction?'Confirm once to upload, index and extract with the selected template and mode. Any failure pauses the workflow.':call.tool!=='upload'&&docs.some((doc:Entity)=>plan.document_ids.includes(doc.id)&&doc.requires_reindex)?'Selected documents need their indexes rebuilt. Confirm once to reindex them, then extract with the selected template. Originals and earlier results are retained.':'Review the selected dataset, files and template, then confirm. Outdated document indexes will be rebuilt automatically before extraction.'} {plan.goal&&'After processing, Aegis will inspect the saved results and finish your original request, even if you close this page.'}</p>
       <button className="btn primary" disabled={attachmentsBlocked||!plan.dataset_id||(hasExtraction&&count>1&&!plan.extraction_mode)||(call.tool==='upload'?(!uploadFiles.length||(!boundFiles?.length&&Boolean(unresolvedJson.length))||(hasExtraction&&!plan.template_id)):(!count||!plan.template_id))} onClick={()=>void perform(plan,index)}>{call.tool==='upload'?(hasExtraction?(plan.calls.some((c:Entity)=>c.tool==='reextract')?'Confirm upload and re-extraction':'Confirm upload and extraction'):'Confirm upload'):call.tool==='reextract'?'Confirm re-extraction':'Confirm extraction'}</button>
      </div>}

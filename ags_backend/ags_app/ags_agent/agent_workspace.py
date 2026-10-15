@@ -798,7 +798,7 @@ def install(app, auth, main):
                     accepted=result.get('extractions',[])
                     if extraction_mode=='independent':
                         for doc in result['documents']:
-                            accepted.append(main.create_extraction(main.ExtractInput(dataset_id=dataset.id,document_ids=[doc['id']],template_id=template_id or data['template_id'],wait_for_index=True,allow_external=allow_external,idempotency_key='agent-'+id+'-'+doc['id']),owner))
+                            accepted.append(main.create_extraction(main.ExtractInput(dataset_id=dataset.id,document_ids=[doc['id']],template_id=template_id or data['template_id'],wait_for_index=True,allow_external=allow_external,display_name=display_name or None,idempotency_key='agent-'+id+'-'+doc['id']),owner))
                     extraction_call=next(c for c in data['calls'] if c['tool'] in ('extract','reextract'))
                     entries=[{'extraction_id':e['id'],'document_ids':e['document_ids'],'name':e['name'],'merge':e.get('merge'),'status':e['job']['status'],'model_selection':e['model_selection']} for e in accepted]
                     extraction_call.update(status='waiting',started_at=time.time(),job_ids=[e['job']['id'] for e in accepted],jobs=[e['job'] for e in accepted],result={'extractions':entries})
