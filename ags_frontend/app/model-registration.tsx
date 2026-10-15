@@ -1,7 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
 import { useEffect, useState } from "react";
-import { Check, Layers, Plus, Search, X, Pencil } from "lucide-react";
+import { Check, Layers, Search, X, Pencil } from "lucide-react";
 import "./model-configuration.css";
 import { parseModelParameters, supportedModelParameters } from "./model-parameters";
 

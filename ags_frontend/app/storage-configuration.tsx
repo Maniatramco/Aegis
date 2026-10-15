@@ -1,7 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
 import {useEffect,useState} from 'react';
-import {Cloud,HardDrive,RefreshCw,CheckCircle2,Archive,RotateCcw,Database} from 'lucide-react';
+import {Cloud,HardDrive,CheckCircle2,Archive,Database} from 'lucide-react';
 import {WorkflowStepper} from './workflow-stepper';
 import './storage-configuration.css';
 type Entity=Record<string,any>;

@@ -1,7 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
 import { useEffect, useRef, useState } from "react";
-import { KeyRound, Plus, RefreshCw, Search, Users } from "lucide-react";
+import { KeyRound, RefreshCw, Search, Users } from "lucide-react";
 import "./user-management.css";
 import { DatasetAssignments } from "./dataset-assignments";
 

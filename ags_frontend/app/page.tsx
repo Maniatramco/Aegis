@@ -27,8 +27,6 @@ import {pendingJobIds,mergeJobUpdates} from './workflow-polling';
 import {
   Activity,
   Bot,
-  ArrowDownToLine,
-  ArrowLeft,
   BookOpen,
   Check,
   ChevronRight,
@@ -41,13 +39,9 @@ import {
   LogOut,
   Menu,
   MessageSquare,
-  Play,
-  Plus,
   RefreshCw,
-  Search,
   Shield,
   Square,
-  Trash2,
   X,
   AlertCircle,
   CheckCircle2,
@@ -91,10 +85,6 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
 const viewLabel = (name: View) => name === "Aegis agent V2" ? "Aegis Agent" : name === "Extract" ? "Review" : name === "Extract Data" ? "Extract" : name;
 const viewRoute = (name: View) => name === "Extract Data" ? "Extract Data" : viewLabel(name);
 type ReviewReturn = {view: View; datasetId: string; agentTab: string; extractionTab: string};
-const byteSize = (n: number) =>
-  n > 1048576
-    ? `${(n / 1048576).toFixed(1)} MB`
-    : `${Math.ceil((n || 0) / 1024)} KB`;
 const date = (v: string | number) =>
   v
     ? new Date(
@@ -169,21 +159,6 @@ function Notice({
     </div>
   );
 }
-function Download({
-  path,
-  children,
-}: {
-  path: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <a className="btn" href={`/api${path}`} download>
-      <ArrowDownToLine size={14} />
-      {children}
-    </a>
-  );
-}
-
 export default function App() {
   const [view, setView] = useState<View>("Home");
   const [homeSearch,setHomeSearch]=useState('');
@@ -277,7 +252,7 @@ export default function App() {
   } | null>(null);
   const [models, setModels] = useState<Entity[]>([]);
   const [extractModelId, setExtractModelId] = useState("");
-  const [documentPollError, setDocumentPollError] = useState(false);
+  const [, setDocumentPollError] = useState(false);
   const [scope, setScope] = useState<string[]>([]);
   const [templates, setTemplates] = useState<Entity[]>([]);
   const [templateId, setTemplateId] = useState("");

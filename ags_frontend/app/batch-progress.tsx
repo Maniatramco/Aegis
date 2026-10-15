@@ -3,7 +3,6 @@ import {WorkflowStepper} from './workflow-stepper';
 import { summarizeUploadBatch, documentJourneySteps, type UploadProgressItem } from "./batch-workflow";
 import "./batch-progress.css";
 
-const labels = { upload:"Upload", extract:"Read document", index:"Build index", ready:"Ready" };
 export function BatchProgress({items,compact=false}:{items:UploadProgressItem[];compact?:boolean}) {
   const batch = summarizeUploadBatch(items);
   if (!batch.total) return null;

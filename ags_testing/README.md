@@ -79,7 +79,9 @@ values, project name and Compose file selection to the test environment.
 
 `npm --prefix ags_frontend run test:screenshots` runs responsive browser checks.
 Set `AEGIS_CAPTURE_SCREENSHOTS=true` to retain synthetic screenshots under ignored
-`ags_runtime/ags_screenshots/`. Browser traces/reports stay ignored by Git.
+`ags_runtime/ags_screenshots/`. Browser results/traces are written to
+`frontend/test-results/` and the HTML report to `frontend/playwright-report/`,
+both under `ags_testing` and ignored by Git.
 The Oracle test image is `docker/Dockerfile.oracle-tests`, selected by the local
 Oracle Compose profile. The optional browser QA image is `docker/Dockerfile.browser-qa`.
 

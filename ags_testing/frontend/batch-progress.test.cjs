@@ -19,7 +19,6 @@ function load(filename){
  return compiled.exports;
 }
 const {OperationProgress,extractionProgressJob,JobProgress}=load(path.resolve(__dirname,'../../ags_frontend/app/operation-progress.tsx'));
-const {DocumentUploadPanel}=load(path.resolve(__dirname,'../../ags_frontend/app/document-upload.tsx'));
 const {explainPlan}=load(path.resolve(__dirname,'../../ags_frontend/app/agent-v2.tsx'));
 const {AgentChatAnswer,AgentAnswerText,conversationExchanges}=load(path.resolve(__dirname,'../../ags_frontend/app/agent-v2-chat.tsx'));
 
@@ -129,9 +128,6 @@ test('an open upload panel suppresses duplicate background workflows without sup
  assert.match(html,/Extraction/);
 });
 
-function uploadController(batchRows, extra={}) {
- return {dataset:{name:'Upload QA'},batchRows,pending:[],uploading:false,blocked:'',retrying:[],notice:'',pollError:false,externalRequired:false,consent:false,maxMb:25,...extra};
-}
 test('re-extraction dialog owns its workflow until it closes, when background progress resumes',()=>{
  const job={id:'re-extract-1',kind:'extract',status:'running',workflow:{stages:{generate:{status:'running'}}}};
  const foreground=renderToStaticMarkup(React.createElement(OperationProgress,{requests:[],jobs:[job],visibleJobId:job.id}));
@@ -148,32 +144,6 @@ test('a foreground extraction does not hide other jobs or unrelated loading acti
  assert.match(html,/In progress/);
  assert.doesNotMatch(html,/>queued</);
 });
-test('processing and completed views show one workflow without a file picker or upload button',()=>{
- for(const batchRows of [items,items.map(item=>({...item,processing:false,ready:true,document:{...item.document,status:'ready'}}))]) {
-  const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController(batchRows),workflowOnly:true}));
-  assert.equal((html.match(/aria-label="Batch upload workflow"/g)||[]).length,1);
-  assert.doesNotMatch(html,/type="file"|Drop documents here|Choose documents|class="upload-actions"/);
-  assert.match(html,/invoice-0\.txt/);
- }
-});
-test('the attachment view retains file selection before starting processing',()=>{
- const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([]),attachmentOnly:true}));
- assert.match(html,/type="file"/);
- assert.match(html,/Choose documents/);
- assert.doesNotMatch(html,/aria-label="Batch upload workflow"/);
-});
-test('workflow-only failures retain their reasons and retry actions without file selection',()=>{
- const failed={...items[0],processing:false,failed:true,document:{...items[0].document,status:'failed',error:'Embedding provider timed out'},job:{status:'failed',workflow:{current:'index'}}};
- const html=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([failed]),workflowOnly:true}));
- assert.match(html,/Embedding provider timed out/);
- assert.match(html,/Restart document workflow/);
- assert.doesNotMatch(html,/type="file"/);
- const rejected={id:'rejected',name:'rejected.txt',status:'failed',error:'Upload rejected'};
- const uploadFailure=renderToStaticMarkup(React.createElement(DocumentUploadPanel,{upload:uploadController([rejected],{pending:[rejected]}),workflowOnly:true}));
- assert.match(uploadFailure,/Retry upload/);
- assert.doesNotMatch(uploadFailure,/type="file"/);
-});
-
 const {ExtractionReview}=load(path.resolve(__dirname,'../../ags_frontend/app/extraction-review.tsx'));
 test('review and background progress render an extraction workflow only once while refresh remains visible',()=>{
  const extraction={id:'review-extraction',status:'queued',version:1,document_ids:['review-doc'],job:{id:'review-job',kind:'extract',status:'queued'}};

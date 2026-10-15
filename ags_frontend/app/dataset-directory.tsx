@@ -1,7 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
 import {useEffect,useRef,useState} from "react";
-import {ArrowRight,CheckCircle2,Database,FileText,MessageSquare,Search,Trash2,X} from "lucide-react";
+import {CheckCircle2,Database,FileText,MessageSquare,Search,Trash2,X} from "lucide-react";
 import "./workspace-flow.css";
 import "./home-cards.css";
 import "./dataset-directory.css";

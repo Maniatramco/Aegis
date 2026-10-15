@@ -1,7 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
 import {useEffect,useRef,useState} from "react";
-import {ArrowRight,Check,Download,History,Pencil,Plus,Trash2,X} from "lucide-react";
+import {ArrowRight,Check,Download,History,Pencil,Trash2,X} from "lucide-react";
 import {filterPromptTemplates,promptTemplateDownload} from "./prompt-template-data";
 import "./prompt-templates.css";
 type Entity=Record<string,any>;

@@ -1,7 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, CheckCircle2, Database, Layers, Plus, Settings2, X } from "lucide-react";
+import { CheckCircle2, Database, Layers, Settings2, X } from "lucide-react";
 import "./dataset-focus.css";
 import "./model-configuration.css";
 import {useDatasetLifecycle} from "./dataset-lifecycle";
