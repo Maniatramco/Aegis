@@ -1,0 +1,4 @@
+interface:
+  display_name: "Aegis OCI Code Deployment"
+  short_description: "Deploy Aegis code while preserving OCI settings"
+  default_prompt: "Use $aegis-deploy to deploy the specified Aegis release to my prepared OCI environment while preserving its configuration."

@@ -22,6 +22,16 @@ Normal code updates use `ags_deploy/deploy-aegis-code.ps1`. For a fresh schema o
 
 The reusable [release skill](.agents/skills/aegis-release/SKILL.md) remains discoverable by AI tools. It requires a prepared destination and explicit deployment instructions. Preserve the [Unified Chat workflow](AGENTS.md).
 
+For AI-assisted code deployment, use [the `aegis-deploy` skill](.agents/skills/aegis-deploy/SKILL.md):
+"Use $aegis-deploy to deploy `ags_sprint1` to my existing OCI environment. Verify
+the existing database, deploy frontend/API/worker code, and preserve all configuration.
+Do not provision infrastructure." Supply the existing destination and access once.
+The skill uses `ags_deploy/deploy-aegis-code.ps1` and the read-only
+`ags_deploy/check-code-release.py` before/after check. Routine releases verify the
+database; `ags_database/deploy-oci-database.ps1` is only for an explicitly requested
+fresh schema in a prepared empty owner. Current `Recreate` deployments can have a
+brief restart window. Creating or checking the skill does not deploy anything.
+
 Earlier guides and verification reports remain in Git history at documentation commit `a33d5fb`. `ags_docs/` contains the handover in Word/PDF, the dedicated application deployment guide, and the backend code release and database deployment PDFs. The architecture diagram stays embedded in the handover. Reusable QA inputs live under `ags_testing/qa/ags_fixtures/`. These repository changes do not deploy or change the running application.
 
 ## Backend dependencies and manual tests

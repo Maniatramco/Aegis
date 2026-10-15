@@ -27,6 +27,11 @@ Run backend regressions and frontend unit tests, type checking and a production 
 
 ## Deploy only when requested
 
+For routine code deployment to existing OCI resources with configuration preserved,
+use [aegis-deploy](../aegis-deploy/SKILL.md). It adds read-only before/after checks
+around the existing release helper and distinguishes schema verification from a
+fresh installation. Keep this release skill for source maintenance and handovers.
+
 For an explicitly requested fresh database schema installation, follow [ags_database/README.md](../../../ags_database/README.md#deploy-the-schema-to-another-oci-database). Use `ags_database/deploy-oci-database.ps1` with the destination wallet, owner, alias and full server service; `-CheckOnly` validates local inputs without connecting. Its shared `install.sql` preflight requires an empty owner and compatible Oracle features. For manual SQL execution, start the client in `ags_database`. Schema creation does not transfer live data or prepare OKE application state. For an existing workspace, use the read-only verification script instead of the fresh installer.
 
 `ags_deploy/deploy-aegis-code.ps1` updates existing deployments; it is not a fresh installer. Require a prepared destination kubeconfig/context, registry and pull credentials, state, DB/schema, object storage, secrets and reranker. `ags_deploy/ags_oke/ags_legacy_provisioning.py` combines the historical Mumbai infrastructure and pilot registry helpers. It is not needed for normal code releases; its explicit subcommands retain pilot-specific settings and private-state requirements. Keep `ags_kubeconfig.py` separate because the existing kubeconfig uses it for authentication.

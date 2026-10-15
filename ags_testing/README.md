@@ -10,6 +10,7 @@ ags_testing/
   frontend/                 Node unit tests, Playwright suites/config and fixtures
   qa/                       Opt-in manual browser tools, benchmarks and fixtures
   scripts/                  Smoke, Oracle integration and hardware test helpers
+  deployment/               Offline image-only release guard checks
   docker/                   Oracle integration and browser QA images
   compose.test.yaml          Disposable mock API/worker overlay
   pytest.ini                Backend discovery and application import path
@@ -101,3 +102,11 @@ Explicit QA commands `qa/agent_benchmark.py`, `qa/agent_smoke.py`,
 run them with `ags_backend` on `PYTHONPATH` only in a deliberately selected test
 environment. The launcher's `python -m ags_app.ocr_smoke` check stays with runtime code.
 Moving these files does not execute them or deploy anything.
+
+## Deployment helper checks
+
+Run `python -B -m unittest discover -s ags_testing/deployment -v` from the
+repository root. These offline checks verify that the code-release guard accepts
+the intended image updates and rejects configuration drift, wrong destinations,
+unready/partial rollouts and inconsistent receipts. They make no OCI, Docker or
+database connections and require only the Python standard library.
