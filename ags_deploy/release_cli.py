@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIELDS = {'SourcePath', 'Ref', 'Kubeconfig', 'Context', 'Namespace', 'Registry',
           'RegistryNamespace', 'Platform', 'AppUrl', 'DatabaseAction', 'WalletPath',
           'DatabaseOwner', 'ServiceAlias', 'ExpectedService', 'SqlclPath',
-          'BackupReference', 'ValidationReference'}
+          'BackupReference', 'ValidationReference', 'DeployFrontend', 'DeployBackend'}
+BOOLEAN_FIELDS = {'DeployFrontend', 'DeployBackend'}
 
 
 def module_from(path, name):
@@ -101,8 +102,9 @@ def load_inputs(path):
     data = json.loads(path.read_text(encoding='utf-8-sig'))
     if not isinstance(data, dict) or set(data)-FIELDS:
         raise DeploymentStopped('Input JSON contains unsupported fields. Use the non-secret example; passwords/tokens are not accepted in this file')
-    if not all(isinstance(value, str) for value in data.values()):
-        raise DeploymentStopped('Every input JSON value must be a string')
+    for key, value in data.items():
+        if not isinstance(value, bool if key in BOOLEAN_FIELDS else str):
+            raise DeploymentStopped(key+' must be a JSON boolean' if key in BOOLEAN_FIELDS else key+' must be a string')
     for field in ('SourcePath', 'Kubeconfig', 'WalletPath'):
         if data.get(field):
             candidate = Path(data[field]).expanduser()
@@ -151,9 +153,11 @@ def compare_protected(before, after):
             raise DeploymentStopped('Deployment settings/images changed during preparation: '+name)
 
 
-def infer_registry(deployments):
+def infer_registry(deployments, components=('frontend', 'backend')):
     prefixes = set()
     for name, containers in GUARD.APP_CONTAINERS.items():
+        if ('frontend' if name == 'aegis-web' else 'backend') not in components:
+            continue
         for container in containers:
             parts = deployments[name]['images'][container].split('/')
             if len(parts) < 3:
@@ -250,6 +254,12 @@ EXIT SUCCESS
 class Workflow:
     def __init__(self, values, check_only=False, runner=None, input_fn=input):
         self.values = dict(values)
+        for field in BOOLEAN_FIELDS:
+            if field in values and not isinstance(values[field], bool):
+                raise DeploymentStopped(field+' must be a JSON boolean')
+        self.frontend = values.get('DeployFrontend', True)
+        self.backend = values.get('DeployBackend', True)
+        self.components = [name for name, selected in (('frontend', self.frontend), ('backend', self.backend)) if selected]
         self.check_only = check_only
         self.runner = runner or Runner()
         self.input = input_fn
@@ -292,10 +302,46 @@ class Workflow:
         return json.loads(self.kubectl(arguments, input_text))
 
     def prepare(self):
+        action = self.values.get('DatabaseAction', '').lower()
+        if not action:
+            action = ask('Database action: skip, verify existing schema, or install into a prepared empty owner', 'verify', self.input).lower()
+        if action not in ('skip', 'verify', 'install'):
+            raise DeploymentStopped('DatabaseAction must be skip, verify or install')
+        if action == 'skip' and not self.components:
+            raise DeploymentStopped('Nothing selected: enable frontend/backend or choose a database action')
+        self.action = action
         root_value = self.values.get('SourcePath') or str(ROOT)
         self.source_root = Path(root_value).expanduser().resolve(strict=True)
         ref = self.values.get('Ref') or 'ags_sprint1'
         require_pattern(ref, r'[A-Za-z0-9_][A-Za-z0-9_./-]*', 'source ref')
+        self.release = 'release-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:6]
+        self.directory = self.source_root/'ags_deploy/deployment-records'/self.release
+        self.directory.mkdir(parents=True, exist_ok=False)
+        self.source, self.commit = export_commit(self.source_root, ref, self.directory, self.runner)
+        self.source_hash = source_fingerprint(self.source)
+        if len(self.components) == 1 and 'AEGIS_COMPONENT_SELECTION_V1' not in (self.source/'ags_deploy/deploy-aegis-code.ps1').read_text(encoding='utf-8-sig'):
+            raise DeploymentStopped('The selected source commit predates component selection; choose a commit containing the updated release helper')
+        self.powershell = shutil.which('pwsh') or shutil.which('powershell')
+        if not self.powershell:
+            raise DeploymentStopped('PowerShell is required for the existing release helpers')
+        self.record.update(source_commit=self.commit, source_fingerprint=self.source_hash,
+                           database_action=action, components=self.components, release=self.release,
+                           regression_tests='Not run by this CLI; operator evidence required')
+        if action == 'install':
+            self.wallet = Path(self.value('WalletPath', 'Destination wallet ZIP path')).expanduser().resolve(strict=True)
+            self.db_owner = self.value('DatabaseOwner', 'Prepared EMPTY database owner').upper()
+            self.alias = self.value('ServiceAlias', 'Destination wallet service alias')
+            self.service = self.value('ExpectedService', 'Full server database service name')
+            self.sqlcl = shutil.which(self.values.get('SqlclPath') or 'sql')
+            if not self.sqlcl:
+                raise DeploymentStopped('SQLcl must already be installed for a fresh schema installation')
+            self.database_args = ['-WalletPath', str(self.wallet), '-UserName', self.db_owner,
+                                  '-ServiceAlias', self.alias, '-ExpectedService', self.service,
+                                  '-SqlclPath', self.sqlcl]
+            self.ps_helper(self.source/'ags_database/deploy-oci-database.ps1', self.database_args+['-CheckOnly'])
+            if not self.components:
+                self.record.update(owner=self.db_owner, service_name=self.service, wallet_alias=self.alias)
+                return
         kubeconfig = Path(self.value('Kubeconfig', 'Existing destination kubeconfig path')).expanduser().resolve(strict=True)
         self.kubeconfig_hash = hashlib.sha256(kubeconfig.read_bytes()).hexdigest()
         local = json.loads(self.runner.capture(['kubectl', '--kubeconfig', str(kubeconfig), 'config', 'view', '-o', 'json']))
@@ -319,42 +365,19 @@ class Workflow:
             raise DeploymentStopped('The existing Kubernetes server must be a credential-free HTTPS endpoint')
         namespace = self.values.get('Namespace') or 'aegis-oci'
         require_pattern(namespace, r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', 'namespace')
-        action = self.values.get('DatabaseAction', '').lower()
-        if not action:
-            action = ask('Database action: verify existing schema, or install into a prepared empty owner', 'verify', self.input).lower()
-        if action not in ('verify', 'install'):
-            raise DeploymentStopped('DatabaseAction must be verify or install')
-        self.action = action
         self.options = SimpleNamespace(kubeconfig=kubeconfig, context=context, namespace=namespace)
-        self.release = 'release-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:6]
-        self.directory = self.source_root/'ags_deploy/deployment-records'/self.release
-        self.directory.mkdir(parents=True, exist_ok=False)
-        self.source, self.commit = export_commit(self.source_root, ref, self.directory, self.runner)
-        self.source_hash = source_fingerprint(self.source)
-        self.powershell = shutil.which('pwsh') or shutil.which('powershell')
-        if not self.powershell:
-            raise DeploymentStopped('PowerShell is required for the existing release helpers')
-        self.record.update(source_commit=self.commit, source_fingerprint=self.source_hash,
-                           context=context, server=server, namespace=namespace, database_action=action,
-                           release=self.release, regression_tests='Not run by this CLI; operator evidence required')
-        if action == 'install':
-            self.wallet = Path(self.value('WalletPath', 'Destination wallet ZIP path')).expanduser().resolve(strict=True)
-            self.db_owner = self.value('DatabaseOwner', 'Prepared EMPTY database owner').upper()
-            self.alias = self.value('ServiceAlias', 'Destination wallet service alias')
-            self.service = self.value('ExpectedService', 'Full server database service name')
-            self.sqlcl = shutil.which(self.values.get('SqlclPath') or 'sql')
-            if not self.sqlcl:
-                raise DeploymentStopped('SQLcl must already be installed for a fresh schema installation')
-            self.database_args = ['-WalletPath', str(self.wallet), '-UserName', self.db_owner,
-                                  '-ServiceAlias', self.alias, '-ExpectedService', self.service,
-                                  '-SqlclPath', self.sqlcl]
-            self.ps_helper(self.source/'ags_database/deploy-oci-database.ps1', self.database_args+['-CheckOnly'])
+        self.record.update(context=context, server=server, namespace=namespace)
 
     def ps_helper(self, path, arguments, stream=False):
         command = [self.powershell, '-NoProfile', '-File', str(path), *arguments]
         return self.runner.stream(command) if stream else self.runner.interactive(command)
 
     def approve_connection(self):
+        if self.action == 'install' and not self.components:
+            confirm('CONNECT', 'Read-only SQLcl access requested: '+self.db_owner+'@'+self.service+
+                    ' (wallet alias '+self.alias+'). No Kubernetes access or table creation during discovery.', self.input)
+            self.connect_approved = True
+            return
         self.check_target_file()
         confirm('CONNECT', 'Read-only access requested: '+self.record['context']+' / '+self.record['server']+
                 ' / namespace '+self.record['namespace']+'. Database action: '+self.action+
@@ -370,9 +393,13 @@ class Workflow:
         snapshot = {'context': self.options.context, 'server': self.record['server'],
                     'namespace': self.options.namespace, 'deployments': records, 'resources': GUARD.resource_records(resources)}
         if not hasattr(self, 'initial_metadata'):
+            if not self.components:
+                self.url, self.platform = None, None
+                return snapshot
             nodes = self.target_json(['get', 'nodes', '-o', 'json'])['items']
-            self.platform = infer_platform(nodes, deployments, self.values.get('Platform', ''))
-            registry, namespace = infer_registry(records)
+            selected_deployments = [item for item in deployments if ('frontend' if item['metadata']['name'] == 'aegis-web' else 'backend') in self.components]
+            self.platform = infer_platform(nodes, selected_deployments, self.values.get('Platform', ''))
+            registry, namespace = infer_registry(records, self.components)
             self.registry = self.values.get('Registry') or registry or self.value('Registry', 'Existing OCIR host')
             self.registry_namespace = self.values.get('RegistryNamespace') or namespace or self.value('RegistryNamespace', 'Existing registry namespace')
             require_pattern(self.registry, r'[A-Za-z0-9.-]+', 'registry host')
@@ -396,7 +423,8 @@ class Workflow:
         self.check_target_file()
         snapshot = GUARD.collect(self.options)
         GUARD.require_ready(snapshot)
-        GUARD.validate_source(snapshot, self.source)
+        if self.backend:
+            GUARD.validate_source(snapshot, self.source)
         return snapshot
 
     def verify_database(self):
@@ -408,9 +436,9 @@ class Workflow:
                 raise DeploymentStopped('Saved application database differs from the requested '+input_key)
         if self.action == 'install' and (result['owner'].upper() != self.db_owner or result['service_name'].casefold() != self.service.casefold()):
             raise DeploymentStopped('Prepared application connection does not point to the installed database; no configuration was changed')
-        if result['active_jobs']:
+        if result['active_jobs'] and self.backend:
             raise DeploymentStopped('Active database jobs exist; let them finish before releasing')
-        return dict(totals, owner=result['owner'], service_name=result['service_name'], wallet_alias=result['wallet_alias'], active_jobs=0)
+        return dict(totals, owner=result['owner'], service_name=result['service_name'], wallet_alias=result['wallet_alias'], active_jobs=result['active_jobs'])
 
     def verify_empty_owner(self, number):
         if not self.connect_approved:
@@ -430,7 +458,8 @@ class Workflow:
 
     def inspect_image_ids(self):
         ids = {}
-        for image in (self.web_image, self.backend_image):
+        images = ([self.web_image] if self.frontend else [])+([self.backend_image] if self.backend else [])
+        for image in images:
             data = json.loads(self.runner.capture(['docker', 'image', 'inspect', image]))
             if len(data) != 1 or data[0]['Os']+'/'+data[0]['Architecture'] != self.platform:
                 raise DeploymentStopped('A prepared image has the wrong platform')
@@ -438,16 +467,18 @@ class Workflow:
         return ids
 
     def build(self):
-        self.runner.interactive(['docker', 'build', '--platform', self.platform, '-t', self.web_image, str(self.source/'ags_frontend')])
-        self.runner.interactive(['docker', 'build', '--platform', self.platform,
-                                 '--build-arg', 'INSTALL_LOCAL_EMBEDDINGS=false', '--build-arg', 'INSTALL_CLOUD_MODELS=false',
-                                 '--build-arg', 'INSTALL_ORACLE=true', '--build-arg', 'INSTALL_OCI=true',
-                                 '-t', self.backend_image, str(self.source/'ags_backend')])
+        if self.frontend:
+            self.runner.interactive(['docker', 'build', '--platform', self.platform, '-t', self.web_image, str(self.source/'ags_frontend')])
+        if self.backend:
+            self.runner.interactive(['docker', 'build', '--platform', self.platform,
+                                     '--build-arg', 'INSTALL_LOCAL_EMBEDDINGS=false', '--build-arg', 'INSTALL_CLOUD_MODELS=false',
+                                     '--build-arg', 'INSTALL_ORACLE=true', '--build-arg', 'INSTALL_OCI=true',
+                                     '-t', self.backend_image, str(self.source/'ags_backend')])
         self.image_ids = self.inspect_image_ids()
 
     def approve_publication(self):
         confirm('PUBLISH', 'Review the saved plan above. Approval covers this exact source, target, images and database action. '
-                'Existing Recreate deployments restart pods and can briefly interrupt the app. '
+                +('Selected Recreate deployments restart pods and can briefly interrupt the app. ' if self.components else 'No application images or pods will be changed. ')+
                 'Infrastructure, configuration, model mappings and data are preserved; no automatic rollback.', self.input)
         self.publish_approved = True
 
@@ -467,6 +498,8 @@ class Workflow:
                      '-Context', self.options.context, '-Namespace', self.options.namespace,
                      '-Registry', self.registry, '-RegistryNamespace', self.registry_namespace,
                      '-Platform', self.platform, '-Release', self.release, '-SkipBuild']
+        if len(self.components) == 1:
+            arguments += ['-Components', self.components[0].capitalize()]
         receipt = self.ps_helper(self.source/'ags_deploy/deploy-aegis-code.ps1', arguments, stream=True).resolve(strict=True)
         expected_directory = (self.source/'ags_deploy/deployment-records').resolve()
         if receipt.parent != expected_directory:
@@ -481,21 +514,64 @@ class Workflow:
         compare_protected(self.initial_metadata, snapshot)
         return snapshot
 
+    def check_database_selection(self):
+        if self.action != 'skip' or self.backend:
+            result = self.verify_database()
+            if self.action == 'skip':
+                result['action'] = 'Database scripts skipped; read-only backend compatibility verified'
+            return result
+        return {'action': 'Skipped; no Oracle queries or database scripts selected'}
+
+    def present_plan(self):
+        plan = self.directory/'plan.json'
+        plan.write_text(json.dumps(self.record, indent=2), encoding='utf-8')
+        print('\nDEPLOYMENT PLAN\n'+json.dumps(self.record, indent=2))
+        print('Private plan: '+str(plan))
+        self.approve_publication()
+
+    def run_schema_only(self):
+        self.save('Awaiting read-only database connection approval')
+        self.approve_connection()
+        self.save('Read-only empty database owner preflight')
+        database = self.verify_empty_owner(1)
+        self.record.update(database=database, components=[], application_release='Not selected')
+        if self.check_only:
+            self.record.update(state='preflight-only', builds='Not run', publication='Not attempted')
+            self.save('Read-only database preflight completed; no changes made')
+            return self.record
+        self.record.update(state='awaiting-publication-approval',
+                           planned_actions=['Install thirteen tables in the verified empty owner using the guarded installer',
+                                            'Require the installer completed-schema success marker; no image build, push or Kubernetes commands'],
+                           validation_reference=self.value('ValidationReference', 'Schema script validation/CI evidence for this source (operator reference)'),
+                           backup_reference='New verified empty owner; no existing database data')
+        self.present_plan()
+        if source_fingerprint(self.source) != self.source_hash:
+            raise DeploymentStopped('Approved source changed; approval is no longer valid')
+        self.verify_empty_owner(2)
+        self.install_database()
+        self.record.update(state='complete', database_verification='Guarded installer completed all schema postchecks and success marker',
+                           application_checks='Not selected; no application deployment was performed')
+        self.save('Database schema installation completed; frontend and backend untouched')
+        print('Record: '+str(self.directory/'result.json'))
+        return self.record
+
     def run(self):
         try:
             self.prepare()
+            if self.action == 'install' and not self.components:
+                return self.run_schema_only()
             self.save('Awaiting read-only connection approval')
             self.approve_connection()
             self.save('Read-only target and database preflight')
             self.initial_metadata = self.metadata_preflight()
-            if self.action == 'verify':
+            if self.action != 'install':
                 self.baseline = self.snapshot()
                 compare_protected(self.initial_metadata, self.baseline)
-                self.database = self.verify_database()
+                self.database = self.check_database_selection()
             else:
                 self.database = self.verify_empty_owner(1)
                 self.baseline = None
-            self.record.update(database=self.database, public_url=self.url, platform=self.platform,
+            self.record.update(database=self.database, components=self.components, public_url=self.url, platform=self.platform,
                                previous_images={name: item['images'] for name, item in self.initial_metadata['deployments'].items()},
                                preserved_configuration='Fingerprints recorded; no infrastructure/configuration mutation is permitted',
                                model_checks='Model/relay configuration preserved; provider inference is not run by this CLI')
@@ -504,6 +580,11 @@ class Workflow:
                 print(json.dumps(self.record, indent=2))
                 self.save('Read-only preflight completed; no release attempted')
                 return self.record
+            if not self.components:
+                self.record.update(state='verified-only', builds='Not run', publication='Not selected')
+                self.save('Database verification completed; no application release selected')
+                print(json.dumps(self.record, indent=2))
+                return self.record
             self.backup = self.values.get('BackupReference') or ('New verified empty owner; no existing database data' if self.action == 'install' else self.value('BackupReference', 'Existing backup/restore point reference (not created by this command)'))
             self.validation = self.values.get('ValidationReference') or self.value('ValidationReference', 'Regression/CI evidence for this source (operator reference; tests are not run here)')
             self.save('Building local release images; nothing is published')
@@ -511,22 +592,19 @@ class Workflow:
             if source_fingerprint(self.source) != self.source_hash:
                 raise DeploymentStopped('Exported source changed during preparation')
             self.record.update(images=self.image_ids, backup_reference=self.backup, validation_reference=self.validation,
-                               planned_actions=['Install thirteen tables in the verified empty owner' if self.action == 'install' else 'Verify existing schema; no DDL',
-                                                'Verify schema and app configuration/readiness before publishing',
-                                                'Push the two reviewed images; record immutable digests and previous images',
-                                                'Update api and worker images, await readiness; update web image, await readiness',
-                                                'Compare configuration fingerprints, verify schema and HTTPS'],
+                               planned_actions=[('Install thirteen tables in the verified empty owner' if self.action == 'install' else 'Database scripts skipped; compatibility verification required for backend' if self.action == 'skip' else 'Verify existing schema; no DDL'),
+                                                'Verify preserved app configuration/readiness before publishing',
+                                                'Push only selected images: '+', '.join(self.components),
+                                                'Update api and worker images, await readiness' if self.backend else 'Backend images unchanged',
+                                                'Update web image, await readiness' if self.frontend else 'Frontend image unchanged',
+                                                'Compare configuration fingerprints and unselected images; verify HTTPS'],
                                readiness='Verified' if self.baseline else 'Conditional: app readiness and saved-connection verification must pass after schema installation',
                                state='awaiting-publication-approval')
             compare_protected(self.initial_metadata, self.metadata_preflight())
             if self.baseline:
                 GUARD.compare(self.baseline, self.snapshot())
-                self.verify_database()
-            plan = self.directory/'plan.json'
-            plan.write_text(json.dumps(self.record, indent=2), encoding='utf-8')
-            print('\nDEPLOYMENT PLAN\n'+json.dumps(self.record, indent=2))
-            print('Private plan: '+str(plan))
-            self.approve_publication()
+                self.check_database_selection()
+            self.present_plan()
             self.save('Rechecking the approved source, target and local image IDs')
             if source_fingerprint(self.source) != self.source_hash or self.inspect_image_ids() != self.image_ids:
                 raise DeploymentStopped('Approved source/images changed; approval is no longer valid')
@@ -537,22 +615,23 @@ class Workflow:
                 self.install_database()
                 self.save('Checking app readiness and saved connection after schema installation')
                 self.baseline = self.wait_after_schema()
-                self.database = self.verify_database()
+                self.database = self.check_database_selection()
+                self.record['database'] = self.database
             else:
                 GUARD.compare(self.baseline, self.snapshot())
-                self.verify_database()
+                self.check_database_selection()
             (self.directory/'baseline.json').write_text(json.dumps(self.baseline, indent=2), encoding='utf-8')
-            self.save('Publishing reviewed images and releasing API, worker and frontend')
+            self.save('Publishing reviewed images for selected components: '+', '.join(self.components))
             receipt = self.release_images()
             self.record['receipt'] = str(receipt)
             self.save('Verifying released images, preserved configuration and database schema')
             released = json.loads(receipt.read_text(encoding='utf-8-sig'))
-            GUARD.compare(self.baseline, self.snapshot(), released)
-            self.verify_database()
+            GUARD.compare(self.baseline, self.snapshot(), released, components=self.components)
+            self.check_database_selection()
             with urllib.request.urlopen(self.url, timeout=20) as response:
                 if response.status != 200:
                     raise DeploymentStopped('Application HTTPS check did not return HTTP 200')
-            self.record.update(state='complete', https_status=200, web_image=released['web_image'], backend_image=released['backend_image'])
+            self.record.update(state='complete', https_status=200, web_image=released.get('web_image'), backend_image=released.get('backend_image'))
             self.save('Release completed; configuration checks passed')
             print('Application: '+self.url+'\nReceipt: '+str(receipt)+'\nRecord: '+str(self.directory/'result.json'))
             print('No inference or upload/extraction write tests were run. No infrastructure or configuration changes were made by this command.')

@@ -76,6 +76,27 @@ class ReleaseGuardTests(unittest.TestCase):
         after, receipt = released(self.deployments, self.before)
         guard.compare(self.before, after, receipt)
 
+    def test_selected_component_release_preserves_every_unselected_image(self):
+        for component, unchanged, unused_key in (('frontend', 'aegis-api-worker', 'backend_image'),
+                                                  ('backend', 'aegis-web', 'web_image')):
+            with self.subTest(component=component):
+                after, receipt = released(self.deployments, self.before)
+                after['deployments'][unchanged] = copy.deepcopy(self.before['deployments'][unchanged])
+                receipt.update(components=[component])
+                receipt[unused_key] = None
+                guard.compare(self.before, after, receipt, components=[component])
+                after['deployments'][unchanged]['images'][next(iter(guard.APP_CONTAINERS[unchanged]))] = 'unexpected/image'
+                with self.assertRaisesRegex(guard.ReleaseCheckError, 'images differ'):
+                    guard.compare(self.before, after, receipt, components=[component])
+
+    def test_wrong_or_invalid_component_receipt_is_rejected(self):
+        after, receipt = released(self.deployments, self.before)
+        with self.assertRaisesRegex(guard.ReleaseCheckError, 'approved selection'):
+            guard.compare(self.before, after, receipt, components=['frontend'])
+        for invalid in ([], ['frontend', 'frontend'], ['unknown'], 'frontend'):
+            with self.subTest(invalid=invalid), self.assertRaises(guard.ReleaseCheckError):
+                guard.compare(self.before, after, receipt | {'components': invalid})
+
     def test_sidecar_or_init_container_image_changes_are_rejected(self):
         for category, container in (('containers', 'model-relay'), ('initContainers', 'prepared-state')):
             with self.subTest(category=category):

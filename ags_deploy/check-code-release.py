@@ -133,7 +133,7 @@ def validate_source(snapshot, source_path):
         raise ReleaseCheckError('Source runtime.toml differs from the active configuration; this code-only release cannot change it')
 
 
-def compare(baseline, current, receipt=None):
+def compare(baseline, current, receipt=None, components=None):
     for key in ('format_version', 'context', 'server', 'namespace'):
         if baseline.get(key) != current.get(key):
             raise ReleaseCheckError(f'Release destination mismatch: {key}')
@@ -152,12 +152,23 @@ def compare(baseline, current, receipt=None):
                     for item in receipt['previous']}
         if previous != expected_images:
             raise ReleaseCheckError('Receipt previous images differ from the checked baseline')
-        for key in ('web_image', 'backend_image'):
-            if not re.fullmatch(r'[^\s]+@sha256:[a-f0-9]{64}', receipt.get(key, '')):
-                raise ReleaseCheckError('Receipt must contain immutable image digests')
-        expected_images['aegis-web']['web'] = receipt['web_image']
-        for container in ('api', 'worker'):
-            expected_images['aegis-api-worker'][container] = receipt['backend_image']
+        selected = receipt.get('components', ['frontend', 'backend'])
+        if (not isinstance(selected, list) or not selected or
+                any(item not in ('frontend', 'backend') for item in selected) or len(set(selected)) != len(selected)):
+            raise ReleaseCheckError('Receipt has invalid application components')
+        if components is not None and set(selected) != set(components):
+            raise ReleaseCheckError('Receipt components differ from the approved selection')
+        for component, key in (('frontend', 'web_image'), ('backend', 'backend_image')):
+            if component in selected:
+                if not re.fullmatch(r'[^\s]+@sha256:[a-f0-9]{64}', receipt.get(key) or ''):
+                    raise ReleaseCheckError('Receipt must contain immutable image digests')
+            elif receipt.get(key) is not None:
+                raise ReleaseCheckError('Receipt includes an image for an unselected component')
+        if 'frontend' in selected:
+            expected_images['aegis-web']['web'] = receipt['web_image']
+        if 'backend' in selected:
+            for container in ('api', 'worker'):
+                expected_images['aegis-api-worker'][container] = receipt['backend_image']
     if set(baseline['deployments']) != set(current['deployments']):
         raise ReleaseCheckError('The inspected deployment set changed')
     for name, before in baseline['deployments'].items():

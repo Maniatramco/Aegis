@@ -52,8 +52,15 @@ For an operator running directly in PowerShell, the repository now provides
 keep filled destination files outside Git. The CLI exports committed source,
 prompts CONNECT before discovery and PUBLISH after local builds and the detailed
 plan, then uses the maintained schema/release helpers and configuration guard.
-`DatabaseAction=verify` compares the existing schema; `install` is only for the
-explicit prepared empty-owner case below. It never provisions or configures OCI.
+JSON `DeployFrontend` and `DeployBackend` booleans independently select web and
+API/worker images, defaulting to both for older input files. `DatabaseAction=skip`
+skips database scripts; a backend release still requires read-only compatibility
+and active-job checks. Frontend-only with skip makes no Oracle queries.
+`verify` compares the existing schema; `install` is only for the explicit prepared
+empty-owner case below. Both image flags false with install runs only the guarded
+schema installer/postchecks, requiring no cluster or Docker. Verify-only still
+uses the existing API's saved connection and cluster access; it has no PUBLISH
+step. Reject skip with both flags false. It never provisions or configures OCI.
 It records operator regression/backup references, and does not run regression,
 inference or write-workflow tests. An AI using it must still complete the evidence
 and detailed target review required here; never supply approval tokens without
@@ -187,7 +194,7 @@ storage, services, replica counts, resource limits and rollout strategy. Do not
 run `ags_legacy_provisioning.py`, `ags_render.py`, `ags_runtime_config.py`, local
 setup/migration scripts, `kubectl apply`, Helm, scale, configuration patch or
 registration endpoints during this workflow. The release helper's permitted
-cluster mutations are image updates for `web`, `api` and `worker` only.
+cluster mutations are selected image updates for `web`, `api` and `worker` only.
 
 Before release, verify the approved source's backend tests, frontend unit tests,
 type checks and production build using `ags_testing/README.md`. Reuse completed
@@ -254,11 +261,15 @@ if ($LASTEXITCODE -ne 0) { throw 'Pre-release configuration check failed; no rel
 .\ags_deploy\deploy-aegis-code.ps1 -SourcePath $SourcePath -Kubeconfig $Kubeconfig -Context $Context -Namespace $Namespace -Registry $Registry -RegistryNamespace $RegistryNamespace -Platform $Platform -Release $Release -SkipBuild
 ```
 
-With `-SkipBuild`, the deployment helper pushes both reviewed local images,
-records previous image references, updates API+worker first and web second, and
-waits for rollouts. `-SkipBuild` still
-pushes and deploys; it is not a dry run. There is no backend-only switch or automatic
-rollback. Do not edit the helper, manifests, configuration or source during execution.
+With `-SkipBuild`, the deployment helper publishes the reviewed local images.
+Its default `-Components All` releases API+worker first, then web; use
+`-Components Frontend` or `-Components Backend` only when that selection was
+explicitly included in the approved plan. Build/inspect only selected images for
+a selective release. The receipt lists selected components and all previous
+images; verify unselected images stayed unchanged. Existing examples above use
+the default All selection. `-SkipBuild` still pushes and deploys; it is not a dry
+run. There is no automatic rollback. Do not edit the helper, manifests,
+configuration or source during execution.
 
 Capture the **exact receipt path printed by that invocation** as `$Receipt`; never
 choose a receipt by "latest file" or a guessed timestamp. Then run:

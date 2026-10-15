@@ -34,6 +34,7 @@ class FakeRunner:
     def __init__(self, directory):
         self.directory = directory
         self.events = []
+        self.calls = []
         self.deployments, self.resources, self.before = helpers.fixtures()
         for item in self.deployments:
             for container in item['spec']['template']['spec']['containers']:
@@ -46,6 +47,7 @@ class FakeRunner:
         self.fail_release = False
 
     def capture(self, arguments, **kwargs):
+        self.calls.append(arguments)
         if arguments[0] == 'docker':
             return json.dumps([{'Os': 'linux', 'Architecture': 'arm64', 'Id': 'sha256:local'}])
         command = arguments[arguments.index('-n')+2:]
@@ -65,6 +67,7 @@ class FakeRunner:
         raise AssertionError('Unexpected external command: '+repr(arguments))
 
     def interactive(self, arguments, **kwargs):
+        self.calls.append(arguments)
         if arguments[0] == 'docker':
             self.events.append('build')
             return
@@ -75,13 +78,23 @@ class FakeRunner:
             marker = re.search(r"PUT_LINE\('([^']+)'\)", sql)[1]
             self.events.append('empty-owner-check')
             log.write_text(marker+'\n', encoding='utf-8')
+        elif '-CheckOnly' in arguments:
+            self.events.append('local-wallet-check')
         else:
             self.events.append('install')
             if self.fail_install:
                 raise cli.DeploymentStopped('Simulated partial schema failure')
 
     def stream(self, arguments, **kwargs):
+        self.calls.append(arguments)
         self.events.append('publish')
+        if '-Components' in arguments:
+            component = arguments[arguments.index('-Components')+1].lower()
+            self.receipt['components'] = [component]
+            for name, item in self.before['deployments'].items():
+                if ('frontend' if name == 'aegis-web' else 'backend') != component:
+                    self.after['deployments'][name] = copy.deepcopy(item)
+            self.receipt['backend_image' if component == 'frontend' else 'web_image'] = None
         script = Path(arguments[arguments.index('-File')+1])
         destination = script.parent/'deployment-records/this-invocation.json'
         destination.parent.mkdir(exist_ok=True)
@@ -162,6 +175,84 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn('install', self.runner.events)
         self.assertEqual(json.loads(Path(result['receipt']).read_text()), self.runner.receipt)
         self.assertEqual(self.runner.before['resources'], self.runner.after['resources'])
+
+    def select(self, frontend, backend, action):
+        self.workflow.frontend = frontend
+        self.workflow.backend = backend
+        self.workflow.components = [name for name, chosen in (('frontend', frontend), ('backend', backend)) if chosen]
+        self.action = action
+
+    def test_frontend_only_skips_oracle_and_keeps_backend_images(self):
+        self.select(True, False, 'skip')
+        result = self.run_quietly()
+        self.assertEqual(result['state'], 'complete')
+        self.assertEqual(self.runner.events.count('build'), 1)
+        self.assertNotIn('schema-check', self.runner.events)
+        self.assertEqual(self.runner.after['deployments']['aegis-api-worker'], self.runner.before['deployments']['aegis-api-worker'])
+        self.assertEqual(self.runner.receipt['components'], ['frontend'])
+
+    def test_backend_only_checks_database_compatibility_without_ddl_or_frontend_release(self):
+        self.select(False, True, 'skip')
+        self.run_quietly()
+        self.assertEqual(self.runner.events.count('build'), 1)
+        self.assertIn('schema-check', self.runner.events)
+        self.assertNotIn('install', self.runner.events)
+        self.assertEqual(self.runner.after['deployments']['aegis-web'], self.runner.before['deployments']['aegis-web'])
+
+    def test_database_verify_only_builds_nothing_and_needs_no_publish_approval(self):
+        self.select(False, False, 'verify')
+        self.responses = ['CONNECT']
+        result = self.run_quietly()
+        self.assertEqual(result['state'], 'verified-only')
+        self.assertIn('schema-check', self.runner.events)
+        self.assertFalse({'build', 'install', 'publish', 'approval'} & set(self.runner.events))
+        self.http.assert_not_called()
+
+    def test_database_only_install_does_not_require_kubernetes_or_docker(self):
+        self.select(False, False, 'install')
+        work = self.workflow
+        work.prepare = cli.Workflow.prepare.__get__(work)
+        wallet = self.directory/'wallet.zip'
+        wallet.write_text('synthetic; client stub handles the local-only package check')
+        work.values.update(SourcePath=str(self.source), DatabaseAction='install', WalletPath=str(wallet),
+                           DatabaseOwner='TEST_OWNER', ServiceAlias='test_low', ExpectedService='test_low.adb.oraclecloud.com')
+        with patch.object(cli, 'export_commit', return_value=(self.source, 'a'*40)), \
+             patch.object(cli.shutil, 'which', side_effect=lambda name: str(self.directory/'sql.cmd') if name == 'sql' else 'powershell'):
+            result = self.run_quietly()
+        self.assertEqual(result['state'], 'complete')
+        self.assertTrue(result['database_installed'])
+        self.assertFalse(any(call[0] in ('kubectl', 'docker') for call in self.runner.calls))
+        self.assertFalse({'build', 'publish', 'schema-check'} & set(self.runner.events))
+        self.http.assert_not_called()
+
+    def test_frontend_only_does_not_validate_unselected_backend_source_toml(self):
+        self.select(True, False, 'skip')
+        (self.source/'ags_backend/ags_app/ags_config/runtime.toml').write_text('unselected backend source differs')
+        self.assertEqual(self.run_quietly()['state'], 'complete')
+
+    def test_fresh_schema_can_be_combined_with_frontend_only(self):
+        self.select(True, False, 'install')
+        result = self.run_quietly()
+        self.assertTrue(result['database_installed'])
+        self.assertEqual(self.runner.events.count('build'), 1)
+        self.assertEqual(self.runner.after['deployments']['aegis-api-worker'], self.runner.before['deployments']['aegis-api-worker'])
+
+    def test_fresh_schema_can_be_combined_with_backend_only(self):
+        self.select(False, True, 'install')
+        result = self.run_quietly()
+        self.assertTrue(result['database_installed'])
+        self.assertEqual(self.runner.events.count('build'), 1)
+        self.assertEqual(self.runner.after['deployments']['aegis-web'], self.runner.before['deployments']['aegis-web'])
+
+    def test_database_only_check_only_does_not_install_or_contact_cluster(self):
+        self.select(False, False, 'install')
+        self.workflow.check_only = True
+        self.responses = ['CONNECT']
+        result = self.run_quietly()
+        self.assertEqual(result['state'], 'preflight-only')
+        self.assertIn('empty-owner-check', self.runner.events)
+        self.assertFalse({'build', 'install', 'publish', 'approval'} & set(self.runner.events))
+        self.assertFalse(any(call[0] in ('kubectl', 'docker') for call in self.runner.calls))
 
     def test_connection_denial_does_not_contact_target(self):
         self.responses = ['no']
@@ -277,6 +368,20 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
 
 class InputAndSchemaTests(unittest.TestCase):
+    def test_component_flags_require_real_booleans_and_noop_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary)/'inputs.json'
+            for invalid in ('"false"', '0', 'null'):
+                path.write_text('{"DeployFrontend":'+invalid+'}')
+                with self.assertRaises(cli.DeploymentStopped):
+                    cli.load_inputs(path)
+            path.write_text('{"DeployFrontend":false,"DeployBackend":true,"DatabaseAction":"skip"}')
+            values = cli.load_inputs(path)
+            self.assertFalse(values['DeployFrontend'])
+            self.assertTrue(values['DeployBackend'])
+        with self.assertRaisesRegex(cli.DeploymentStopped, 'Nothing selected'):
+            cli.Workflow({'DeployFrontend':False,'DeployBackend':False,'DatabaseAction':'skip'}).prepare()
+
     def test_remote_database_probe_runs_read_only_without_application_imports_or_secret_output(self):
         fixture = schema_fixture()
         queries = []
@@ -466,6 +571,70 @@ class InputAndSchemaTests(unittest.TestCase):
             records = list((repository/'ags_deploy/deployment-records').glob('*/result.json'))
             self.assertEqual(len(records), 1)
             self.assertEqual(json.loads(records[0].read_text())['state'], 'stopped')
+
+    @unittest.skipUnless(os.name == 'nt' and shutil.which('powershell'), 'Windows release-helper simulation')
+    def test_real_release_helper_builds_pushes_and_updates_only_selected_components(self):
+        for selection in ('All', 'Frontend', 'Backend'):
+            with self.subTest(selection=selection), tempfile.TemporaryDirectory() as temporary:
+                base = Path(temporary)
+                source = base/'source'
+                for component in ('ags_frontend', 'ags_backend'):
+                    (source/component).mkdir(parents=True)
+                    (source/component/'Dockerfile').write_text('synthetic build context')
+                helper = base/'deploy-aegis-code.ps1'
+                shutil.copyfile(ROOT/'ags_deploy/deploy-aegis-code.ps1', helper)
+                deployments = base/'deployments.json'
+                deployments.write_text(json.dumps({'items':helpers.fixtures()[0]}))
+                kubeconfig = base/'kubeconfig.yaml'
+                kubeconfig.write_text('synthetic; kubectl function handles all calls')
+                log = base/'calls.jsonl'
+                harness = base/'simulate.ps1'
+                harness.write_text("$ErrorActionPreference='Stop'\n$global:LASTEXITCODE=0\n"+
+                    '$global:callLog='+cli.ps_literal(log)+'\n$global:deploymentFixture='+cli.ps_literal(deployments)+'''\n
+function global:docker {
+    $global:LASTEXITCODE=0
+    $arguments=@($args)
+    @{tool='docker';arguments=$arguments} | ConvertTo-Json -Compress | Add-Content -LiteralPath $global:callLog
+    if ($arguments[0] -eq 'image') {
+        if ($arguments[-1] -eq '{{.Os}}/{{.Architecture}}') { 'linux/arm64' }
+        else {
+            $image=$arguments[2]
+            $repository=$image.Substring(0,$image.LastIndexOf(':'))
+            ConvertTo-Json -InputObject @($repository+'@sha256:'+('a'*64)) -Compress
+        }
+    } elseif ($arguments[0] -notin @('build','push')) { throw 'Unexpected Docker command' }
+}
+function global:kubectl {
+    $global:LASTEXITCODE=0
+    $arguments=@($args)
+    @{tool='kubectl';arguments=$arguments} | ConvertTo-Json -Compress | Add-Content -LiteralPath $global:callLog
+    if ($arguments -contains 'config') {
+        '{"contexts":[{"name":"test-context"}],"clusters":[{"cluster":{"server":"https://test.invalid"}}]}'
+    } elseif ($arguments -contains 'get') { Get-Content -LiteralPath $global:deploymentFixture -Raw }
+    elseif ($arguments -notcontains 'set' -and $arguments -notcontains 'rollout') { throw 'Unexpected kubectl command' }
+}
+'''+'\n& '+cli.ps_literal(helper)+' -SourcePath '+cli.ps_literal(source)+' -Kubeconfig '+cli.ps_literal(kubeconfig)+
+                    ' -Context test-context -Namespace test-namespace -Registry registry.invalid -RegistryNamespace test -Platform linux/arm64 -Release offline-release -Components '+selection+'\n', encoding='utf-8-sig')
+                result = subprocess.run([shutil.which('powershell'), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(harness)],
+                                        capture_output=True, text=True, timeout=40)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = [json.loads(line) for line in log.read_text(encoding='utf-8-sig').splitlines()]
+                chosen = {'frontend', 'backend'} if selection == 'All' else {selection.lower()}
+                for verb in ('build', 'push'):
+                    matching = [call['arguments'] for call in calls if call['tool']=='docker' and call['arguments'][0]==verb]
+                    self.assertEqual(len(matching), len(chosen))
+                    for arguments in matching:
+                        component = 'frontend' if any('ags-aegis-web:' in value for value in arguments) else 'backend'
+                        self.assertIn(component, chosen)
+                updates = [call['arguments'] for call in calls if call['tool']=='kubectl' and 'set' in call['arguments']]
+                self.assertEqual(len(updates), len(chosen))
+                for arguments in updates:
+                    component = 'frontend' if 'deployment/aegis-web' in arguments else 'backend'
+                    self.assertIn(component, chosen)
+                receipt = json.loads(next((base/'deployment-records').glob('*.json')).read_text(encoding='utf-8-sig'))
+                self.assertEqual(set(receipt['components']), chosen)
+                for component, key in (('frontend','web_image'), ('backend','backend_image')):
+                    self.assertEqual(receipt[key] is not None, component in chosen)
 
 
 if __name__ == '__main__':

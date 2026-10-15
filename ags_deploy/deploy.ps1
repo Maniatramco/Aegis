@@ -6,8 +6,10 @@ One command for an Aegis database/schema and frontend/API/worker code release.
 .DESCRIPTION
 Without arguments, prompts for missing non-secret inputs. -Inputs accepts a JSON
 file based on deployment-inputs.example.json. Requires prepared OCI resources,
-existing authentication, Docker, kubectl and Python 3.10+. Fresh table installation
-also requires SQLcl and an existing empty application owner. Creates no OCI
+existing authentication and Python 3.10+. JSON DeployFrontend/DeployBackend booleans
+select application images; DatabaseAction is skip, verify or install. Application
+releases need Docker and kubectl. Fresh table installation needs SQLcl and an empty
+application owner; database-only installation needs no Docker or Kubernetes. Creates no OCI
 database instance, users, OKE resources, Secrets or configuration. Prompts CONNECT
 before remote inspection and PUBLISH before DDL/image publication. Passwords stay
 in private SQLcl prompts. -CheckOnly makes no database or deployment changes.

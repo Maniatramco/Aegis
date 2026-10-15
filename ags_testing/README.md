@@ -111,6 +111,11 @@ the intended image updates and rejects configuration drift, wrong destinations,
 unready/partial rollouts and inconsistent receipts. The command-line checks also
 exercise connection/publication approvals, existing-schema and fresh-owner
 workflows, source/target drift and partial failures using simulated clients.
+Component checks cover frontend-only, backend-only, database-only and combined
+releases, unchanged unselected images and strict JSON booleans. On Windows the
+actual PowerShell release helper runs against in-process Docker/kubectl stubs;
+the test verifies selected build, push and image-update calls without contacting
+those tools or changing a real deployment.
 The schema fixture contains historical logical metadata with synthetic destination,
 capability and status values; it is not a new live inspection. These checks make
 no OCI, Docker or database connections and require only the Python standard library

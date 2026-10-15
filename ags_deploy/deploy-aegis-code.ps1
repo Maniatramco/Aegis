@@ -7,11 +7,13 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$RegistryNamespace,
     [ValidatePattern('^[a-z0-9-]+$')][string]$Namespace = 'aegis-oci',
     [ValidateSet('linux/arm64','linux/amd64')][string]$Platform = 'linux/arm64',
+    [ValidateSet('All','Frontend','Backend')][string]$Components = 'All',
     [ValidatePattern('^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$')]
     [string]$Release = ('release-' + (Get-Date -Format 'yyyyMMdd-HHmmss')),
     [switch]$SkipBuild
 )
 
+# AEGIS_COMPONENT_SELECTION_V1: selected images only; omitted images stay unchanged.
 # Updates an already initialized Aegis installation. This does not provision
 # OCI infrastructure, initialize a fresh database, or install Kubernetes Secrets.
 $ErrorActionPreference = 'Stop'
@@ -64,18 +66,29 @@ foreach ($expected in @(
 
 $webImage = "$Registry/$RegistryNamespace/ags-aegis-web`:$Release"
 $backendImage = "$Registry/$RegistryNamespace/ags-aegis-backend`:$Release"
+$deployFrontend = $Components -in @('All', 'Frontend')
+$deployBackend = $Components -in @('All', 'Backend')
+$selectedImages = @()
+$selectedComponents = @()
+if ($deployFrontend) { $selectedImages += $webImage; $selectedComponents += 'frontend' }
+if ($deployBackend) { $selectedImages += $backendImage; $selectedComponents += 'backend' }
+Write-Host "Selected application components: $Components"
 if (-not $SkipBuild) {
-    Invoke-Checked -Program docker -Arguments @('build', '--platform', $Platform,
-        '-t', $webImage, (Join-Path $source 'ags_frontend'))
-    Invoke-Checked -Program docker -Arguments @('build', '--platform', $Platform,
-        '--build-arg', 'INSTALL_LOCAL_EMBEDDINGS=false',
-        '--build-arg', 'INSTALL_CLOUD_MODELS=false',
-        '--build-arg', 'INSTALL_ORACLE=true', '--build-arg', 'INSTALL_OCI=true',
-        '-t', $backendImage, (Join-Path $source 'ags_backend'))
+    if ($deployFrontend) {
+        Invoke-Checked -Program docker -Arguments @('build', '--platform', $Platform,
+            '-t', $webImage, (Join-Path $source 'ags_frontend'))
+    }
+    if ($deployBackend) {
+        Invoke-Checked -Program docker -Arguments @('build', '--platform', $Platform,
+            '--build-arg', 'INSTALL_LOCAL_EMBEDDINGS=false',
+            '--build-arg', 'INSTALL_CLOUD_MODELS=false',
+            '--build-arg', 'INSTALL_ORACLE=true', '--build-arg', 'INSTALL_OCI=true',
+            '-t', $backendImage, (Join-Path $source 'ags_backend'))
+    }
 }
 
 # With -SkipBuild, these exact destination tags must already exist locally.
-foreach ($image in @($webImage, $backendImage)) {
+foreach ($image in $selectedImages) {
     $actualPlatform = & docker image inspect $image --format '{{.Os}}/{{.Architecture}}'
     if ($LASTEXITCODE -ne 0) { throw "Local image missing: $image" }
     if (($actualPlatform -join '').Trim() -ne $Platform) {
@@ -83,9 +96,9 @@ foreach ($image in @($webImage, $backendImage)) {
     }
 }
 
-# Publish both images before updating either deployment.
+# Publish all selected images before updating any deployment.
 $digests = @{}
-foreach ($image in @($webImage, $backendImage)) {
+foreach ($image in $selectedImages) {
     Invoke-Checked -Program docker -Arguments @('push', $image)
     $digestJson = & docker image inspect $image --format '{{json .RepoDigests}}'
     if ($LASTEXITCODE -ne 0) { throw "Cannot inspect published digest for $image" }
@@ -102,21 +115,27 @@ $receipt = Join-Path $receiptDirectory "$Release-$([guid]::NewGuid().ToString('N
 @{
     context = $Context; server = $destination.clusters[0].cluster.server
     namespace = $Namespace; release = $Release
+    components = $selectedComponents
     previous = @($before.items | ForEach-Object {
         @{ deployment = $_.metadata.name; containers = @($_.spec.template.spec.containers |
             ForEach-Object { @{ name = $_.name; image = $_.image } }) }
     })
-    web_image = $digests[$webImage]; backend_image = $digests[$backendImage]
+    web_image = $(if ($deployFrontend) { $digests[$webImage] } else { $null })
+    backend_image = $(if ($deployBackend) { $digests[$backendImage] } else { $null })
 } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $receipt -Encoding utf8
 Write-Host "Previous images and destination saved: $receipt"
 
-Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('set', 'image',
-    'deployment/aegis-api-worker', "api=$($digests[$backendImage])", "worker=$($digests[$backendImage])"))
-Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('rollout', 'status',
-    'deployment/aegis-api-worker', '--timeout=15m'))
-Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('set', 'image',
-    'deployment/aegis-web', "web=$($digests[$webImage])"))
-Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('rollout', 'status',
-    'deployment/aegis-web', '--timeout=15m'))
+if ($deployBackend) {
+    Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('set', 'image',
+        'deployment/aegis-api-worker', "api=$($digests[$backendImage])", "worker=$($digests[$backendImage])"))
+    Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('rollout', 'status',
+        'deployment/aegis-api-worker', '--timeout=15m'))
+}
+if ($deployFrontend) {
+    Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('set', 'image',
+        'deployment/aegis-web', "web=$($digests[$webImage])"))
+    Invoke-Checked -Program kubectl -Arguments ($kubectlArguments + @('rollout', 'status',
+        'deployment/aegis-web', '--timeout=15m'))
+}
 Write-Host 'Image rollouts completed. Run one application check: login, upload, extraction and cited chat.'
 Write-Host 'If a rollout fails, inspect the saved record and the deployment before retrying. No automatic rollback is performed.'
