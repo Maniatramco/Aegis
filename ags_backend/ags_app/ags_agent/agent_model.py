@@ -301,7 +301,14 @@ Use selected_dataset by default. accessible_datasets is ONLY for explicitly disc
     current=[dict(m,content='Scope/reference data:\n'+context+'\nCURRENT request: '+m['content']) for m in messages if m['role']=='user'][-1:]
     cfg=core.settings();protocol=(cfg.get('model_connection') or {}).get('protocol') if cfg['model_provider']=='registered' else cfg['model_provider']
     if protocol=='ollama':cfg=dict(cfg,context_limit=min(8192,cfg.get('context_limit') or 8192))
-    output=schema_decision([instruction]+turns+current,[tool],cfg,required_tool=True,stage='routing') if protocol=='ollama' and cfg['model'].startswith('qwen3') else complete([instruction]+turns+current,[tool])
+    if protocol=='ollama' and cfg['model'].startswith('qwen3'):
+        output=schema_decision([instruction]+turns+current,[tool],cfg,required_tool=True,stage='routing')
+    else:
+        # Routing is a function decision. Preserve the pinned credentials while
+        # requiring a native tool call instead of prose resembling tool JSON.
+        active=core._execution.get() or {}
+        with core.execution_context(dict(active,settings=dict(cfg,_agent_require_tool=True))):
+            output=complete([instruction]+turns+current,[tool])
     calls=output.get('calls') or []
     if len(calls)!=1 or calls[0]['name']!='route_aegis':
         return {'intent':'clarify','source':'unresolved','operation':'none','clarification':'Please clarify the task or information you need.'}
@@ -382,6 +389,11 @@ def complete(messages, tools, on_token=None):
         if '<think>' in text: raise providers.ProviderError('The agent model returned unfinished reasoning without an answer.')
         return {'text': text, 'calls': calls}
     if protocol in ('openai', 'openai-compatible', 'azure-openai'):
+        wire_tools=tools
+        if provider=='registered':
+            from ..ags_models.provider_registry import provider as adapter_provider
+            prepare=getattr(adapter_provider(connection),'agent_tools',None)
+            if prepare:wire_tools=prepare(tools)
         def serialize(inputs):
             wire=[]
             for original in inputs:
@@ -394,7 +406,7 @@ def complete(messages, tools, on_token=None):
                         call['function']['arguments']=json.dumps(call['function']['arguments'])
                 if message['role']=='tool':message.pop('tool_name',None)
                 wire.append(message)
-            return {'messages':wire,'tools':tools}
+            return {'messages':wire,'tools':wire_tools}
         budget=cfg.get('max_output_tokens') or 768
         wire=agent_context.fit(messages,cfg,budget,serialize,'tool_selection' if cfg.get('_agent_require_tool') else 'answer')
         payload={'model':cfg['model'],**wire,'max_completion_tokens':budget}
@@ -427,6 +439,12 @@ def complete(messages, tools, on_token=None):
         except (KeyError,ValueError,TypeError) as exc:
             raise providers.ProviderError('The agent provider returned invalid tool arguments.') from exc
         result={'text': message.get('content') or '', 'calls': calls}
+        if provider=='registered':
+            restore=getattr(adapter_provider(connection),'agent_calls',None)
+            if restore:
+                from ..ags_models.validation import ConnectionError
+                try:result['calls']=restore(calls,tools)
+                except ConnectionError as exc:raise providers.ProviderError(str(exc)) from exc
         if any('extra_content' in call for call in message.get('tool_calls') or []):
             result['_provider_state']={'protocol':protocol,'tool_calls':copy.deepcopy(message['tool_calls'])}
         return result

@@ -38,6 +38,8 @@ def notices(snapshot, role, main):
         destinations.append({'key':key, 'title':provider, 'description':text})
     if role == 'embedding' and cfg.get('storage_provider') == 'oci':
         add('storage', 'OCI Object Storage', 'Upload original documents to '+(cfg.get('oci_storage_bucket') or 'your configured OCI bucket')+'.')
+    if role == 'embedding' and cfg.get('ocr_provider') == 'gemini':
+        add('ocr', 'Gemini OCR', 'Send scanned page images and embedded document images to the mapped Gemini extraction model for transcription.')
     if cfg.get('search_provider') in ('oci', 'oracle'):
         add('search', 'OCI knowledge store', 'Send query text, document content and metadata to the configured OCI search or vector service.')
     if cfg.get('embedding_provider') in ('openai', 'registered'):

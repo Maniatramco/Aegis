@@ -52,6 +52,26 @@ Ollama execution continues through `ags_local/ollama.py`; it is not silently
 routed through the cloud facade. Legacy root imports alias the canonical
 modules, preserving older callers and saved protocol/configuration formats.
 
+## Gemini OCR and cloud-only datasets
+
+A dataset mapped to a `gemini-*` extraction model on the Gemini Developer API
+also uses that registration for scanned PDF pages and embedded DOCX images.
+Index jobs pin its model, profile version and encrypted credential reference;
+the API key is never copied into jobs or document metadata. Upload approval
+lists Gemini OCR as an image destination. Other datasets retain their own
+local OCR setup. A cloud OCR failure never falls back to Ollama.
+
+The adapter in `providers/ags_gcp/ocr.py` uses Google's
+[image input API](https://ai.google.dev/gemini-api/docs/openai#image-understanding).
+The shared OCR path still rejects incomplete, invalid, unreadable and blank
+transcriptions, retains original/native text and labels OCR as unverified.
+Cloud cache identities pin configuration versions, not unavailable weight
+digests. OCR output/context limits also respect the extraction registration.
+
+Gemini routing declares union-shaped tool contracts as separate bounded
+functions. Returned arguments are validated against the selected branch and
+the original canonical schema before any agent acts.
+
 ## Add another model using a supported protocol
 
 Use Aegis Model Registration: name, category, protocol, endpoint, model or

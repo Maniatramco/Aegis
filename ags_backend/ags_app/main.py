@@ -96,7 +96,7 @@ def enqueue(owner,kind,target,allow_external=False,snapshot=None,initial_status=
 
 def external_check(consent,embedding=False,cfg=None):
     cfg=cfg or settings();external=(cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider'] in ('oci','oracle') or cfg['storage_provider']=='oci') if embedding else cfg['model_provider'] in ('openai','oci','registered') or cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider'] in ('oci','oracle')
-    if external and not consent:raise HTTPException(409,'This action sends document text or your query to the configured external provider. Confirm external data transmission first.')
+    if (external or cfg.get('ocr_provider')=='gemini') and not consent:raise HTTPException(409,'This action sends document text or your query to the configured external provider. Confirm external data transmission first.')
     if (cfg['model_provider']=='mock' or cfg['embedding_provider']=='mock') and os.getenv('AEGIS_ALLOW_MOCK')!='true':raise HTTPException(400,'Mock providers require AEGIS_ALLOW_MOCK=true and are for tests only')
 
 class Credentials(BaseModel):

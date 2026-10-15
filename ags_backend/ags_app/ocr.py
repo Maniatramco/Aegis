@@ -1,4 +1,4 @@
-"""Local page OCR, independent of the dataset's chat/embedding execution settings.
+"""Page OCR with dataset-pinned Gemini or the existing local vision service.
 
 VLM transcription is unverified source text, never calibrated confidence or
 verified image coordinates. Originals remain the authority for review.
@@ -42,12 +42,17 @@ def config():
         batch = int(os.getenv('AEGIS_OCR_BATCH', '128'))
         if not 30 <= timeout <= 3600 or not 512 <= output <= 8192 or not output + 2048 <= context <= 32768 or not 100 <= dpi <= 300 or not 32 <= batch <= 1024:
             raise ValueError()
+        from . import core
+        cloud = (core._execution.get() or {}).get('ocr_execution')
+        if cloud:
+            from .ags_models.providers.ags_gcp import ocr as gemini_ocr
+            return gemini_ocr.configure(cloud, dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch))
         model = local_model_name(os.getenv('AEGIS_OCR_MODEL', 'qwen2.5vl:3b'))
         from .model_connections import validate_endpoint
         endpoint = validate_endpoint(os.getenv('AEGIS_OCR_URL') or os.getenv('AEGIS_OLLAMA_URL', 'http://127.0.0.1:11434'), 'ollama')
     except Exception:
-        raise OcrError('OCR configuration is invalid. Check the local endpoint, model and OCR limits.') from None
-    return dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch, model=model, endpoint=endpoint, protocol=3)
+        raise OcrError('OCR configuration is invalid. Check the selected model, endpoint and OCR limits.') from None
+    return dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch, model=model, endpoint=endpoint, protocol=3, provider='ollama', digest_type='weights')
 
 
 def call(cfg, path, payload=None, timeout=None):
@@ -71,7 +76,13 @@ def call(cfg, path, payload=None, timeout=None):
 def available(cfg=None):
     cfg = cfg or config()
     if not cfg['enabled']:
-        raise OcrError('OCR is disabled. Enable AEGIS_OCR_ENABLED and install the configured vision model, or upload a searchable PDF.')
+        raise OcrError('OCR is disabled. Enable AEGIS_OCR_ENABLED or upload a searchable PDF.')
+    if cfg.get('provider') == 'gemini':
+        try:
+            from .ags_models.providers.ags_gcp import ocr as gemini_ocr
+            return gemini_ocr.available(cfg)
+        except Exception:
+            raise OcrError('Gemini OCR configuration or saved credentials are unavailable. Check the dataset extraction registration.') from None
     data = call(cfg, '/api/show', {'model': cfg['model']}, timeout=10)
     if 'vision' not in data.get('capabilities', []):
         raise OcrError('The configured OCR model does not support images. Install qwen2.5vl:3b or another compatible local vision model.')
@@ -127,7 +138,14 @@ def transcribe(image, cfg):
     # Qwen2.5-VL on Ollama 0.35.1 can repeat tokens indefinitely under the
     # nested schema grammar. JSON mode plus an explicit shape is compatible;
     # the same strict schema is still validated before any text is indexed.
-    result = call(cfg, '/api/chat', {'model': cfg['model'], 'stream': False, 'format': 'json',
+    if cfg.get('provider') == 'gemini':
+        try:
+            from .ags_models.providers.ags_gcp import ocr as gemini_ocr
+            result = gemini_ocr.transcribe(image, cfg, INSTRUCTION, SCHEMA)
+        except Exception:
+            raise OcrError('Gemini OCR request failed. Check model access, saved API credentials, quota and service availability. No partial page was indexed.') from None
+    else:
+        result = call(cfg, '/api/chat', {'model': cfg['model'], 'stream': False, 'format': 'json',
         'messages': [{'role': 'system', 'content': INSTRUCTION}, {'role': 'user',
         'content': 'Transcribe every visible line, in reading order. Your JSON MUST have exactly these two keys: {"text":"full transcription as one string with newline characters", "unreadable":false}. Do not use document fields as keys. Set unreadable true if any text is unclear.',
         'images': [base64.b64encode(image).decode('ascii')]}],
@@ -146,6 +164,7 @@ def transcribe(image, cfg):
     if len(value['text']) > 100000:
         raise OcrError('OCR page exceeds the text safety limit. Split the page and retry.')
     return value['text'], {'model': cfg['model'], 'digest':cfg['digest'], 'seconds': round(time.monotonic() - started, 3),
+        'provider': cfg.get('provider', 'ollama'), 'digest_type': cfg.get('digest_type', 'weights'),
         'verified': False, 'confidence': None, 'coordinates': None,
         'notice': 'AI OCR transcription; check names, numbers and tables against the unchanged original.'}
 
@@ -184,5 +203,5 @@ def read_page(raw, index, native_text, *, cfg=None, progress=None, cache_id=None
 
 def summary(pages):
     values = [page['ocr'] | dict(page=page.get('page'), source_filename=page.get('source_filename')) for page in pages if page.get('ocr')]
-    return {'model': config()['model'], 'ocr_page_count': len(values), 'pages': values,
+    return {'model': values[0]['model'], 'provider': values[0].get('provider', 'ollama'), 'ocr_page_count': len(values), 'pages': values,
             'notice': 'Contains AI OCR transcription. Quotes matched to OCR text are not verification against the original image.'} if values else None

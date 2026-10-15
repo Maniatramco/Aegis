@@ -144,7 +144,7 @@ def parse_document(name,raw,*,ocr_enabled=True,progress=None,cache_id=None):
                 image_results.append(meta|{'image':str(part.partname),'page':None})
                 text+='\n[Embedded image '+str(part.partname)+'; page unknown]\n'+result
         if len(text)>5000000:raise ValueError('Document exceeds 5 million character text limit')
-        return [{'page':None,'text':text,**({'text_origin':'native+ocr','ocr':{'model':ocr.config()['model'],'images':image_results,'verified':False,'notice':'DOCX image transcription; page location unavailable.'}} if ocr_enabled and image_results else {})}]
+        return [{'page':None,'text':text,**({'text_origin':'native+ocr','ocr':{'model':image_results[0]['model'],'provider':image_results[0].get('provider','ollama'),'images':image_results,'verified':False,'notice':'DOCX image transcription; page location unavailable.'}} if ocr_enabled and image_results else {})}]
     raise ValueError('Unsupported document format')
 
 def chunk_pages(did,pages,size,overlap):
@@ -198,7 +198,7 @@ def _process(jid,token,snapshot):
     if kind=='index' and kb!=snapshot['dataset_id']:raise ValueError('Document dataset changed; submit a new indexing job.')
     if kind=='index':
         consent=store.json('jobs/'+jid+'.json').get('allow_external',False)
-        if (cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider'] in ('oci','oracle')) and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
+        if (cfg['embedding_provider'] in ('openai','registered') or cfg['search_provider'] in ('oci','oracle') or cfg.get('ocr_provider')=='gemini') and not consent:raise ValueError('External embedding/indexing requires explicit external data transmission consent')
         with Session.begin() as s:s.get(Record,did).status='processing'
         state=workflow.read(jid)
         # Retry an indexing failure from its saved extraction, using the same pinned configuration.

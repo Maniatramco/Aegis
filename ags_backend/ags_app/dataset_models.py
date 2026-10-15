@@ -165,6 +165,12 @@ def _embedding_snapshot(r):
     transport=vector_backend()
     if transport:cfg['search_provider']=transport
     snap['settings']=cfg
+    from .ags_models.providers.ags_gcp import ocr as gemini_ocr
+    vision=gemini_ocr.dataset_snapshot(r)
+    if vision:
+        snap['ocr_execution']=vision
+        cfg['ocr_provider']='gemini'
+        cfg['ocr_model']=vision['provider_model']
     if cfg['embedding_provider']=='ollama':
         from .ollama_provider import model_digest,OllamaError
         try:
