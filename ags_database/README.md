@@ -2,7 +2,7 @@
 
 `ags_database/` contains native Oracle SQL aligned with the deployed `agsora`
 Autonomous AI Database in `ap-mumbai-1`. Read-only inspection on
-15 October 2026 at 23:54 IST (18:24 UTC) confirmed owner `ADMIN`, mTLS wallet alias
+16 October 2026 at 00:18 IST (15 October at 18:48 UTC) confirmed owner `ADMIN`, mTLS wallet alias
 `agsora_low`, and all thirteen application tables. OCI identifies
 the database as Oracle 26ai; the connected server reports `23.26.4.1.0`.
 No application data or credentials are included in these scripts.
@@ -18,6 +18,7 @@ local tooling does not remove or replace that runtime dependency.
 | Folder or file | Purpose |
 | --- | --- |
 | `ags_tables/` | Thirteen Oracle table definitions read from live metadata, including native vectors |
+| `deploy-oci-database.ps1` | SQLcl deployment launcher using an explicit destination wallet, account, alias and full service |
 | `install.sql` | Guarded fresh installer with target, capability and completed-schema checks |
 | `ags_schema/verify_live_schema.sql` | Read-only connection, table, column, constraint and vector checks |
 | `ags_queries/` | Read-only workflow, account and dataset-access inspection using the connected owner |
@@ -93,6 +94,28 @@ destination wallet connection is configured; `SET CLOUDCONFIG` is SQLcl-specific
 
 ### 3 Install once in the verified empty owner
 
+The deployment launcher can be called from any working directory. From the
+repository root, first validate the package and destination wallet locally:
+
+```powershell
+.\ags_database\deploy-oci-database.ps1 `
+  -WalletPath 'C:\aegis-target\Wallet_NEWDB.zip' `
+  -UserName 'AGS_APP' `
+  -ServiceAlias 'NEWDB_low' `
+  -ExpectedService 'YOUR_FULL_SERVICE_NAME.adb.oraclecloud.com' `
+  -CheckOnly
+```
+
+`-CheckOnly` starts no SQL client and makes no database connection. When a
+deployment to the confirmed new target is authorized, run the same command
+without `-CheckOnly`. SQLcl must be installed (`sql` on PATH, or supply
+`-SqlclPath`). It prompts for the password, uses `install.sql`, and requires
+both a successful client exit and the completed-schema success marker. The
+script prints the installation log path; it does not put a password in a
+command, generated SQL file or log. `-WhatIf` previews the operation locally.
+
+For an already connected SQLcl or SQL*Plus session, the manual equivalent is
+below. The client must have `ags_database` as its working directory.
 Only when you intend to install into that new destination, replace both values
 with the confirmed owner and **full server service name**:
 
@@ -139,6 +162,12 @@ credentials are seeded by these SQL files. A code-image release is a separate
 operation from schema installation.
 
 ### Validation performed
+
+The fresh read-only live metadata comparison at the time above matched all
+thirteen SQL files, including column order/types/defaults/nullability,
+collations, primary/unique/foreign/check constraints, foreign-key delete rules,
+native vector format and application index definitions. Only owner qualification
+and Oracle-managed physical storage clauses are omitted for destination portability.
 
 On 16 October 2026, the installer completed against a disposable local Oracle AI Database 26ai
 Free `23.26.3.0.0` instance with extended strings enabled. All thirteen tables,
