@@ -89,7 +89,7 @@ Use the same Compose configuration arguments for stop/start operations and prese
 | `ags_docs/` | Architecture, Word handover, deployment and operating guides |
 | `local/` | Laptop Compose profiles, environment templates and launchers |
 
-The `python`, `webui` and `database` branches contain the full repository; their names do not filter folders. This handover freezes `python`. It does not merge component branches or change `main`.
+The `python`, `webui` and `database` branches contain the full repository; their names do not filter folders. The final handover branch is `ags_sprint1`, created from the `python` source freeze. The original freeze tag is preserved, and `main` is unchanged.
 
 ## Development checks
 
