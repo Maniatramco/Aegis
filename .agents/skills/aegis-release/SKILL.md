@@ -21,7 +21,7 @@ Read [the README](../../../README.md) and the single [architecture and deploymen
 
 Inspect branch, remote, existing changes and component Docker contexts. Include the intended application files and required assets; exclude private state, environment files, deployment receipts and session-only QA notes. Keep source-declared versions distinct from observed deployed versions.
 
-Run backend regressions and frontend unit tests, type checking and a production build in an isolated environment. Diagnose failures and report unrun integration checks accurately. Update the single Word handover when relevant and reuse the approved Mural diagram under `ags_docs/ags_assets/`. Record actual validation in that handover. Preserve existing immutable tags; apply a new tag only when requested for a new source freeze. Push only the intended branch and tag without force.
+Run backend regressions and frontend unit tests, type checking and a production build in an isolated environment. Diagnose failures and report unrun integration checks accurately. Update the single Word handover when relevant and reuse the approved Mural diagram already embedded in the handover. Record actual validation in that handover. Preserve existing immutable tags; apply a new tag only when requested for a new source freeze. Push only the intended branch and tag without force.
 
 ## Deploy only when requested
 
