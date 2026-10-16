@@ -5,7 +5,7 @@ function mount({scope={datasetIds:['a'],documentIds:['file']},autoSummary=false,
  global.sessionStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
  let cursor=0,root;const hooks=[],effects=[],calls=[],streams=[];
  const react={useState(initial){const slot=cursor++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>hooks[slot]=typeof value==='function'?value(hooks[slot]):value];},useRef(initial){const slot=cursor++;if(!(slot in hooks))hooks[slot]={current:initial};return hooks[slot];},useEffect(fn){effects.push(fn);}};
- const empty=new Proxy({},{get:()=>()=>null});const {DatasetKnowledgeChat,knowledgeScopeKey}=compile('dataset-knowledge-chat.tsx',{'react':react,'lucide-react':empty,'./agent-logo':empty,'./agent-v2-chat':empty,'./agent-answer-workflow':empty});
+ const empty=new Proxy({},{get:()=>()=>null});const {DatasetKnowledgeChat,knowledgeScopeKey}=compile('dataset-knowledge-chat.tsx',{'react':react,'lucide-react':empty,'./agent-logo':empty,'./agent-v2-chat':empty,'./dataset-chat-status':empty});
  const props={scope,autoSummary,username:'tester',api:async(...args)=>{calls.push(args);return handler?handler(...args):catalog;},stream:async(...args)=>{streams.push(args);return streamHandler?streamHandler(...args):new Promise(()=>{});}};
  const nodes=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(nodes):[node,...nodes(node.props?.children)];
  const render=()=>{cursor=0;effects.length=0;root=DatasetKnowledgeChat(props);};render();

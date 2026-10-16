@@ -31,6 +31,7 @@ def test_combined_summary_follows_hybrid_rerank_generation_validation(system,mon
     monkeypatch.setattr(agent_model,'complete',answer)
     result=post(s,'/api/dataset-chat/messages',body(a,b,summary=True));message=result['message']
     assert seen and message['answer_workflow']['status']=='completed'
+    assert message['source_summary']=={'checked_count':4,'dataset_count':2,'documents':2,'saved_results':0,'dataset_descriptions':2,'guidance':0,'cited_count':1}
     assert message['tool_trace'][0]['result']['retrieval']['mode']=='hybrid'
     assert message['tool_trace'][0]['result']['retrieval']['reranker_enabled']
     for citation in message['citations']:assert s.api.get(citation['source_url']).status_code==200
@@ -99,6 +100,8 @@ def test_streamed_chat_creates_no_agent_plans_or_jobs(system,monkeypatch):
     s=system;a,one,b,two=setup(s,monkeypatch);before={item['id'] for item in s.api.get('/api/jobs').json()}
     response=s.api.post('/api/dataset-chat/reply',json=body(a,b,summary=True))
     assert response.status_code==200 and 'event: done' in response.text,response.text
+    assert 'event: sources' in response.text and response.text.index('event: sources')<response.text.index('event: done')
+    assert '"checked_count": 4' in response.text
     assert 'dataset_knowledge_chat' in response.text and 'citation' in response.text
     assert {item['id'] for item in s.api.get('/api/jobs').json()}==before
     with s.session() as db:assert not list(db.scalars(select(core.Record).where(core.Record.kind.in_(['agent_plan','agent_goal']))))
@@ -107,3 +110,12 @@ def test_original_agent_rejects_dataset_chat_request_fields(system,monkeypatch):
     s=system;a,one,b,two=setup(s,monkeypatch)
     response=s.api.post('/api/agent-v2/plans',json={'text':'Hello','planner_model_id':body(a,b)['model_id'],'knowledge_dataset_ids':[a['id']]})
     assert response.status_code==422
+
+def test_checked_sources_deduplicate_passages_and_keep_saved_results_distinct():
+    from ags_app.ags_agent.dataset_chat import source_summary
+    records=[{'entity_id':'doc-one:chunk1','source_type':'document_chunk','document_ids':['doc-one']},
+        {'entity_id':'doc-one:chunk2','source_type':'document_chunk','document_ids':['doc-one']},
+        {'entity_id':'result-one:record1','source_type':'extraction','document_ids':['doc-one']},
+        {'entity_id':'result-one:record2','source_type':'extraction','document_ids':['doc-one']},
+        {'entity_id':'dataset-one','source_type':'dataset'}]
+    assert source_summary(records,1)=={'checked_count':3,'dataset_count':1,'documents':1,'saved_results':1,'dataset_descriptions':1,'guidance':0}

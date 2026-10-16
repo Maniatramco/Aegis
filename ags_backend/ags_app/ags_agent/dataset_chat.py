@@ -41,7 +41,21 @@ def validate(body,owner):
         if not same_scope(core.store.json(record.ref),body):raise HTTPException(409,'Start a new chat when dataset knowledge changes.')
 
 
-def answer(body,owner,snapshot,main,progress):
+def source_summary(records,dataset_count):
+    """Count distinct inspected sources, not passages or all eligible files."""
+    groups={'documents':set(),'saved_results':set(),'dataset_descriptions':set(),'guidance':set()}
+    for record in records:
+        kind=record['source_type'];root=record['entity_id'].split(':',1)[0]
+        if kind in ('document','document_chunk'):
+            groups['documents'].update(record.get('document_ids') or [root])
+        elif kind=='extraction':groups['saved_results'].add(record.get('extraction_id') or root)
+        elif kind=='dataset':groups['dataset_descriptions'].add(root)
+        else:groups['guidance'].add(record['entity_id'])
+    counts={name:len(values) for name,values in groups.items()}
+    return {'checked_count':sum(counts.values()),'dataset_count':dataset_count,**counts}
+
+
+def answer(body,owner,snapshot,main,progress,on_sources=None):
     with progress.step('Checking accessible dataset knowledge'):
         validate(body,owner)
         view=WorkspaceKnowledge(owner,body.dataset_ids,body.document_ids,body.summary)
@@ -64,6 +78,8 @@ def answer(body,owner,snapshot,main,progress):
                 points += [point for point in catalog if point['id'] not in seen]
         records=assemble(points)
     if not records:raise HTTPException(409,'No indexed knowledge is available in the included scope yet.')
+    inspected=source_summary(records,len(view.views))
+    if on_sources:on_sources(inspected)
     citations=[];reviews=[];evidence={'scope':{'dataset_ids':view.dataset_ids,'document_ids':sorted(view.documents)},
         'records':[],'complete_catalog':bool(catalog_scope),'semantic_candidates':not bool(catalog_scope),
         'applied_filters':[],'retrieval':view.search_diagnostics}
@@ -104,7 +120,9 @@ def answer(body,owner,snapshot,main,progress):
         messages.append({'role':'system','content':'The draft failed validation: '+problem+'. Answer the CURRENT question using the same evidence and valid [n] citations only.'})
     if problem:raise HTTPException(502,chat_policy.validation_message(problem))
     used={int(index) for index in re.findall(r'\[(\d+)\]',text)}
+    inspected['cited_count']=source_summary([record for index,record in enumerate(records,1) if index in used],len(view.views))['checked_count']
     return {'id':core.uid(),'role':'assistant','text':text,'status':'completed','citations':[item for item in citations if item['index'] in used],
+        'source_summary':inspected,
         'review_actions':reviews,'model_selection':routing.public_selection(snapshot),'created_at':time.time(),
         'tool_trace':[{'tool':'query_dataset_knowledge','result':evidence}],'request_route':{'routing_mode':'dataset_knowledge_chat'}}
 
@@ -116,6 +134,9 @@ def run(body,owner,main,callback=None,cancelled=None):
     def progress_update(workflow):
         check()
         if callback:callback('progress',{'workflow':workflow})
+    def sources_update(summary):
+        check()
+        if callback:callback('sources',{'source_summary':dict(summary)})
     progress=AnswerProgress(progress_update)
     with progress.step('Resolving authorized chat model'):
         validate(body,owner)
@@ -124,7 +145,7 @@ def run(body,owner,main,callback=None,cancelled=None):
     # New threads have a fresh ID, not an Agent checkpoint or plan ID.
     id=record.id if record else core.uid()
     with core.document_lock('dataset-chat-'+id),token_usage.collect() as usage:
-        message=answer(body,owner,snapshot,main,progress)
+        message=answer(body,owner,snapshot,main,progress,sources_update)
         check()
         with progress.step('Saving dataset chat response'):
             # Recheck access after inference before recording a completed reply.
