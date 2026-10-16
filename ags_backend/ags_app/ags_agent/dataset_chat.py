@@ -6,7 +6,7 @@ from pydantic import BaseModel,ConfigDict,Field
 from sqlalchemy import select
 from .. import core,dataset_models as routing,providers
 from ..temporary_chat import chat_snapshot
-from . import chat_policy,token_usage
+from . import chat_policy,token_usage,dataset_chat_general
 from .chat_agent import complete_answer,chat_limits
 from .agent_progress import AnswerProgress
 from .dataset_chat_knowledge import WorkspaceKnowledge,validate_workspace_scope,assemble
@@ -55,16 +55,48 @@ def source_summary(records,dataset_count):
     return {'checked_count':sum(counts.values()),'dataset_count':dataset_count,**counts}
 
 
-def answer(body,owner,snapshot,main,progress,on_sources=None):
+def chat_model_snapshot(body,owner):
+    """Resolve only Chat credentials/mapping; greetings never resolve embeddings."""
+    if len(set(body.dataset_ids))!=1:return chat_snapshot(owner,body.model_id)
+    dataset=routing.owned(body.dataset_ids[0],owner,'knowledge_base')
+    with routing.snapshot_reads(dataset,body.model_id):
+        routing.require_active(dataset)
+        snapshot=routing.resolve_model(dataset,'chat',body.model_id)
+        cfg=core.settings().copy()
+        cfg.update({key:snapshot['settings'][key] for key in routing.MODEL_KEYS if key in snapshot['settings']})
+        core.enforce_local_only(cfg)
+        snapshot.update(settings=cfg,dataset_id=dataset.id)
+    return snapshot
+
+
+def answer(body,owner,snapshot,main,progress,on_sources=None,previous=None):
     with progress.step('Checking accessible dataset knowledge'):
         validate(body,owner)
+    if not dataset_chat_general.requires_knowledge(body.text,body.summary,previous):
+        main.external_check(True,cfg=snapshot['settings'])
+        with progress.step('Answering or routing question'):
+            direct=dataset_chat_general.general_reply(body.text,snapshot,chat_limits(snapshot['settings']),previous)
+        if direct is not None:
+            with progress.step('Validating general answer'):
+                inspected={'knowledge_used':False,'checked_count':0,'cited_count':0,'dataset_count':0,
+                    'documents':0,'saved_results':0,'dataset_descriptions':0,'guidance':0}
+                if on_sources:on_sources(inspected)
+            return {'id':core.uid(),'role':'assistant','text':direct,'status':'completed','citations':[],
+                'source_summary':inspected,'review_actions':[],'model_selection':routing.public_selection(snapshot),
+                'created_at':time.time(),'tool_trace':[],
+                'request_route':{'routing_mode':'dataset_general_chat','knowledge_used':False}}
+    # Dataset answers retain the original complete mapping/embedding checks.
+    with progress.step('Resolving grounded knowledge configuration'):
+        if len(set(body.dataset_ids))==1:
+            snapshot=routing.execution_snapshot(routing.owned(body.dataset_ids[0],owner,'knowledge_base'),'chat',body.model_id)
         view=WorkspaceKnowledge(owner,body.dataset_ids,body.document_ids,body.summary)
     # The separate chat exposes no operation contracts, including @ commands.
-    count=re.fullmatch(r'\s*(?:how many|count|number of)\s+(?:(?:my|our|accessible|included|available|indexed|source)\s+)*(datasets?|documents?|files?)(?:\s+(?:are there|do i have|can i access))?[?.!\s]*',body.text,re.I)
-    listing=re.fullmatch(r'\s*(?:list|show|name|enumerate)(?:\s+me)?\s+(?:(?:all|my|our|accessible|included|available|indexed|source|the)\s+)*(datasets?|documents?|files?|filenames?)(?:\s+in\s+(?:the\s+)?(?:workspace|included knowledge))?[?.!\s]*',body.text,re.I)
-    if not count and re.search(r'\b(how many|number of|count)\b',body.text,re.I) and not body.summary:
+    request=dataset_chat_general.without_salutation(body.text)
+    count=re.fullmatch(r'\s*(?:how many|count|number of)\s+(?:(?:my|our|accessible|included|available|indexed|source)\s+)*(datasets?|documents?|files?)(?:\s+(?:are there|do i have|can i access))?[?.!\s]*',request,re.I)
+    listing=re.fullmatch(r'\s*(?:list|show|name|enumerate)(?:\s+me)?\s+(?:(?:all|my|our|accessible|included|available|indexed|source|the)\s+)*(datasets?|documents?|files?|filenames?)(?:\s+in\s+(?:the\s+)?(?:workspace|included knowledge))?[?.!\s]*',request,re.I)
+    if not count and re.search(r'\b(how many|number of|count)\b',request,re.I) and not body.summary:
         raise HTTPException(422,'Filtered counts are not available in dataset knowledge chat. Choose a precise document or dataset count.')
-    if not listing and re.search(r'\b(?:list|show|enumerate)\b.*\b(?:all|every)\b.*\b(?:datasets?|documents?|files?|filenames?)\b',body.text,re.I):
+    if not listing and re.search(r'\b(?:list|show|enumerate)\b.*\b(?:all|every)\b.*\b(?:datasets?|documents?|files?|filenames?)\b',request,re.I):
         raise HTTPException(422,'Choose an unfiltered dataset or file list. Ranked passages cannot establish a complete filtered list.')
     catalog_scope=count or listing
     types=['dataset'] if catalog_scope and catalog_scope[1].lower().startswith('dataset') else ['document'] if catalog_scope else ['dataset','document','document_chunk','extraction','application']
@@ -140,12 +172,12 @@ def run(body,owner,main,callback=None,cancelled=None):
     progress=AnswerProgress(progress_update)
     with progress.step('Resolving authorized chat model'):
         validate(body,owner)
-        snapshot=routing.execution_snapshot(routing.owned(body.dataset_ids[0],owner,'knowledge_base'),'chat',body.model_id) if len(set(body.dataset_ids))==1 else chat_snapshot(owner,body.model_id)
+        snapshot=chat_model_snapshot(body,owner)
     record=owned_chat(body.conversation_id,owner) if body.conversation_id else None
     # New threads have a fresh ID, not an Agent checkpoint or plan ID.
     id=record.id if record else core.uid()
     with core.document_lock('dataset-chat-'+id),token_usage.collect() as usage:
-        message=answer(body,owner,snapshot,main,progress,sources_update)
+        message=answer(body,owner,snapshot,main,progress,sources_update,core.store.json(record.ref).get('messages',[]) if record else None)
         check()
         with progress.step('Saving dataset chat response'):
             # Recheck access after inference before recording a completed reply.

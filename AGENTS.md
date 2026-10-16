@@ -19,3 +19,9 @@ Implemented and verified for the production Unified Chat path on 14 October 2026
 ## Repository cleanup
 
 Move retired files into the repository-root `delete/` folder, preserving their original relative paths, instead of permanently deleting them. Keep this archive outside application builds and active test discovery. Private state and generated artifacts must remain ignored by Git when moved there.
+
+## Dashboard general-chat exception (17 October 2026)
+
+The user now requires the separate Dashboard Dataset Knowledge Chat to answer greetings, small talk and clearly self-contained general-knowledge questions directly with the selected Chat model, without Unified Knowledge, embedding resolution or reranking. Use model-generated answers, never canned final replies. Keep authorization, model mapping/credentials, history isolation and post-inference access checks. Clearly disclose that no knowledge lookup was used; never invent citations or completed retrieval stages.
+
+Mixed requests, Aegis/application guidance, private/business facts, dataset/document/extraction questions and ambiguous/context-dependent follow-ups retain the full scoped hybrid retrieval, reranking, grounded generation and citation-validation workflow. A greeting prefix must not bypass grounding for the rest of a question. This exception applies only to Dashboard Dataset Knowledge Chat; preserve the original Aegis Agent and processing/onboarding workflows.

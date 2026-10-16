@@ -18,3 +18,14 @@ test('older answers and failed retrieval never invent checked-source counts',()=
  const older=DatasetChatStatus({message:{status:'completed',citations:[{index:1},{index:2}]}});assert.match(text(older),/Source counts were not recorded/);assert.doesNotMatch(text(older),/sources checked/);
  const failed=DatasetChatStatus({message:{status:'failed'}});assert.match(text(failed),/Needs attention/);assert.doesNotMatch(text(failed),/Answer ready|sources checked/);
 });
+
+test('general answers explicitly disclose no knowledge lookup without invented retrieval counts',()=>{
+ const tree=DatasetChatStatus({message:{status:'completed',request_route:{routing_mode:'dataset_general_chat'},source_summary:{knowledge_used:false,checked_count:0,cited_count:0,dataset_count:0}}});
+ assert.match(text(tree),/General answerNo knowledge lookup/);assert.match(text(tree),/Unified Knowledge was not searched/);
+ assert.doesNotMatch(text(tree),/sources checked|datasets searched|Source counts were not recorded/);
+});
+
+test('routing a question does not claim that retrieval has started',()=>{
+ const tree=DatasetChatStatus({message:{status:'streaming',answer_workflow:{steps:[{id:'route',label:'Answering or routing question',status:'running'}]}}});
+ assert.match(text(tree),/Understanding question/);assert.doesNotMatch(text(tree),/Searching Unified Knowledge/);
+});
