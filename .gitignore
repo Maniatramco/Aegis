@@ -34,5 +34,17 @@ ags_frontend/screenshots/
 # Private destination receipts from the portable application release helper.
 /ags_deploy/deployment-records/
 
+# Keep the deployment EXE local until end-to-end testing is complete.
+/ags_deploy/AegisDeploy/AegisDeploy.exe
+
 # Session-specific local design review notes.
 /design-qa.md
+
+# Private OCI deployment inputs stay local to each checkout.
+/ags_deploy/targets/
+
+# Archived desktop executables remain local.
+/delete/ags_deploy/AegisDeploy/
+
+# Private target settings beside the main deployment entry point.
+/ags_deploy/aegis-oci-inputs.json

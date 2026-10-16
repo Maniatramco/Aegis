@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location('release_cli', ROOT/'ags_deploy/release_cli.py')
+SPEC = importlib.util.spec_from_file_location('release_cli', ROOT/'ags_deploy/scripts/release_cli.py')
 cli = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(cli)
 helpers = cli.module_from(Path(__file__).with_name('test_code_release_check.py'), 'guard_fixtures')
@@ -96,7 +96,7 @@ class FakeRunner:
                     self.after['deployments'][name] = copy.deepcopy(item)
             self.receipt['backend_image' if component == 'frontend' else 'web_image'] = None
         script = Path(arguments[arguments.index('-File')+1])
-        destination = script.parent/'deployment-records/this-invocation.json'
+        destination = Path(arguments[arguments.index('-SourcePath')+1])/'ags_deploy/deployment-records/this-invocation.json'
         destination.parent.mkdir(exist_ok=True)
         destination.write_text(json.dumps(self.receipt), encoding='utf-8')
         self.last_receipt = str(destination)
@@ -117,8 +117,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         config.mkdir(parents=True)
         shutil.copyfile(ROOT/'ags_backend/ags_app/ags_config/runtime.toml', config/'runtime.toml')
         (self.source/'ags_frontend').mkdir()
-        (self.source/'ags_deploy').mkdir()
-        (self.source/'ags_deploy/deploy-aegis-code.ps1').write_text('test-helper', encoding='utf-8')
+        (self.source/'ags_deploy/scripts').mkdir(parents=True)
+        (self.source/'ags_deploy/scripts/deploy-aegis-code.ps1').write_text('test-helper', encoding='utf-8')
         self.runner = FakeRunner(self.directory)
         digest = cli.hashlib.sha256((config/'runtime.toml').read_bytes().replace(b'\r\n', b'\n')).hexdigest()
         for snapshot in (self.runner.before, self.runner.after):
@@ -486,6 +486,24 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
 
 class InputAndSchemaTests(unittest.TestCase):
+    def test_helper_relocation_preserves_fingerprint_and_prefers_current_layout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)
+            for component in ('ags_frontend', 'ags_backend', 'ags_database'):
+                (source/component).mkdir()
+            legacy = source/'ags_deploy/deploy-aegis-code.ps1'
+            legacy.parent.mkdir()
+            legacy.write_text('same committed helper', encoding='utf-8')
+            self.assertEqual(cli.release_helper(source), legacy)
+            expected = cli.source_fingerprint(source)
+            current = source/'ags_deploy/scripts/deploy-aegis-code.ps1'
+            current.parent.mkdir()
+            legacy.replace(current)
+            self.assertEqual(cli.release_helper(source), current)
+            self.assertEqual(cli.source_fingerprint(source), expected)
+            legacy.write_text('retired helper must not be selected', encoding='utf-8')
+            self.assertEqual(cli.release_helper(source), current)
+            self.assertEqual(cli.source_fingerprint(source), expected)
     def test_y_n_flags_select_components_and_reject_ambiguous_values(self):
         with tempfile.TemporaryDirectory() as temporary:
             path=Path(temporary)/'target.json'
@@ -648,7 +666,7 @@ class InputAndSchemaTests(unittest.TestCase):
             for relative in ('ags_frontend/Dockerfile', 'ags_backend/Dockerfile', 'ags_database/install.sql',
                              'ags_database/deploy-oci-database.ps1', 'ags_deploy/deploy-aegis-code.ps1'):
                 path = repository/relative
-                path.parent.mkdir(exist_ok=True)
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('committed', encoding='utf-8')
             runner = cli.Runner()
             for arguments in (['init'], ['add', '.'], ['-c', 'user.name=Offline test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'fixture']):
@@ -667,18 +685,22 @@ class InputAndSchemaTests(unittest.TestCase):
             repository = base/'repository'
             repository.mkdir()
             for relative in ('ags_frontend/Dockerfile', 'ags_backend/Dockerfile', 'ags_database/install.sql',
-                             'ags_database/deploy-oci-database.ps1', 'ags_deploy/deploy-aegis-code.ps1'):
+                             'ags_database/deploy-oci-database.ps1', 'ags_deploy/scripts/deploy-aegis-code.ps1'):
                 path = repository/relative
-                path.parent.mkdir(exist_ok=True)
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('committed fixture', encoding='utf-8')
             runner = cli.Runner()
             for arguments in (['init'], ['add', '.'], ['-c', 'user.name=Offline test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'fixture']):
                 runner.capture(['git', '-C', str(repository), *arguments])
             configuration = base/'kubeconfig.yaml'
             configuration.write_text('fixture; stub kubectl handles local config only')
-            inputs = base/'inputs.json'
+            inputs = repository/'ags_deploy/aegis-oci-inputs.json'
             inputs.write_text(json.dumps({'SourcePath': str(repository), 'Ref': 'HEAD',
                                           'Kubeconfig': str(configuration), 'DatabaseAction': 'verify'}))
+            launcher = repository/'ags_deploy/deploy.ps1'
+            shutil.copyfile(ROOT/'ags_deploy/deploy.ps1', launcher)
+            for name in ('release_cli.py', 'check-code-release.py', 'oci_schema_check.py', 'oracle_release.py'):
+                shutil.copyfile(ROOT/'ags_deploy/scripts'/name, repository/'ags_deploy/scripts'/name)
             stub = base/'stub.py'
             stub.write_text('import sys,json,subprocess,runpy\nfrom unittest.mock import patch\noriginal_run=subprocess.run\n'
                             'def fake_run(arguments,**kwargs):\n'
@@ -686,15 +708,21 @@ class InputAndSchemaTests(unittest.TestCase):
                             ' assert arguments[1:]==["--kubeconfig",'+repr(str(configuration))+',"config","view","-o","json"],"Remote access attempted"\n'
                             ' data={"contexts":[{"name":"offline","context":{"cluster":"fake"}}],"clusters":[{"name":"fake","cluster":{"server":"https://offline.invalid"}}]}\n'
                             ' return subprocess.CompletedProcess(arguments,0,json.dumps(data),"")\n'
-                            'assert sys.argv[1:4]==["-B","-X","utf8"]\nsys.argv=sys.argv[4:]\n'
+                            'assert sys.argv[1:5]==["-u","-B","-X","utf8"]\nsys.argv=sys.argv[5:]\n'
                             'with patch("subprocess.run",fake_run):runpy.run_path(sys.argv[0],run_name="__main__")\n')
             fake_python = base/'fake-python.cmd'
             fake_python.write_text('@"'+sys.executable+'" -B -X utf8 "'+str(stub)+'" %*\r\n')
             result = subprocess.run([shutil.which('powershell'), '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                                     '-File', str(ROOT/'ags_deploy/deploy.ps1'), '-Inputs', str(inputs), '-Python', str(fake_python)],
+                                     '-File', str(launcher), '-CheckOnly', '-Python', str(fake_python)],
                                     input='no\n', capture_output=True, text=True, timeout=40,
                                     env=dict(os.environ, PATH=str(base)+os.pathsep+os.environ['PATH']))
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Aegis deployment launcher started.', result.stdout)
+            self.assertIn('Mode: READ-ONLY PREFLIGHT', result.stdout)
+            self.assertIn('Inputs: '+str(inputs), result.stdout)
+            self.assertIn('Preparing committed source and target inputs...', result.stdout)
+            self.assertIn('Aegis deployment process exited with code 1.', result.stdout)
+            self.assertLess(result.stdout.index('launcher started.'), result.stdout.index('Type CONNECT'))
             self.assertIn('Type CONNECT', result.stdout, result.stderr)
             self.assertIn('Not approved', result.stderr)
             self.assertNotIn('Remote access attempted', result.stderr)
@@ -712,7 +740,7 @@ class InputAndSchemaTests(unittest.TestCase):
                     (source/component).mkdir(parents=True)
                     (source/component/'Dockerfile').write_text('synthetic build context')
                 helper = base/'deploy-aegis-code.ps1'
-                shutil.copyfile(ROOT/'ags_deploy/deploy-aegis-code.ps1', helper)
+                shutil.copyfile(ROOT/'ags_deploy/scripts/deploy-aegis-code.ps1', helper)
                 deployments = base/'deployments.json'
                 deployments.write_text(json.dumps({'items':helpers.fixtures()[0]}))
                 kubeconfig = base/'kubeconfig.yaml'
@@ -765,7 +793,7 @@ function global:kubectl {
                 for arguments in updates:
                     component = 'frontend' if 'deployment/aegis-web' in arguments else 'backend'
                     self.assertIn(component, chosen)
-                receipt = json.loads(next((base/'deployment-records').glob('*.json')).read_text(encoding='utf-8-sig'))
+                receipt = json.loads(next((source/'ags_deploy/deployment-records').glob('*.json')).read_text(encoding='utf-8-sig'))
                 self.assertEqual(set(receipt['components']), chosen)
                 for component, key in (('frontend','web_image'), ('backend','backend_image')):
                     self.assertEqual(receipt[key] is not None, component in chosen)

@@ -4,7 +4,7 @@
 .SYNOPSIS
 One command for an Aegis database/schema and frontend/API/worker code release.
 .DESCRIPTION
-Without arguments, prompts for missing non-secret inputs. -Inputs accepts a JSON
+Without -Inputs, uses aegis-oci-inputs.json beside this script when present, then prompts for missing non-secret inputs. -Inputs accepts a JSON
 file based on deployment-inputs.example.json. Requires prepared OCI resources,
 existing authentication and Python 3.10+. DB_Object, DeployFrontend and DeployBackend
 use Y/N. DB_ReleaseFile selects the ordered database release JSON. DB_Object=Y needs
@@ -27,13 +27,25 @@ Credits: uses the existing Aegis database and application release helpers.
 param([string]$Inputs, [switch]$CheckOnly, [string]$Python)
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
+if (-not $Inputs) {
+    $defaultInputs = Join-Path $PSScriptRoot 'aegis-oci-inputs.json'
+    if (Test-Path -LiteralPath $defaultInputs -PathType Leaf) { $Inputs = $defaultInputs }
+}
+Write-Host 'Aegis deployment launcher started.'
+if ($CheckOnly) { Write-Host 'Mode: READ-ONLY PREFLIGHT (-CheckOnly); no builds or deployment changes.' }
+else { Write-Host 'Mode: RELEASE; CONNECT and PUBLISH approval are still required.' }
 if (-not $Python) {
     $localPython = Join-Path $repository '.venv\Scripts\python.exe'
     if (Test-Path -LiteralPath $localPython -PathType Leaf) { $Python = $localPython }
     else { $Python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source }
 }
-$cliArguments = @('-B', '-X', 'utf8', (Join-Path $PSScriptRoot 'release_cli.py'))
+$cliArguments = @('-u', '-B', '-X', 'utf8', (Join-Path $PSScriptRoot 'scripts\release_cli.py'))
 if ($Inputs) { $cliArguments += @('--inputs', $Inputs) }
 if ($CheckOnly) { $cliArguments += '--check-only' }
+Write-Host ('Python: ' + $Python)
+if ($Inputs) { Write-Host ('Inputs: ' + $Inputs) }
+Write-Host 'Preparing committed source and target inputs...'
 & $Python @cliArguments
-if ($LASTEXITCODE -ne 0) { throw "Aegis deployment stopped (exit $LASTEXITCODE). Read the phase/result above; no automatic retry or rollback was attempted." }
+$deploymentExitCode = $LASTEXITCODE
+Write-Host ('Aegis deployment process exited with code {0}.' -f $deploymentExitCode)
+if ($deploymentExitCode -ne 0) { throw "Aegis deployment stopped (exit $deploymentExitCode). Read the phase/result above; no automatic retry or rollback was attempted." }

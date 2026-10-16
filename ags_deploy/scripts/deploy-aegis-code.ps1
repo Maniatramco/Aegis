@@ -109,7 +109,7 @@ foreach ($image in $selectedImages) {
     $digests[$image] = $taskDigestMatches[0]
 }
 
-$receiptDirectory = Join-Path $PSScriptRoot 'deployment-records'
+$receiptDirectory = Join-Path $source 'ags_deploy/deployment-records'
 New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
 $receipt = Join-Path $receiptDirectory "$Release-$([guid]::NewGuid().ToString('N').Substring(0,8)).json"
 @{

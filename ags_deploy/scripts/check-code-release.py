@@ -183,7 +183,7 @@ def compare(baseline, current, receipt=None, components=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=('snapshot', 'verify'))
-    parser.add_argument('--source-path', type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument('--source-path', type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument('--kubeconfig', type=Path, required=True)
     parser.add_argument('--context', required=True)
     parser.add_argument('--namespace', default='aegis-oci')

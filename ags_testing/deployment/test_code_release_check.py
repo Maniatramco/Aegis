@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location('code_release_check', ROOT/'ags_deploy/check-code-release.py')
+SPEC = importlib.util.spec_from_file_location('code_release_check', ROOT/'ags_deploy/scripts/check-code-release.py')
 guard = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(guard)
 

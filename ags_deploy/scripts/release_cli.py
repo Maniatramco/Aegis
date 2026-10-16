@@ -20,7 +20,7 @@ import uuid
 import zipfile
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 FIELDS = {'SourcePath', 'Ref', 'Kubeconfig', 'Context', 'Namespace', 'Registry',
           'RegistryNamespace', 'Platform', 'AppUrl', 'DatabaseAction', 'WalletPath',
           'DatabaseOwner', 'ServiceAlias', 'ExpectedService', 'SqlclPath',
@@ -36,9 +36,9 @@ def module_from(path, name):
     return module
 
 
-GUARD = module_from(ROOT/'ags_deploy/check-code-release.py', 'release_guard')
-SCHEMA = module_from(ROOT/'ags_deploy/oci_schema_check.py', 'oci_schema_check')
-ORACLE_RELEASE = module_from(ROOT/'ags_deploy/oracle_release.py', 'oracle_release')
+GUARD = module_from(Path(__file__).with_name('check-code-release.py'), 'release_guard')
+SCHEMA = module_from(Path(__file__).with_name('oci_schema_check.py'), 'oci_schema_check')
+ORACLE_RELEASE = module_from(Path(__file__).with_name('oracle_release.py'), 'oracle_release')
 
 
 class DeploymentStopped(RuntimeError):
@@ -124,6 +124,16 @@ def load_inputs(path):
     return data
 
 
+def release_helper(source):
+    # Source refs frozen before the folder cleanup retain the original layout.
+    for relative in ('ags_deploy/scripts/deploy-aegis-code.ps1',
+                     'ags_deploy/deploy-aegis-code.ps1'):
+        helper = source/relative
+        if helper.is_file():
+            return helper
+    raise DeploymentStopped('The selected commit lacks required release files: ags_deploy/scripts/deploy-aegis-code.ps1')
+
+
 def export_commit(source_root, ref, directory, runner):
     commit = runner.capture(['git', '-C', str(source_root), 'rev-parse', '--verify', '--end-of-options', ref+'^{commit}']).strip()
     require_pattern(commit, r'[a-f0-9]{40,64}', 'source commit')
@@ -137,9 +147,10 @@ def export_commit(source_root, ref, directory, runner):
                 raise DeploymentStopped('Invalid source archive path')
         package.extractall(source)
     for relative in ('ags_frontend/Dockerfile', 'ags_backend/Dockerfile', 'ags_database/install.sql',
-                     'ags_database/deploy-oci-database.ps1', 'ags_deploy/deploy-aegis-code.ps1'):
+                     'ags_database/deploy-oci-database.ps1'):
         if not (source/relative).is_file():
             raise DeploymentStopped('The selected commit lacks required release files: '+relative)
+    release_helper(source)
     return source, commit
 
 
@@ -149,7 +160,7 @@ def source_fingerprint(source):
         for path in sorted((source/prefix).rglob('*')):
             if path.is_file():
                 hashes[path.relative_to(source).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
-    hashes['release-helper'] = hashlib.sha256((source/'ags_deploy/deploy-aegis-code.ps1').read_bytes()).hexdigest()
+    hashes['release-helper'] = hashlib.sha256(release_helper(source).read_bytes()).hexdigest()
     return GUARD.fingerprint(hashes)
 
 
@@ -264,6 +275,8 @@ EXIT SUCCESS
 
 
 class Workflow:
+    requires_powershell = True
+
     def __init__(self, values, check_only=False, runner=None, input_fn=input):
         self.values = dict(values)
         self.frontend = flag(values.get('DeployFrontend', 'Y'), 'DeployFrontend', True)
@@ -333,10 +346,10 @@ class Workflow:
         self.directory.mkdir(parents=True, exist_ok=False)
         self.source, self.commit = export_commit(self.source_root, ref, self.directory, self.runner)
         self.source_hash = source_fingerprint(self.source)
-        if len(self.components) == 1 and 'AEGIS_COMPONENT_SELECTION_V1' not in (self.source/'ags_deploy/deploy-aegis-code.ps1').read_text(encoding='utf-8-sig'):
+        if len(self.components) == 1 and 'AEGIS_COMPONENT_SELECTION_V1' not in release_helper(self.source).read_text(encoding='utf-8-sig'):
             raise DeploymentStopped('The selected source commit predates component selection; choose a commit containing the updated release helper')
         self.powershell = shutil.which('pwsh') or shutil.which('powershell')
-        if not self.powershell:
+        if not self.powershell and (self.requires_powershell or action == 'install'):
             raise DeploymentStopped('PowerShell is required for the existing release helpers')
         self.record.update(source_commit=self.commit, source_fingerprint=self.source_hash,
                            database_action=action, components=self.components, release=self.release,
@@ -540,7 +553,7 @@ class Workflow:
                      '-Platform', self.platform, '-Release', self.release, '-SkipBuild']
         if len(self.components) == 1:
             arguments += ['-Components', self.components[0].capitalize()]
-        receipt = self.ps_helper(self.source/'ags_deploy/deploy-aegis-code.ps1', arguments, stream=True).resolve(strict=True)
+        receipt = self.ps_helper(release_helper(self.source), arguments, stream=True).resolve(strict=True)
         expected_directory = (self.source/'ags_deploy/deployment-records').resolve()
         if receipt.parent != expected_directory:
             raise DeploymentStopped('The reported receipt is outside this invocation source directory')

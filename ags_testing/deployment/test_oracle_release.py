@@ -12,7 +12,7 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('release_cli', ROOT/'ags_deploy/release_cli.py')
+spec = importlib.util.spec_from_file_location('release_cli', ROOT/'ags_deploy/scripts/release_cli.py')
 cli = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cli)
 oracle = cli.ORACLE_RELEASE
