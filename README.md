@@ -1,58 +1,165 @@
 # Aegis
 
-Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js interface, FastAPI, LangGraph agents and a durable Python worker.
+Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Final handover branch: `ags_sprint1`.** The original source freeze remains tagged `aegis-freeze-2026-10-15`.
+**Handover branch: `ags_sprint1`. Application base version: `v26.1.0.0`.** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
-Read the architecture handover in [Word](ags_docs/Aegis_Architecture_Handover.docx) or [PDF](ags_docs/Aegis_Architecture_Handover.pdf) for the approved Mural diagram, end-to-end workflows, observed OCI resources, running technology versions and model placement.
+## Start here
 
-Use the single [final OCI deployment PDF](ags_docs/Aegis_OCI_Deployment_Guide.pdf) in order: **Section 1 Resource provisioning (pages 2-7)** covers OCI/model prerequisites and their purposes, the recorded Mumbai pilot example and initial installation handoff. **Section 2 Code deployment (pages 8-18)** includes the workflow diagram on page 9, the AI skill, Windows PowerShell and OCI Cloud Shell routes, component flags, approvals, verification and recovery. Windows automatic setup is on pages 10-11 and saved-file deployment on page 15; Cloud Shell setup and execution are on pages 16-17. It replaces the separate database, backend and Kubernetes deployment guides. Provisioning and initial configuration remain separate from the code/object release command and AI deployment skill.
+| Need | Maintained reference |
+| --- | --- |
+| Architecture, technology stack, workflows, approved Mural diagram and model placement | [Architecture handover PDF](ags_docs/Aegis_Architecture_Handover.pdf) or [editable Word document](ags_docs/Aegis_Architecture_Handover.docx) |
+| Provisioning prerequisites and initial installation handoff | [OCI deployment guide](ags_docs/Aegis_OCI_Deployment_Guide.pdf), Section 1, pages 2-7 |
+| Windows workstation setup, destination JSON, build and deployment commands | [Windows deployment README](ags_deploy/README.md); deployment PDF pages 10-11 and 15 |
+| AI-assisted prerequisite setup and deployment | [Aegis deployment agent skill](.agents/skills/aegis-deploy/SKILL.md) |
+| Database scripts and object release behavior | [Database README](ags_database/README.md) |
+| Local development and runtime launchers | [Local-use README](ags_local_use/README.md) |
+| Automated tests, fixtures and manual QA | [Testing README](ags_testing/README.md) |
 
-## Deploy with one command
+The two PDFs above are the documents to share for architecture/technology and provisioning/deployment. Deployment PDF Section 2 (pages 8-18) includes the workflow on page 9, Windows and Cloud Shell instructions, component selection, approvals, verification and recovery. Provisioning and initial application configuration are separate from the code/object release scripts and deployment skill.
 
-Copy [the non-secret input template](ags_deploy/templates/deployment-inputs.example.json) outside Git, fill the destination values, and run from the repository root in an interactive PowerShell terminal:
+## Prerequisites before deployment
+
+The normal Windows workflow is **Setup-Aegis.ps1, then Deploy-Aegis.ps1**. Have these ready first:
+
+- An open Windows PowerShell 5.1 or newer window and a local Aegis Git checkout with saved, validated source files.
+- App Installer / WinGet and internet access for missing tool installation. For application releases, a workstation that supports Docker Desktop Linux containers, installer/UAC access when required, and at least 10 GiB free on the source/work drive. Actual images/builds can require more space.
+- An **existing prepared OCI environment** with compatible Aegis workloads, database access, persistent state, storage, Secrets, required model/reranker assets and HTTPS routing as applicable. A bare OKE cluster or new tenancy is insufficient.
+- Your destination's usable kubeconfig/context, authorized OCI authentication and registry access; a database wallet and authorized credentials when database objects are selected.
+- A filled private destination JSON and truthful test/CI evidence for the source being released. Keep passwords, tokens, private keys and wallets out of Git, JSON, command arguments and logs.
+
+Normal setup reuses working tools and installs supported missing Git, Python 3.12, kubectl and Docker Desktop through WinGet as applicable. It creates a missing project `.venv`, installs an isolated OCI CLI if kubeconfig authentication needs it, and the pinned Oracle driver for database object releases. WSL/Docker setup, private login, UAC and restart prompts can require operator action. It cannot provide credentials, grant OCI access or create the destination resources. It does not restart Windows automatically.
+
+Setup does not clone the repository. If Git is needed before cloning, follow the [manual tool installation commands](ags_deploy/README.md#manual-reference-install-missing-workstation-tools), install Microsoft's App Installer first if WinGet is unavailable, then reopen PowerShell. Local Node/npm installation is needed for local frontend development/testing, while deployment installs application dependencies inside the maintained Docker images.
+
+## Windows quick start for a colleague
+
+### 1. Obtain the source
+
+If you do not already have a checkout, run in a directory where a new `Aegis` folder can be created:
 
 ```powershell
-.\ags_deploy\deploy.ps1 -Inputs C:\aegis-target\target.json
+git clone --branch ags_sprint1 https://github.com/Maniatramco/Aegis.git
+Set-Location .\Aegis\ags_deploy
 ```
 
-With a private `ags_deploy/aegis-oci-inputs.json` beside the script, `-Inputs` can be omitted. That file is ignored by Git. Supporting implementations are under `ags_deploy/scripts/`; the private target is not a distributable template.
+For an existing checkout, open its `ags_deploy` folder instead. Review any saved local changes before deploying; do not overwrite the checkout or reset someone else's work.
 
-To build inside OCI without Docker Desktop, use the same Y/N inputs with Linux paths in the correct tenancy's **Cloud Shell**:
+### 2. Prepare your environment's private JSON
+
+Run from `ags_deploy`. Create the destination file from the [clean non-secret template](ags_deploy/templates/deployment-inputs.example.json), then edit it:
+
+```powershell
+New-Item -ItemType Directory -Path 'C:\aegis-target' -Force
+if (-not (Test-Path -LiteralPath 'C:\aegis-target\colleague-oci.json')) {
+    Copy-Item -LiteralPath '.\templates\deployment-inputs.example.json' -Destination 'C:\aegis-target\colleague-oci.json'
+}
+notepad 'C:\aegis-target\colleague-oci.json'
+```
+
+Fill the local source path (or leave `SourcePath` blank), component selections, destination kubeconfig/context/namespace, registry, platform, public URL and validation evidence. Fill the database identity/wallet fields when `DB_Object` is `Y`. Use your own prepared environment's values and credentials. The template initially selects database objects and both application components; review every `Y`/`N` before running it. See the [field descriptions and component examples](ags_deploy/README.md#prepare-the-target-json).
+
+Keep a separate private JSON for each tenancy/cluster. Use the **same file on both commands** below. If `-Inputs` is omitted, the scripts use the ignored `ags_deploy/aegis-oci-inputs.json` beside them. Filled destination files are private operator state, not distributable templates.
+
+### 3. Run prerequisite setup
+
+```powershell
+.\Setup-Aegis.ps1 -Inputs 'C:\aegis-target\colleague-oci.json'
+```
+
+Complete installation/credential prompts and type `CONNECT` when asked to authorize remote read-only checks. Setup checks the selected source, tools, target access, registry metadata and schema/configuration as applicable. It does not build or publish images, apply database DDL, update workloads or run application regressions.
+
+Continue only after successful completion prints **`AEGIS_PREREQUISITES_READY`**. If setup stops, inspect its exact printed report, resolve the stated issue and rerun the same setup command. Complete any requested Windows restart yourself before retrying. The marker confirms checks at that time; it does not guarantee image build, registry push or rollout success.
+
+### 4. Build and deploy
+
+```powershell
+.\Deploy-Aegis.ps1 -Inputs 'C:\aegis-target\colleague-oci.json'
+```
+
+The release performs **CONNECT -> preflight -> selected image builds -> saved plan -> PUBLISH -> release -> verification**. Review the exact source, destination, images, database action and restart impact in the printed `plan.json` before typing `PUBLISH`. There is no additional manual application build command. Setup and deployment never auto-answer approval words.
+
+## The two Windows invocation methods
+
+Both methods use the same prerequisite setup, target JSON and maintained release workflow. Run from `ags_deploy`; choose one release command per run.
+
+| Method | Optional read-only release preflight | Build and release |
+| --- | --- | --- |
+| Main script | `.\deploy.ps1 -Inputs 'C:\aegis-target\colleague-oci.json' -CheckOnly` | `.\deploy.ps1 -Inputs 'C:\aegis-target\colleague-oci.json'` |
+| Shortcut scripts | `.\Check-Aegis.ps1 -Inputs 'C:\aegis-target\colleague-oci.json'` | `.\Deploy-Aegis.ps1 -Inputs 'C:\aegis-target\colleague-oci.json'` |
+
+The shortcuts call `deploy.ps1` and pause so the result can be read. A release already includes target preflight; a separate `Check-Aegis.ps1` invocation is optional. `Setup-Aegis.ps1 -CheckOnly` checks prerequisites without installing tools, creating a virtual environment, starting Docker or performing registry login; it still requires permission for remote read-only checks and writes local reports.
+
+## Saved source, component selection and database behavior
+
+Each normal Windows release snapshots saved local application/database source and the maintained release helper, including non-ignored new files and saved deletions. No Git commit or JSON `Ref` update is required. Private state, credentials, ignored new files, generated output and the `delete/` archive are excluded. The plan records `source_mode: working-tree`, the base commit, snapshot fingerprint and `source-manifest.json`; the saved snapshot is the actual build input. Save and validate intended edits before starting. Later edits go into a subsequent run.
+
+Each invocation runs the selected Docker builds; unchanged layers may use cache. Saving a file alone does not trigger a deployment. For an explicitly committed-source release, add `-CommittedSource` to both setup and deployment; only that mode exports the JSON `Ref` and excludes uncommitted edits.
+
+| Release | `DB_Object` | `DeployFrontend` | `DeployBackend` |
+| --- | --- | --- | --- |
+| Frontend and backend code, no database DDL | N | Y | Y |
+| Frontend only | N | Y | N |
+| Backend API and worker only | N | N | Y |
+| Database objects only | Y | N | N |
+
+All N is rejected. `DB_ReleaseFile` normally selects [ags_database/release.json](ags_database/release.json). Matching objects are preserved, listed supported missing objects can be created after approval, and incompatible existing definitions stop the release. The file can explicitly permit a missing app user/schema inside the existing database; show its grants/quota and objects in the final plan before approval. Existing accounts, settings, objects and data remain intact. This is not infrastructure provisioning, a data import or an arbitrary migration runner.
+
+Database-only releases do not require Docker or Kubernetes. With database objects disabled, a backend release still needs read-only schema compatibility and active-job checks; frontend-only releases make no Oracle queries. Use private password prompts. A backup reference is optional and is not required or prompted for.
+
+## Deployment agent skill
+
+The shareable agent skill is included in this repository at [.agents/skills/aegis-deploy/SKILL.md](.agents/skills/aegis-deploy/SKILL.md), with its [agent metadata](.agents/skills/aegis-deploy/agents/openai.yaml). It covers workstation setup, private target inputs, saved-source builds, plan approval, verification and failure handling. Ask your agent:
+
+> Use the repository's aegis-deploy skill to prepare my Windows prerequisites, verify the destination in my private target JSON, and build and deploy Aegis after I approve the exact release plan.
+
+Give the agent your actual checkout and private JSON paths; provide secrets through private prompts rather than chat. Approve read-only connection scope and the exact publication plan separately. The skill uses the same maintained scripts and prepared-resource boundary as the manual route. The [aegis-release skill](.agents/skills/aegis-release/SKILL.md) covers source freezes and handover maintenance.
+
+## Verify the outcome and handle stops
+
+A completed application release prints `Release completed; configuration checks passed`, the application URL, exact receipt/record paths and exit code 0. A successful setup or `-CheckOnly` run is not a deployment. Database-only releases report their database result without claiming an application rollout. Retain the exact plan, result and receipt printed by that invocation; do not pick a guessed or latest record.
+
+Setup reports are under `ags_runtime/deployment-setup/setup-.../result.json`; release records are under `ags_deploy/deployment-records/release-.../`. They remain ignored by Git. Read the [outcome and troubleshooting sections](ags_deploy/README.md#confirm-the-outcome) for commands and common failures, including missing approval, hidden/closed terminals and Docker/authentication issues.
+
+Releases preserve infrastructure, configuration, model mappings, persistent state and unselected components. Selected Recreate deployments restart pods and can briefly interrupt service. On failure, inspect completed phases and actual images before proposing recovery. There is no automatic retry or rollback. Setup/deployment do not run regression, upload/extraction or model inference tests; supply truthful source validation evidence and run only authorized acceptance checks.
+
+## Application version and Connections footer
+
+The displayed base version is defined in [application-version.json](ags_frontend/app/application-version.json). The compact footer shows **Connections** and **v26.1.0.0**; hover, focus or click Connections to inspect service details. AI model hosting is derived from authorized dataset defaults: Gemini is labeled GCP, Ollama Local, and mixed connections can show Local / GCP. This metadata is not a provider health test or a change to model registrations.
+
+## Additional OCI route and current limitation
+
+The separate Cloud Shell route uses committed source, Linux paths and Podman. It is not one of the two Windows invocation methods above. See deployment PDF pages 16-17 for preparation and execution:
 
 ```bash
 bash ./ags_deploy/cloud_shell/deploy-cloud-shell.sh --inputs ~/aegis-private/target.json
 ```
 
-Add `--check-only` for read-only preflight. This uses Podman and existing Cloud Shell storage, with native architecture and remaining free-hour checks. Python 3.12 is supplied by Cloud Shell; DB object creation also needs the pinned Oracle driver in a private tool environment. See pages 15-16 of the final PDF for source checkout, kubeconfig, private wallet/registry login and input preparation. This is the OCI Cloud Shell route; OCI DevOps managed build runners are not enabled. Cloud Shell compute is free within the tenancy allowance; existing hosting and registry storage retain their own pricing and limits. No paid fallback or new infrastructure is created.
+Add `--check-only` for read-only preflight. Native architecture, disk space, remaining Cloud Shell allowance, existing registry login and applicable private database wallet/driver must be checked. The route does not provision infrastructure or choose a paid fallback. OCI DevOps managed build runners are not enabled by these Windows/Cloud Shell scripts.
 
-**Current Mumbai limitation (16 October 2026):** the existing OKE API access rules reject Cloud Shell's public connection. The user chose to keep all network settings unchanged. The route therefore cannot complete a release to this cluster from the current Cloud Shell session; a successful target preflight remains mandatory. No firewall exception, registry push, database DDL or workload rollout was performed while preparing this route.
+**Recorded Mumbai limitation, 16 October 2026:** the existing OKE API rules rejected the Cloud Shell public connection. Network settings were kept unchanged. This target requires an authorized connection that passes preflight before any publication; do not infer availability from this historical note or change firewall rules as part of a code release.
 
-The JSON controls each component with `"Y"` or `"N"`: `DB_Object`, `DeployFrontend`, and `DeployBackend`. Backend includes API and worker. `DB_ReleaseFile` selects the ordered database manifest, normally [ags_database/release.json](ags_database/release.json). Matching objects are skipped, missing supported objects are created, and incompatible existing definitions stop the release. The manifest can explicitly permit a missing application user/schema inside the existing database; existing accounts and settings are preserved. This does not create the physical Oracle database, provision OCI infrastructure, import data or run arbitrary migrations.
+## Source layout, technology and validation
 
-Type `CONNECT` to permit read-only target discovery, then review the exact source, target, missing DB objects and selected images before typing `PUBLISH`. Add `-CheckOnly` for read-only preflight without builds, DDL, pushes or rollout. The Windows command snapshots saved local application/database source by default, including new non-ignored source files; no Git commit or JSON `Ref` update is required. Add `-CommittedSource` to use the committed JSON `Ref` instead. See the [Windows setup and deployment README](ags_deploy/README.md) for the two-script colleague workflow. OCI Cloud Shell continues to use committed source. Keep secrets out of JSON and use private password prompts. A backup reference is optional and is not prompted for. Tests are not run by this command; supply truthful source validation evidence.
+Application code lives in `ags_backend/` and `ags_frontend/`; native Oracle scripts in `ags_database/`; release/authentication helpers in `ags_deploy/scripts/` and `ags_deploy/ags_oke/`; local runtime options in `ags_local_use/`; and automated tests, fixtures and QA tools in `ags_testing/`. Preserve the [Unified Chat workflow](AGENTS.md): enforce scope, hybrid retrieval, reranking, generation and answer/citation validation.
 
-For AI-assisted deployment, use [aegis-deploy](.agents/skills/aegis-deploy/SKILL.md), supply the same target inputs and selected components, and approve discovery and the detailed release plan separately. The final PDF contains the complete request to give the AI. The [aegis-release skill](.agents/skills/aegis-release/SKILL.md) covers source freezes and handover maintenance.
+The release Dockerfiles retain immutable Python 3.12.15 and Node.js 22.23.3 base digests and committed dependency locks. The OCI backend profile includes Oracle/OCI and native AWS/Google SDKs, with local in-process embeddings disabled. Existing model files, mappings, endpoints and runtime configuration are preserved. The architecture handover records observed technology versions and deployment placement; a documentation/GitHub push does not update the running application.
 
-Existing Deployments, database access, state, storage, Secrets, reranker/model assets and HTTPS routing must already be prepared. An empty tenancy or bare OKE cluster is insufficient. The release preserves configuration and model registrations; the existing Recreate strategy can briefly interrupt service when images change. Inspect the exact printed record/receipt after failure; no automatic retry or rollback is provided.
+Use the maintained files linked above rather than superseded guide names. Any historical `delete/` archive stays outside builds and active test discovery. Private state, generated reports, wallets and release records stay out of Git.
 
-## Source and documentation
-
-Application source is under `ags_backend/` and `ags_frontend/`; native Oracle scripts are under [ags_database](ags_database/README.md); maintained release/authentication tools are under `ags_deploy/`. Local launchers and alternative runtime manifests are grouped under [ags_local_use](ags_local_use/README.md). Tests, fixtures and manual QA tools are centralized under [ags_testing](ags_testing/README.md). Preserve the [Unified Chat workflow](AGENTS.md).
-
-`ags_docs/` contains one deployment PDF and the architecture handover in Word/PDF with its approved diagram. Superseded guides are archived under root `delete/` with their original paths. This archive stays outside application builds and active test discovery. Private state, generated reports, wallets and release records stay out of Git.
-
-The release Dockerfiles retain immutable live-matching Python 3.12.15 and Node.js 22.23.3 base digests and committed dependency locks. The OCI backend profile includes the existing Oracle/OCI and native AWS/Google SDKs, with local in-process embeddings disabled. Model files, mappings, endpoints and runtime configuration are preserved. Documentation and branch pushes do not deploy the running application.
-
-## Backend dependencies and manual tests
-
-Use Python 3.12. `ags_backend/requirements.txt` contains the pinned shared runtime, including OCI and CPU reranking. Optional Oracle, native cloud-provider and local-embedding dependencies remain in their named runtime requirements files. Test dependencies live in `ags_testing/backend/requirements.txt`.
-
-Run backend tests from the repository root in PowerShell (`py -3.12 -m venv .venv` once if needed):
+For manual validation, follow [ags_testing/README.md](ags_testing/README.md). From the repository root with a supported project Python environment:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r ags_testing\backend\requirements.txt
 .\.venv\Scripts\python.exe -B ags_testing\run_backend_tests.py
 ```
 
-The runner uses temporary SQLite storage and mock providers in a child process, clearing inherited cloud settings and opt-in integration flags. For one file, append `backend/test_api_documentation.py -v`. Frontend checks retain their `npm run test:*` and `typecheck` commands. See the [testing guide](ags_testing/README.md) for all commands and opt-in integrations. Application startup checks stay with runtime code. These isolated tests do not deploy or access live OCI.
+The backend runner uses temporary SQLite storage and mock providers in a child process. For frontend validation, install dependencies once with `npm --prefix ags_frontend ci`, then run:
+
+```powershell
+npm --prefix ags_frontend run test:unit
+npm --prefix ags_frontend run typecheck
+npm --prefix ags_frontend run build
+```
+
+These local checks do not deploy or establish live OCI/provider acceptance. Use the testing guide for deployment guard tests and opt-in integration checks; report actual results for the source being released.

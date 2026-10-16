@@ -179,6 +179,14 @@ The shortcuts call `deploy.ps1`; choose one release command per run. `Check-Aegi
 
 The following sections provide manual installation and troubleshooting commands if automated setup stops. Skip manual installation for tools that already work.
 
+## Documents, agent skill and application version
+
+Use the [architecture handover PDF](../ags_docs/Aegis_Architecture_Handover.pdf) for technology versions, workflows, resources and model placement. The [OCI deployment guide](../ags_docs/Aegis_OCI_Deployment_Guide.pdf) covers provisioning/initial handoff on pages 2-7, Windows prerequisites on pages 10-11 and the saved-source release on page 15. These scripts require the prepared destination described there; workstation setup is not infrastructure provisioning.
+
+The repository includes the [Aegis deployment agent skill](../.agents/skills/aegis-deploy/SKILL.md). Ask your agent to use it with your actual checkout and private destination JSON paths to prepare prerequisites, verify the destination and deploy after approval of the exact release plan. It uses the same PowerShell scripts. Read-only connection permission and publication approval remain separate; credentials stay in private prompts. The [root README](../README.md) provides a colleague quick start from cloning through release.
+
+The displayed base version is `v26.1.0.0`, maintained in [application-version.json](../ags_frontend/app/application-version.json). The compact Connections footer exposes service details on hover, focus or click. AI hosting labels follow authorized dataset defaults, including GCP for Gemini and Local / GCP for mixed connections; this is metadata, not a provider health check. Build and deploy the saved frontend changes to update the running UI.
+
 ## Manual reference: install missing workstation tools
 
 Run these in PowerShell **only when the corresponding tool is missing**. Follow installer prompts. Close and reopen PowerShell after installation so its PATH is refreshed.
