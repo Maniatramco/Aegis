@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 # Run from an open PowerShell window. No credentials are stored here.
 $ErrorActionPreference = 'Stop'
-$aegisRepository = $PSScriptRoot
+$aegisRepository = Split-Path -Parent $PSScriptRoot
 $aegisLauncher = Join-Path $aegisRepository 'ags_deploy\deploy.ps1'
 $aegisInputs = Join-Path $aegisRepository 'ags_deploy\aegis-oci-inputs.json'
 try {
