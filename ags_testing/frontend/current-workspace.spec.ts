@@ -57,24 +57,42 @@ test('grouped navigation, route aliases and agent drawer work on desktop and mob
  for(const name of ['Setup','API Documentation','ADP Documentation','Index inspector','Home','Connections','Services & migration','Document Chat'])await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(0);
  await expect(nav.getByRole('button',{name:'Model',exact:true})).toHaveCount(0);
  await nav.getByRole('button',{name:'Onboard',exact:true}).click();
- expect(await page.locator('#onboard-navigation .nav-item').allTextContents()).toEqual(['Onboard dataset','Dataset','Prompt','Extract','Review']);
- expect(await nav.locator('button:not(.nav-group-toggle):not(.nav-more)').allTextContents()).toEqual(['Dashboard','Aegis Agent','Onboard dataset','Dataset','Prompt','Extract','Review','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage']);
+ expect(await page.locator('#onboard-navigation .nav-item').allTextContents()).toEqual(['Dataset','Prompt','Extract','Review']);
+ expect(await nav.locator('button:not(.nav-group-toggle):not(.nav-more)').allTextContents()).toEqual(['Dashboard','Aegis Agent','Dataset','Prompt','Extract','Review','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage']);
  expect(await nav.locator('#admin-navigation button').allTextContents()).toEqual(['Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage']);
  await nav.getByRole('button',{name:'Aegis Agent',exact:true}).click();
  await expect(page.locator('.sidebar')).not.toHaveClass(/open/);await expect(page.getByLabel('Message Aegis Agent')).toBeVisible();
  await expect(page.locator('.agent-shortcut')).toHaveCount(0);
- for(const [hash,title] of [['Datasets','Datasets'],['Onboard dataset','Onboard dataset'],['Prompt templates','Prompt templates'],['Extract Data','Extract'],['Review','Review'],['Model Registration','Model Registration'],['Model Mapping','Model Mapping'],['Dashboard','Dashboard']]){
+ for(const [hash,title] of [['Datasets','Datasets'],['Prompt templates','Prompt templates'],['Extract Data','Extract'],['Review','Review'],['Model Registration','Model Registration'],['Model Mapping','Model Mapping'],['Dashboard','Dashboard']]){
   await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toHaveText(title);
  }
  for(const hash of ['Setup','API Documentation','ADP Documentation','Index inspector']){
   await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toHaveText('Dashboard');await expect(page).toHaveURL(/#Dashboard$/);
  }
- for(const [hash,title,url] of [['Home','Dashboard',/#Dashboard$/],['Connections','Storage',/#Storage$/],['Services & migration','Storage',/#Storage$/],['Document Chat','Aegis Agent',/#Aegis%20Agent$/],['Ask Aegis','Aegis Agent',/#Aegis%20Agent$/]] as [string,string,RegExp][]){
+ for(const [hash,title,url] of [['Onboard dataset','Datasets',/#Datasets$/],['Home','Dashboard',/#Dashboard$/],['Connections','Storage',/#Storage$/],['Services & migration','Storage',/#Storage$/],['Document Chat','Aegis Agent',/#Aegis%20Agent$/],['Ask Aegis','Aegis Agent',/#Aegis%20Agent$/]] as [string,string,RegExp][]){
   await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toHaveText(title);await expect(page).toHaveURL(url);
  }
  await page.setViewportSize({width:390,height:844});await agent(page,'');await page.getByLabel('Open navigation').click();
  await expect(nav).toBeVisible();await nav.getByRole('button',{name:'Dashboard',exact:true}).click();await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('retired onboarding screen resolves to Dataset and New dataset keeps the original inline workflow',async({page})=>{
+ await page.goto('/#Onboard%20dataset');
+ await expect(page).toHaveURL(/#Datasets$/);
+ await expect(page.getByRole('heading',{level:1})).toHaveText('Datasets');
+ await page.getByRole('button',{name:'New dataset',exact:true}).first().click();
+ await expect(page.getByRole('region',{name:'Dataset onboarding workflow',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Onboarding dataset name',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Upload documents and run extraction',{exact:true})).toHaveCount(0);
+ await expect(page).toHaveURL(/#Datasets$/);
+ await page.getByRole('button',{name:'Close dataset onboarding',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Dataset onboarding workflow',exact:true})).toHaveCount(0);
+ if(await page.getByLabel('Open navigation').isVisible())await page.getByLabel('Open navigation').click();
+ await expect(page.getByRole('navigation',{name:'Workspace pages'}).getByRole('button',{name:'Onboard dataset',exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Refresh workspace',{exact:true})).toBeEnabled();
+ await expect(page.getByText('Loading your workspace…',{exact:true})).toHaveCount(0);
+ if(process.env.AEGIS_NAVIGATION_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_NAVIGATION_SCREENSHOT,fullPage:true});
 });
 
 test('dataset chat actions open Aegis Agent with the selected dataset',async({page})=>{
