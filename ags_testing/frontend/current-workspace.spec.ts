@@ -7,7 +7,7 @@ const source='SYNTHETIC browser fixture. Source reference SYN-2026. Original doc
 test.beforeEach(async({page})=>{
  if(!password)throw new Error('Run against an isolated mock deployment with AEGIS_SMOKE_PASSWORD set.');
  await checked(await page.request.post('/api/auth/login',{data:{username:process.env.AEGIS_SMOKE_USERNAME||'smoke',password}}));
- await page.goto('/#Home');await expect(page.getByRole('heading',{name:'Home',exact:true})).toBeVisible();
+ await page.goto('/#Home');await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible();
 });
 async function setup(page:Page){
  const headers=await sessionHeaders(page.request),models=await seedMockCatalog(page.request,headers,'Browser regression');
@@ -28,30 +28,52 @@ async function extractionReady(page:Page,id:string){
  return checked(await page.request.get('/api/extractions/'+id));
 }
 
+test('Dashboard loads without chat requests and opens chat only after user action',async({page})=>{
+ const requests:{path:string;method:string}[]=[];
+ page.on('request',request=>{const path=new URL(request.url()).pathname;if(path.startsWith('/api/dataset-chat/'))requests.push({path,method:request.method()});});
+ await page.reload();
+ const dashboard=page.getByRole('region',{name:'Dataset dashboard',exact:true});
+ await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible();
+ await expect(dashboard.getByRole('button',{name:'Open chat',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Refresh workspace',{exact:true})).toBeEnabled();
+ await expect(dashboard.getByRole('button',{name:'Onboard dataset',exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Message Dataset Knowledge Chat',{exact:true})).toHaveCount(0);
+ expect(requests).toEqual([]);
+ if(process.env.AEGIS_DASHBOARD_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_DASHBOARD_SCREENSHOT,fullPage:true});
+ await dashboard.getByRole('button',{name:'Open chat',exact:true}).click();
+ await expect(page.getByLabel('Dataset chat model',{exact:true})).toBeEnabled();
+ await expect(page.getByText('Loading accessible dataset knowledge…',{exact:true})).toHaveCount(0);
+ expect(requests.some(request=>request.path==='/api/dataset-chat/catalog')).toBe(true);
+ expect(requests.filter(request=>request.method==='POST')).toEqual([]);
+ await page.getByLabel('Message Dataset Knowledge Chat',{exact:true}).fill('Summarize the key themes');
+ await expect(page.getByLabel('Send dataset chat question',{exact:true})).toBeEnabled();
+ expect(requests.filter(request=>request.method==='POST')).toEqual([]);
+});
+
 test('grouped navigation, route aliases and agent drawer work on desktop and mobile',async({page})=>{
  if(await page.getByLabel('Open navigation').isVisible())await page.getByLabel('Open navigation').click();
  const nav=page.getByRole('navigation',{name:'Workspace pages'});
  await nav.getByRole('button',{name:'Manage workspace',exact:true}).click();
- for(const name of ['Setup','API Documentation','ADP Documentation','Index inspector','Dashboard','Connections','Services & migration','Document Chat'])await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(0);
+ for(const name of ['Setup','API Documentation','ADP Documentation','Index inspector','Home','Connections','Services & migration','Document Chat'])await expect(nav.getByRole('button',{name,exact:true})).toHaveCount(0);
  await expect(nav.getByRole('button',{name:'Model',exact:true})).toHaveCount(0);
  await nav.getByRole('button',{name:'Onboard',exact:true}).click();
  expect(await page.locator('#onboard-navigation .nav-item').allTextContents()).toEqual(['Onboard dataset','Dataset','Prompt','Extract','Review']);
- expect(await nav.locator('button:not(.nav-group-toggle):not(.nav-more)').allTextContents()).toEqual(['Home','Aegis Agent','Onboard dataset','Dataset','Prompt','Extract','Review','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage']);
+ expect(await nav.locator('button:not(.nav-group-toggle):not(.nav-more)').allTextContents()).toEqual(['Dashboard','Aegis Agent','Onboard dataset','Dataset','Prompt','Extract','Review','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage']);
  expect(await nav.locator('#admin-navigation button').allTextContents()).toEqual(['Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage']);
  await nav.getByRole('button',{name:'Aegis Agent',exact:true}).click();
  await expect(page.locator('.sidebar')).not.toHaveClass(/open/);await expect(page.getByLabel('Message Aegis Agent')).toBeVisible();
  await expect(page.locator('.agent-shortcut')).toHaveCount(0);
- for(const [hash,title] of [['Datasets','Datasets'],['Onboard dataset','Onboard dataset'],['Prompt templates','Prompt templates'],['Extract Data','Extract'],['Review','Review'],['Model Registration','Model Registration'],['Model Mapping','Model Mapping'],['Home','Home']]){
-  await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toHaveText(title);
+ for(const [hash,title] of [['Datasets','Datasets'],['Onboard dataset','Onboard dataset'],['Prompt templates','Prompt templates'],['Extract Data','Extract'],['Review','Review'],['Model Registration','Model Registration'],['Model Mapping','Model Mapping'],['Dashboard','Dashboard']]){
+  await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toHaveText(title);
  }
  for(const hash of ['Setup','API Documentation','ADP Documentation','Index inspector']){
-  await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toHaveText('Home');await expect(page).toHaveURL(/#Home$/);
+  await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toHaveText('Dashboard');await expect(page).toHaveURL(/#Dashboard$/);
  }
- for(const [hash,title,url] of [['Dashboard','Home',/#Home$/],['Connections','Storage',/#Storage$/],['Services & migration','Storage',/#Storage$/],['Document Chat','Aegis Agent',/#Aegis%20Agent$/],['Ask Aegis','Aegis Agent',/#Aegis%20Agent$/]] as [string,string,RegExp][]){
-  await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toHaveText(title);await expect(page).toHaveURL(url);
+ for(const [hash,title,url] of [['Home','Dashboard',/#Dashboard$/],['Connections','Storage',/#Storage$/],['Services & migration','Storage',/#Storage$/],['Document Chat','Aegis Agent',/#Aegis%20Agent$/],['Ask Aegis','Aegis Agent',/#Aegis%20Agent$/]] as [string,string,RegExp][]){
+  await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toHaveText(title);await expect(page).toHaveURL(url);
  }
  await page.setViewportSize({width:390,height:844});await agent(page,'');await page.getByLabel('Open navigation').click();
- await expect(nav).toBeVisible();await nav.getByRole('button',{name:'Home',exact:true}).click();await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
+ await expect(nav).toBeVisible();await nav.getByRole('button',{name:'Dashboard',exact:true}).click();await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
@@ -176,7 +198,7 @@ test('chat cites published knowledge and opens and closes source evidence',async
  await page.getByLabel('Clear agent chat').click();await expect(page.getByLabel('Copy agent answer')).toHaveCount(0);
  await send(page,'List document filenames');await expect(page.getByLabel('Copy agent answer')).toBeVisible({timeout:90000});await expect(page.locator('.agent-v2-reply')).toContainText('cited-source.txt');
  await page.getByLabel('Sign out').click();await page.getByLabel('Username',{exact:true}).fill(process.env.AEGIS_SMOKE_USERNAME||'smoke');await page.getByLabel('Password',{exact:true}).fill(password!);await page.getByRole('button',{name:'Sign in',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Home',exact:true})).toBeVisible();await expect(page.getByLabel('Refresh workspace')).toBeEnabled();await agent(page,w.dataset.id);await expect(page.getByLabel('Copy agent answer')).toHaveCount(0);
+ await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible();await expect(page.getByLabel('Refresh workspace')).toBeEnabled();await agent(page,w.dataset.id);await expect(page.getByLabel('Copy agent answer')).toHaveCount(0);
 });
 
 test('a failed request restores its draft and retry completes against the real API',async({page})=>{
@@ -217,7 +239,7 @@ test('current screens fit phone, tablet and desktop and retain shared blue progr
  const doc=await uploadReady(page.request,w.headers,w.dataset,'Responsive-'+('LongName'.repeat(8))+'.txt',source);
  const run=await checked(await page.request.post('/api/extractions',{headers:w.headers,data:{dataset_id:w.dataset.id,document_ids:[doc.id],template_id:w.template.id}}));await extractionReady(page,run.id);
  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});for(const hash of ['Home','Datasets','Model Registration','Model Mapping','Extract Data','Review','Aegis Agent','Storage','Users & passwords','Jobs & activity']){
-  await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('main h1')).toBeVisible();await expect(page.getByLabel('Refresh workspace')).toBeEnabled();
+  await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toBeVisible();await expect(page.getByLabel('Refresh workspace')).toBeEnabled();
   if(hash==='Model Registration')await expect(page.getByRole('table',{name:'Registered models'})).toBeVisible();
   if(hash==='Model Mapping'){await page.getByRole('combobox',{name:'Dataset',exact:true}).selectOption(w.dataset.id);await expect(page.getByLabel('Chat model',{exact:true})).toBeEnabled();}
   if(hash==='Extract Data'){await page.getByLabel('Extract dataset').selectOption(w.dataset.id);await page.getByLabel('Extract prompt template').selectOption(w.template.id);await expect(page.getByRole('table')).toContainText('MOCK TEST VALUE');}

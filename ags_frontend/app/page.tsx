@@ -88,7 +88,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Model Mapping", icon: BookOpen },
 ];
 // Keep saved route identifiers compatible while presenting the product names.
-const viewLabel = (name: View) => name === "Aegis agent V2" ? "Aegis Agent" : name === "Extract" ? "Review" : name === "Extract Data" ? "Extract" : name;
+const viewLabel = (name: View) => name === "Home" ? "Dashboard" : name === "Aegis agent V2" ? "Aegis Agent" : name === "Extract" ? "Review" : name === "Extract Data" ? "Extract" : name;
 const viewRoute = (name: View) => name === "Extract Data" ? "Extract Data" : viewLabel(name);
 type ReviewReturn = {view: View; datasetId: string; agentTab: string; extractionTab: string};
 const date = (v: string | number) =>
@@ -505,10 +505,10 @@ export default function App() {
     let route: string;
     try { route = decodeURIComponent(hash.slice(1)); } catch { route = "Home"; }
     if (["connections","services & migration"].includes(route.toLowerCase())) {route="Storage";window.history.replaceState(null,"","#Storage");}
-    if (route.toLowerCase()==="dashboard") {route="Home";window.history.replaceState(null,"","#Home");}
+    if (["dashboard","home"].includes(route.toLowerCase())) {route="Home";window.history.replaceState(null,"","#Dashboard");}
     if (["setup","api documentation","adp documentation","index inspector"].includes(route.toLowerCase())) {
       route = "Home";
-      window.history.replaceState(null, "", "#Home");
+      window.history.replaceState(null, "", "#Dashboard");
     }
     if (["review","review/list","review/create","extract","extract/create","extraction review","re-extract","aegis agent/extract","document chat/extract"].includes(route.toLowerCase())) {
       const create=route.toLowerCase().endsWith('/create')||route.toLowerCase().endsWith('/extract');
@@ -801,7 +801,7 @@ export default function App() {
               </button>
             </Notice>
           )}
-          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onOnboard={()=>navigate("Onboard dataset")} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope,autoSummary)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} autoSummary={autoSummary} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
+          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
           {(view === "Onboard dataset" || (view==='Review'&&reviewReturn?.view==='Onboard dataset'))&&<div hidden={view!=="Onboard dataset"}><DatasetOnboardingScreen api={api} models={models} defaults={selectedDataset} storageKey={`aegis-new-dataset:${user.id}`} canManage={Boolean(user.is_admin)} loading={loading} onBack={()=>navigate("Home")} onReady={reload} onUse={id=>{changeDataset(id);setDashboardDatasetId('');navigate("Home");}} onReview={openReview} onModels={()=>navigate("Model Registration")}/></div>}
           {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
           {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}

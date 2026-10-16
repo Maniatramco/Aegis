@@ -13,7 +13,7 @@ export function WorkspaceNavigation({view,isAdmin,onNavigate,adminItems,adminOpe
   return <button key={name} className={`nav-item${selected?' selected':''}`} aria-label={label} title={label} aria-current={selected?'page':undefined} onClick={()=>onNavigate(name)}>{name==='Aegis agent V2'?<AgentLogo size={24}/>:<Icon size={18}/>}<span className="nav-item-label">{label}</span></button>;
  };
  return <nav aria-label="Workspace pages">
-  {link('Home','Home',Database)}
+  {link('Home','Dashboard',Database)}
   {link('Aegis agent V2','Aegis Agent',Database)}
   <button className={`nav-item nav-group-toggle${onboardViews.includes(view)?' group-active':''}`} aria-label="Onboard" aria-expanded={onboardOpen} aria-controls="onboard-navigation" onClick={()=>setOnboardOpen(!onboardOpen)}><FolderPlus size={18}/><span className="nav-item-label">Onboard</span><ChevronRight size={14} className={onboardOpen?'rotated':''}/></button>
   <div id="onboard-navigation" className="nav-submenu" hidden={!onboardOpen}>

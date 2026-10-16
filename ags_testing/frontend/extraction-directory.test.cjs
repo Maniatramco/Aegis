@@ -56,7 +56,7 @@ test('Manage workspace model links preserve admin-only visibility',()=>{
  const {WorkspaceNavigation}=compile('workspace-navigation.tsx',{'./agent-logo':compile('agent-logo.tsx',{'./agent-logo.css':{}})});
  const props={view:'Extract',onNavigate(){},adminItems:[],adminOpen:true,onAdminToggle(){}};
  const member=renderToStaticMarkup(React.createElement(WorkspaceNavigation,{...props,isAdmin:false})),admin=renderToStaticMarkup(React.createElement(WorkspaceNavigation,{...props,isAdmin:true}));
- for(const label of ['Home','Aegis Agent','Onboard','Dataset','Prompt','Extract'])assert.ok(member.includes('aria-label="'+label+'"'));
+ for(const label of ['Dashboard','Aegis Agent','Onboard','Dataset','Prompt','Extract'])assert.ok(member.includes('aria-label="'+label+'"'));
  assert.ok(!member.includes('aria-label="Onboard dataset"'));assert.ok(admin.includes('aria-label="Onboard dataset"'));
  assert.ok(!member.includes('aria-label="Model Registration"'));assert.ok(!member.includes('aria-label="Model Mapping"'));
  assert.ok(admin.includes('aria-label="Model Registration"'));assert.ok(admin.includes('aria-label="Model Mapping"'));

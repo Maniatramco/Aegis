@@ -8,22 +8,23 @@ const {DatasetDashboard,datasetDocuments,datasetReadiness}=compiled.exports;
 const datasets=[{id:'a',name:'Invoices'},{id:'b',name:'Policies'}],documents=[{id:'one',parent_id:'a',name:'invoice.txt',status:'ready'},{id:'two',dataset_id:'b',name:'policy.txt',status:'ready'},{id:'stale',kb_id:'a',name:'old.txt',status:'ready',requires_reindex:true}];
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):typeof node.type==='function'?all(node.type(node.props)):[node,...all(node.props?.children)];
 const text=node=>!node?'':typeof node==='string'?node:Array.isArray(node)?node.map(text).join(''):text(node.props?.children);
-function mount(values={}){const state=[],selected=[],agents=[],destinations=[],reviews=[];let root;const props={username:'tester',datasets,documents,loading:false,search:'',onClearSearch(){},onBrowse(){},onOnboard(){},canManage:false,selectedId:'',onSelect:id=>{selected.push(id);props.selectedId=id;},onNavigate:path=>destinations.push(path),onReview:id=>reviews.push(id),renderAgent:(id,onBusy,sourceScope,onSourceChange,knowledgeScope,autoSummary)=>{agents.push({id,onBusy,sourceScope,onSourceChange,knowledgeScope,autoSummary});return null;},guide:null,...values};
+function mount(values={}){const state=[],selected=[],agents=[],destinations=[],reviews=[];let root;const props={username:'tester',datasets,documents,loading:false,search:'',onClearSearch(){},onBrowse(){},canManage:false,selectedId:'',onSelect:id=>{selected.push(id);props.selectedId=id;},onNavigate:path=>destinations.push(path),onReview:id=>reviews.push(id),renderAgent:(id,onBusy,sourceScope,onSourceChange,knowledgeScope)=>{agents.push({id,onBusy,sourceScope,onSourceChange,knowledgeScope});return null;},guide:null,...values};
  const render=()=>{hooks=state;cursor=0;agents.length=0;root=DatasetDashboard(props);};render();return {render,get nodes(){return all(root);},selected,agents,destinations,reviews};}
 function find(v,label){return v.nodes.find(n=>n.props?.['aria-label']===label);}
+function mountChat(values={}){const v=mount(values);v.nodes.find(n=>n.type==='button'&&text(n)==='Open chat').props.onClick();v.render();return v;}
 test('source summaries keep dataset boundaries and do not count stale indexes as ready',()=>{
  assert.deepEqual(datasetDocuments(documents,'a').map(d=>d.id),['one','stale']);
  assert.deepEqual(datasetReadiness(datasets[0],datasetDocuments(documents,'a')),{ready:1,label:'1 need reindex',state:'pending'});
  assert.equal(datasetReadiness({active:false},[]).label,'Inactive');
 });
 test('notebook exposes only selected dataset sources',()=>{
- const v=mount({selectedId:'a'});assert.deepEqual(v.agents.map(a=>a.id),['a']);
+ const v=mountChat({selectedId:'a'});assert.deepEqual(v.agents.map(a=>a.id),['a']);
  const sources=v.nodes.find(n=>n.props?.className==='dashboard-source-list');assert.match(text(sources),/invoice.txt/);assert.doesNotMatch(text(sources),/policy.txt/);
  assert.equal(find(v,'Include source old.txt').props.disabled,true);
  find(v,'Ask Aegis about Policies').props.onClick();v.render();assert.deepEqual(v.agents.map(a=>a.id),['b']);
 });
 test('source deselection remains explicit and never becomes the dataset-wide scope',()=>{
- const v=mount({selectedId:'a',documents:documents.filter(d=>d.id!=='stale')});assert.equal(v.agents[0].sourceScope,null);
+ const v=mountChat({selectedId:'a',documents:documents.filter(d=>d.id!=='stale')});assert.equal(v.agents[0].sourceScope,null);
  find(v,'Include source invoice.txt').props.onChange();v.render();assert.deepEqual(v.agents[0].sourceScope,[]);
  find(v,'Select all indexed sources').props.onChange();v.render();assert.equal(v.agents[0].sourceScope,null);
 });
@@ -33,17 +34,17 @@ test('Sources collapses while the expanded Agent remains available without Studi
  find(v,'Expand sources').props.onClick();v.render();assert.equal(v.nodes.find(n=>n.props?.id==='notebook-source-content').props.hidden,false);
 });
 test('workspace chat starts from authorized datasets; active work blocks scope switching',()=>{
- const workspace=mount();assert.deepEqual(workspace.agents[0].knowledgeScope.datasetIds,['a','b']);assert.equal(workspace.agents[0].autoSummary,true);const v=mount({selectedId:'a'});v.agents[0].onBusy(true);v.render();assert.equal(find(v,'Ask Aegis about Policies').props.disabled,true);assert.equal(find(v,'Include source invoice.txt').props.disabled,true);
+ const workspace=mountChat();assert.deepEqual(workspace.agents[0].knowledgeScope.datasetIds,['a','b']);const v=mountChat({selectedId:'a'});v.agents[0].onBusy(true);v.render();assert.equal(find(v,'Ask Aegis about Policies').props.disabled,true);assert.equal(find(v,'Include source invoice.txt').props.disabled,true);
  const inactive=mount({datasets:[{id:'a',name:'Inactive',active:false}],selectedId:'a'});assert.equal(inactive.agents.length,0);assert.ok(inactive.nodes.some(n=>n.type==='h3'&&text(n)==='This dataset is inactive'));
  workspace.render();workspace.agents[0].onBusy(true);workspace.render();assert.equal(find(workspace,'Chat with all accessible dataset knowledge').props.disabled,true);
  assert.equal(find(v,'Ask Aegis about Invoices').props.disabled,true);
 });
 
-test('onboarding opens the dedicated screen while source browsing keeps its own destination',()=>{
- const calls=[];const v=mount({canManage:true,selectedId:'a',onOnboard:()=>calls.push('onboard'),onBrowse:()=>calls.push('datasets')});
- v.nodes.find(n=>n.type==='button'&&text(n)==='Onboard dataset').props.onClick();
- v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.onClick();v.render();assert.ok(v.nodes.some(n=>n.type==='picker'));assert.deepEqual(calls,['onboard']);
- const member=mount({canManage:false,onOnboard:()=>assert.fail('Member cannot onboard'),onBrowse:()=>calls.push('browse')});
+test('Dashboard omits onboarding while existing-source selection and browsing remain available',()=>{
+ const calls=[];const v=mount({canManage:true,selectedId:'a',onBrowse:()=>calls.push('datasets')});
+ assert.equal(v.nodes.some(n=>n.type==='button'&&text(n)==='Onboard dataset'),false);
+ v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.onClick();v.render();assert.ok(v.nodes.some(n=>n.type==='picker'));assert.deepEqual(calls,[]);
+ const member=mount({canManage:false,onBrowse:()=>calls.push('browse')});
  member.nodes.find(n=>n.type==='button'&&text(n)==='Browse datasets').props.onClick();assert.equal(calls.at(-1),'browse');
 });
 
@@ -51,4 +52,8 @@ test('including available knowledge opens a bounded cross-dataset scope',()=>{
  const v=mount({selectedId:'a'});v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.onClick();v.render();
  const picker=v.nodes.find(n=>n.type==='picker');picker.props.onInclude({datasetIds:['a','b'],documentIds:['one','two']});v.render();
  assert.equal(v.selected.at(-1),'');assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['one','two']});
+});
+
+test('Dashboard does not initialize chat on first load, including a preselected dataset',()=>{
+ for(const selectedId of ['', 'a']){const v=mount({selectedId});assert.equal(v.agents.length,0);v.render();assert.equal(v.agents.length,0);assert.ok(v.nodes.some(n=>n.type==='button'&&text(n)==='Open chat'));find(v,'Ask Aegis about Policies').props.onClick();v.render();assert.deepEqual(v.agents.map(a=>a.id),['b']);}
 });

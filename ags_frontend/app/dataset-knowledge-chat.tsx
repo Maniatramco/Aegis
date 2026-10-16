@@ -12,11 +12,11 @@ import './agent-v2.css';
 type Entity=Record<string,any>;
 type Api=(path:string,method?:string,body?:unknown,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;
 export const knowledgeScopeKey=(scope:DatasetKnowledgeScope)=>JSON.stringify({datasets:[...new Set(scope.datasetIds)].sort(),documents:scope.documentIds===null?null:[...new Set(scope.documentIds)].sort()});
-export function DatasetKnowledgeChat({api,stream,username,scope,autoSummary=false,onBusy,onReview,onOpenAgent,catalogRevision=0}:{api:Api;stream:(path:string,body:unknown,signal:AbortSignal)=>Promise<Response>;username:string;scope:DatasetKnowledgeScope;autoSummary?:boolean;onBusy?:(busy:boolean)=>void;onReview?:(id:string)=>void;onOpenAgent?:()=>void;catalogRevision?:number}){
+export function DatasetKnowledgeChat({api,stream,username,scope,onBusy,onReview,onOpenAgent,catalogRevision=0}:{api:Api;stream:(path:string,body:unknown,signal:AbortSignal)=>Promise<Response>;username:string;scope:DatasetKnowledgeScope;onBusy?:(busy:boolean)=>void;onReview?:(id:string)=>void;onOpenAgent?:()=>void;catalogRevision?:number}){
  const [catalog,setCatalog]=useState<Entity>({datasets:[],documents:[],models:[]}),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const [model,setModel]=useState(''),[text,setText]=useState(''),[messages,setMessages]=useState<Entity[]>([]),[conversation,setConversation]=useState('');
  const [busy,setBusy]=useState(false),[history,setHistory]=useState<Entity[]|null>(null),[attempt,setAttempt]=useState(0),[restoring,setRestoring]=useState(true);
- const controller=useRef<AbortController|null>(null),locked=useRef(false),mounted=useRef(true),summaryStarted=useRef(false),thread=useRef<HTMLDivElement>(null);
+ const controller=useRef<AbortController|null>(null),locked=useRef(false),mounted=useRef(true),thread=useRef<HTMLDivElement>(null);
  const signature=knowledgeScopeKey(scope),login=typeof sessionStorage==='undefined'?'':sessionStorage.getItem(`aegis-agent-v2:${username}-login-session`)||'preview';
  // This storage namespace and these server threads belong only to Dataset Chat.
  const key=`aegis-dataset-chat:${username}:${login}:${signature}`;
@@ -48,13 +48,6 @@ export function DatasetKnowledgeChat({api,stream,username,scope,autoSummary=fals
   }catch(e){if(mounted.current){const stopped=e instanceof Error&&e.name==='AbortError',status=stopped?'aborted':'failed';setMessages(previous=>previous.map(message=>message.id!==id?message:{...message,status,error:stopped?undefined:{detail:e instanceof Error?e.message:'Dataset chat could not finish.'},answer_workflow:message.answer_workflow?{...message.answer_workflow,status,steps:message.answer_workflow.steps.map((step:Entity)=>step.status==='running'?{...step,status:stopped?'cancelled':'failed',duration_ms:Math.max(0,Date.now()-step.started_at)}:step)}:undefined}));}}
   finally{locked.current=false;controller.current=null;if(mounted.current)setBusy(false);}
  };
- useEffect(()=>{
-  if(!autoSummary||summaryStarted.current||loading||restoring||!selectedModel||messages.length||conversation||busy||error||text.trim())return;
-  summaryStarted.current=true;
-  if(sessionStorage.getItem(key+'-overview'))return;
-  sessionStorage.setItem(key+'-overview','started');
-  void send('Give me a concise workspace overview combining the included accessible datasets. Identify key themes and each dataset, cite supporting indexed documents and saved results, and state evidence limits. Do not claim to have reviewed every file.',true);
- },[autoSummary,loading,restoring,selectedModel,messages.length,conversation,busy,error,signature]);
  const fresh=()=>{if(locked.current)return;setMessages([]);setConversation('');setText('');setError('');setHistory(null);sessionStorage.removeItem(key);};
  const openHistory=async()=>{try{const result=await api('/dataset-chat/conversations','GET',undefined,undefined,true);setHistory(result.filter((item:Entity)=>knowledgeScopeKey({datasetIds:item.dataset_ids,documentIds:item.document_ids})===signature));}catch(e){setError(e instanceof Error?e.message:'Chat history is unavailable.');}};
  const restore=async(id:string)=>{try{const saved=await api(`/dataset-chat/conversations/${id}`,'GET',undefined,undefined,true);if(knowledgeScopeKey({datasetIds:saved.dataset_ids,documentIds:saved.document_ids})!==signature)throw new Error('Choose the same dataset knowledge to open this chat.');setMessages(saved.messages||[]);setConversation(saved.id);sessionStorage.setItem(key,saved.id);setHistory(null);setError('');}catch(e){setError(e instanceof Error?e.message:'Saved chat is unavailable.');}};
