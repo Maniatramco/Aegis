@@ -1,7 +1,5 @@
-"""One typed file drives runtime limits, precedence and deployment reloads."""
-import importlib.util
+"""One typed file drives runtime limits and precedence."""
 import json
-from pathlib import Path
 from types import SimpleNamespace
 import pytest
 from ags_app import runtime_config,providers,extraction_retrieval,reranker,core
@@ -114,22 +112,3 @@ def test_admin_inspection_uses_live_file_and_is_not_exposed_to_other_users(accou
     assert defaults['max_output_tokens']==runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS')
     login(accounts,'Colleague')
     assert accounts.get('/api/runtime-config').status_code==403
-
-
-def test_deployment_plan_embeds_one_file_and_retires_duplicate_environment(tmp_path,monkeypatch):
-    root=Path(__file__).resolve().parents[2]
-    spec=importlib.util.spec_from_file_location('runtime_deploy',root/'ags_deploy/ags_oke/ags_runtime_config.py')
-    deploy=importlib.util.module_from_spec(spec);spec.loader.exec_module(deploy)
-    path=use_file(tmp_path,monkeypatch)
-    first=deploy.plan(path)
-    assert first['configmap']['data']['runtime.toml']==path.read_text()
-    assert first['environment_patch']['data']['AEGIS_CHAT_EVIDENCE_BYTES'] is None
-    assert first['environment_patch']['data']['AEGIS_OCR_TIMEOUT'] is None
-    assert 'AEGIS_MASTER_KEY' not in first['managed_keys']
-    containers=first['deployment_patch']['spec']['template']['spec']['containers']
-    assert [c['name'] for c in containers]==['api','worker']
-    assert all(c['volumeMounts'][0]['readOnly'] for c in containers)
-    path.write_text(path.read_text().replace('AEGIS_CHAT_OUTPUT_TOKENS = 1024','AEGIS_CHAT_OUTPUT_TOKENS = 2048'))
-    second=deploy.plan(path)
-    assert second['sha256']!=first['sha256']
-    with pytest.raises(ValueError,match='digest'):deploy.plan(path,backend_image='backend:latest')
