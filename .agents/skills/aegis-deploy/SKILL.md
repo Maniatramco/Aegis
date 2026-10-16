@@ -56,11 +56,58 @@ scan unrelated accounts/regions or fetch application document contents. Reuse
 existing authentication and secure credential paths; do not print private keys,
 passwords or tokens. During discovery do not create credentials, users or pull Secrets.
 
+## OCI Cloud Shell route without local Docker Desktop
+
+When the user wants OCI-only builds without additional build-compute cost, use
+`bash ./ags_deploy/cloud_shell/deploy-cloud-shell.sh --inputs /absolute/path/target.json`
+inside the correct OCI Console Cloud Shell. Add `--check-only` for read-only
+preflight. Keep the Windows PowerShell route available. Do not silently substitute
+OCI DevOps managed builds, GitHub Actions, a new VM or a production OKE node.
+Managed build runners can incur charges and are outside a no-additional-cost scope.
+
+Verify the signed-in tenancy/region and native architecture, remaining Cloud Shell
+monthly allowance and existing disk space. The route requires at least two free
+hours remaining and 3.5 GiB free on each selected component's filesystem before
+building. Backend uses an isolated store in the run directory; frontend uses an
+isolated /tmp store. No global prune, storage expansion or emulation is allowed.
+If capacity or native architecture does not fit, stop and explain the prerequisite.
+Cloud Shell's free compute allowance does not make all hosting or OCIR image storage
+free; check existing storage allowance before authorizing a push under a zero-cost
+constraint. Never approve a paid fallback using trial credits without consent.
+The 16 October Mumbai check found its API allowlist blocks Cloud Shell public
+access. The user explicitly refused a temporary firewall exception. Preserve all
+network settings; do not publish for this target until an approved existing
+connection passes preflight. Do not re-request the refused exception in this release.
+
+Use Python 3.12, Git, OCI CLI, kubectl and Podman already supplied in Cloud Shell.
+For DB_Object Y, install only the pinned Oracle driver in a private tool virtual
+environment and use its Python through AEGIS_PYTHON. Do not install application
+dependencies or change a global runtime. Generate a separate client kubeconfig
+for the approved existing cluster; do not change the application's configuration.
+Filled inputs use Cloud Shell paths. Copy the public repository from the approved
+commit; the runner verifies its control files match the committed source. It
+builds with the same pinned Dockerfiles and live-matching feature flags.
+
+Have the user privately authenticate Podman to the destination OCIR and upload
+the approved database wallet to their private Cloud Shell directory when needed.
+Do not transfer local wallet files, registry tokens, private keys or saved login
+credentials into Cloud Shell without explicit permission for that data and target.
+Never put secrets in JSON, shell history, prompts to AI or deployment records.
+
+The same DB_Object/DB_ReleaseFile/DeployFrontend/DeployBackend Y/N selections apply.
+This route supports the maintained Oracle release-file engine, not legacy SQLcl
+DatabaseAction. CONNECT is required before remote reads; PUBLISH is required after
+builds and the complete reviewed plan, before DDL, image pushes or image changes.
+Push selected images first and use returned immutable digests for rollout. Preserve
+all protected configuration and unselected images; stop on failure and retain the
+exact partial receipt. There is no automatic retry or rollback. A successful
+preflight or local build is not evidence that a production deployment occurred.
+
 ## Resolve the release
 
 For an operator running directly in PowerShell, the repository now provides
 `.\ags_deploy\deploy.ps1`, optionally `-Inputs C:\aegis-target\target.json` or
-`-CheckOnly`. The non-secret template is `ags_deploy/deployment-inputs.example.json`;
+`-CheckOnly`. The non-secret template is `ags_deploy/templates/deployment-inputs.example.json`;
 keep filled destination files outside Git. The CLI exports committed source,
 prompts CONNECT before discovery and PUBLISH after local builds and the detailed
 plan, then uses the maintained schema/release helpers and configuration guard.
@@ -94,7 +141,7 @@ Use the guarded manual helper workflow below only when required by the agent
 environment, while preserving the same selections, checks and approvals.
 
 Find the Aegis repository from the active project or the user's supplied path;
-confirm it contains `ags_deploy/deploy-aegis-code.ps1` and `ags_database/install.sql`.
+confirm it contains `ags_deploy/scripts/deploy-aegis-code.ps1` and `ags_database/install.sql`.
 Use all paths below relative to that repository. Read `AGENTS.md`, the root README
 and `ags_database/README.md`. Read `ags_docs/Aegis_OCI_Deployment_Guide.pdf`
 for the maintained entry point, flags, receipt handling and recovery limits.
@@ -273,7 +320,7 @@ Use unique private files under `ags_deploy/deployment-records/` for `$Baseline`.
 global package environment. The check helper uses the standard library and kubectl.
 
 ```powershell
-python -B .\ags_deploy\check-code-release.py snapshot --source-path $SourcePath --kubeconfig $Kubeconfig --context $Context --namespace $Namespace --output $Baseline
+python -B .\ags_deploy\scripts\check-code-release.py snapshot --source-path $SourcePath --kubeconfig $Kubeconfig --context $Context --namespace $Namespace --output $Baseline
 if ($LASTEXITCODE -ne 0) { throw 'Release baseline check failed.' }
 ```
 
@@ -289,9 +336,9 @@ Immediately after approval, confirm the local image IDs still match the reviewed
 artifacts and recheck that the source and destination are unchanged:
 
 ```powershell
-python -B .\ags_deploy\check-code-release.py verify --source-path $SourcePath --kubeconfig $Kubeconfig --context $Context --namespace $Namespace --baseline $Baseline
+python -B .\ags_deploy\scripts\check-code-release.py verify --source-path $SourcePath --kubeconfig $Kubeconfig --context $Context --namespace $Namespace --baseline $Baseline
 if ($LASTEXITCODE -ne 0) { throw 'Pre-release configuration check failed; no release started.' }
-.\ags_deploy\deploy-aegis-code.ps1 -SourcePath $SourcePath -Kubeconfig $Kubeconfig -Context $Context -Namespace $Namespace -Registry $Registry -RegistryNamespace $RegistryNamespace -Platform $Platform -Release $Release -SkipBuild
+.\ags_deploy\scripts\deploy-aegis-code.ps1 -SourcePath $SourcePath -Kubeconfig $Kubeconfig -Context $Context -Namespace $Namespace -Registry $Registry -RegistryNamespace $RegistryNamespace -Platform $Platform -Release $Release -SkipBuild
 ```
 
 With `-SkipBuild`, the deployment helper publishes the reviewed local images.
@@ -308,7 +355,7 @@ Capture the **exact receipt path printed by that invocation** as `$Receipt`; nev
 choose a receipt by "latest file" or a guessed timestamp. Then run:
 
 ```powershell
-python -B .\ags_deploy\check-code-release.py verify --source-path $SourcePath --kubeconfig $Kubeconfig --context $Context --namespace $Namespace --baseline $Baseline --receipt $Receipt
+python -B .\ags_deploy\scripts\check-code-release.py verify --source-path $SourcePath --kubeconfig $Kubeconfig --context $Context --namespace $Namespace --baseline $Baseline --receipt $Receipt
 if ($LASTEXITCODE -ne 0) { throw 'Post-release verification failed; inspect the receipt and actual deployment.' }
 ```
 

@@ -6,15 +6,27 @@ Aegis turns documents into searchable knowledge and structured, reviewable resul
 
 Read the architecture handover in [Word](ags_docs/Aegis_Architecture_Handover.docx) or [PDF](ags_docs/Aegis_Architecture_Handover.pdf) for the approved Mural diagram, end-to-end workflows, observed OCI resources, running technology versions and model placement.
 
-Use the single [final OCI deployment PDF](ags_docs/Aegis_OCI_Deployment_Guide.pdf) in order: **Section 1 Resource provisioning (pages 2-7)** covers OCI/model prerequisites and their purposes, the recorded Mumbai pilot example and initial installation handoff. **Section 2 Code deployment (pages 8-15)** includes the deployment script workflow diagram on page 9 and covers source/target inputs, component flags, the AI skill and JSON + PowerShell routes, approvals, verification and recovery. It replaces the separate database, backend and Kubernetes deployment guides. Provisioning and initial configuration remain separate from the code/object release command and AI deployment skill.
+Use the single [final OCI deployment PDF](ags_docs/Aegis_OCI_Deployment_Guide.pdf) in order: **Section 1 Resource provisioning (pages 2-7)** covers OCI/model prerequisites and their purposes, the recorded Mumbai pilot example and initial installation handoff. **Section 2 Code deployment (pages 8-17)** includes the workflow diagram on page 9, the AI skill, Windows PowerShell and OCI Cloud Shell routes, component flags, approvals, verification and recovery. Cloud Shell setup and execution are on pages 15-16. It replaces the separate database, backend and Kubernetes deployment guides. Provisioning and initial configuration remain separate from the code/object release command and AI deployment skill.
 
 ## Deploy with one command
 
-Copy [the non-secret input template](ags_deploy/deployment-inputs.example.json) outside Git, fill the destination values, and run from the repository root in an interactive PowerShell terminal:
+Copy [the non-secret input template](ags_deploy/templates/deployment-inputs.example.json) outside Git, fill the destination values, and run from the repository root in an interactive PowerShell terminal:
 
 ```powershell
 .\ags_deploy\deploy.ps1 -Inputs C:\aegis-target\target.json
 ```
+
+With a private `ags_deploy/aegis-oci-inputs.json` beside the script, `-Inputs` can be omitted. That file is ignored by Git. Supporting implementations are under `ags_deploy/scripts/`; the private target is not a distributable template.
+
+To build inside OCI without Docker Desktop, use the same Y/N inputs with Linux paths in the correct tenancy's **Cloud Shell**:
+
+```bash
+bash ./ags_deploy/cloud_shell/deploy-cloud-shell.sh --inputs ~/aegis-private/target.json
+```
+
+Add `--check-only` for read-only preflight. This uses Podman and existing Cloud Shell storage, with native architecture and remaining free-hour checks. Python 3.12 is supplied by Cloud Shell; DB object creation also needs the pinned Oracle driver in a private tool environment. See pages 15-16 of the final PDF for source checkout, kubeconfig, private wallet/registry login and input preparation. This is the OCI Cloud Shell route; OCI DevOps managed build runners are not enabled. Cloud Shell compute is free within the tenancy allowance; existing hosting and registry storage retain their own pricing and limits. No paid fallback or new infrastructure is created.
+
+**Current Mumbai limitation (16 October 2026):** the existing OKE API access rules reject Cloud Shell's public connection. The user chose to keep all network settings unchanged. The route therefore cannot complete a release to this cluster from the current Cloud Shell session; a successful target preflight remains mandatory. No firewall exception, registry push, database DDL or workload rollout was performed while preparing this route.
 
 The JSON controls each component with `"Y"` or `"N"`: `DB_Object`, `DeployFrontend`, and `DeployBackend`. Backend includes API and worker. `DB_ReleaseFile` selects the ordered database manifest, normally [ags_database/release.json](ags_database/release.json). Matching objects are skipped, missing supported objects are created, and incompatible existing definitions stop the release. The manifest can explicitly permit a missing application user/schema inside the existing database; existing accounts and settings are preserved. This does not create the physical Oracle database, provision OCI infrastructure, import data or run arbitrary migrations.
 
