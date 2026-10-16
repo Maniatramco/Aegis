@@ -1,4 +1,4 @@
 interface:
-  display_name: "Aegis OCI Code Deployment"
-  short_description: "Prepare and approve Aegis code-only OCI deployments"
-  default_prompt: "Use $aegis-deploy to clarify my target, ask permission before OCI discovery, and present a verified deployment plan for my approval before publishing code while preserving configuration."
+  display_name: "Aegis Setup and OCI Deployment"
+  short_description: "Set up Windows and deploy Aegis to prepared OCI"
+  default_prompt: "Use $aegis-deploy to prepare my Windows prerequisites, verify my selected OCI destination, and build and deploy Aegis after I approve the exact release plan."
