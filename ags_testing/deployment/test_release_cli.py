@@ -720,7 +720,7 @@ class InputAndSchemaTests(unittest.TestCase):
             self.assertIn('Aegis deployment launcher started.', result.stdout)
             self.assertIn('Mode: READ-ONLY PREFLIGHT', result.stdout)
             self.assertIn('Inputs: '+str(inputs), result.stdout)
-            self.assertIn('Preparing committed source and target inputs...', result.stdout)
+            self.assertIn('Preparing saved local source snapshot and target inputs (JSON Ref ignored)...', result.stdout)
             self.assertIn('Aegis deployment process exited with code 1.', result.stdout)
             self.assertLess(result.stdout.index('launcher started.'), result.stdout.index('Type CONNECT'))
             self.assertIn('Type CONNECT', result.stdout, result.stderr)

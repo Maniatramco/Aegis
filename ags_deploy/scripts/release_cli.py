@@ -154,6 +154,82 @@ def export_commit(source_root, ref, directory, runner):
     return source, commit
 
 
+# Only application/database build inputs and the existing image-release helper
+# enter local snapshots. Private inputs, runtime state and archives stay outside.
+LOCAL_SOURCE_ROOTS = ('ags_frontend', 'ags_backend', 'ags_database')
+LOCAL_HELPERS = ('ags_deploy/scripts/deploy-aegis-code.ps1', 'ags_deploy/deploy-aegis-code.ps1')
+LOCAL_EXCLUDED_PARTS = {'.git', '.venv', 'node_modules', '.next', '__pycache__', '.pytest_cache',
+                        'coverage', 'playwright-report', 'test-results', 'screenshots',
+                        'secrets', 'backups', 'data', 'local-models', 'ags_runtime', 'delete'}
+
+
+def local_source_path(root, name):
+    relative = PurePosixPath(name)
+    if relative.is_absolute() or '..' in relative.parts or '\\' in name or not relative.parts:
+        raise DeploymentStopped('Invalid local source path')
+    if relative.parts[0] not in LOCAL_SOURCE_ROOTS and name not in LOCAL_HELPERS:
+        return None
+    lowered = [part.lower() for part in relative.parts]
+    filename = lowered[-1]
+    if (any(part in LOCAL_EXCLUDED_PARTS for part in lowered) or filename.startswith('.env')
+            or filename.startswith('wallet') or filename.startswith('kubeconfig')
+            or filename == 'aegis-oci-inputs.json'
+            or Path(filename).suffix in {'.pem','.key','.p12','.pfx','.jks','.db','.sqlite','.sqlite3','.pyc','.log','.tsbuildinfo'}):
+        return None
+    path = root.joinpath(*relative.parts)
+    # Never follow a symlink/junction into private files, another checkout or a cycle.
+    for part in (path, *path.parents):
+        if part == root: break
+        if (part.is_symlink() or (part.exists() and getattr(part.lstat(), 'st_file_attributes', 0) & 0x400)
+                or (hasattr(part, 'is_junction') and part.is_junction())):
+            raise DeploymentStopped('Local source contains a symbolic link/junction; use regular source files')
+    if not path.exists():
+        return None  # A saved deletion must remain deleted in the snapshot.
+    if not path.resolve(strict=True).is_relative_to(root) or not path.is_file():
+        raise DeploymentStopped('Local source is not a regular file inside SourcePath')
+    return path
+
+
+def local_source_inventory(root, runner):
+    names = runner.capture(['git','-C',str(root),'ls-files','--cached','--others',
+                            '--exclude-standard','-z','--',*LOCAL_SOURCE_ROOTS,*LOCAL_HELPERS]).split('\0')
+    inventory = {}
+    for name in sorted(set(names)-{''}):
+        path = local_source_path(root, name)
+        if path is not None:
+            inventory[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return inventory
+
+
+def export_working_tree(source_root, directory, runner):
+    source_root = source_root.resolve(strict=True)
+    command = ['git','-C',str(source_root),'rev-parse','--verify','HEAD^{commit}']
+    commit = runner.capture(command).strip()
+    require_pattern(commit, r'[a-f0-9]{40,64}', 'base source commit')
+    inventory = local_source_inventory(source_root, runner)
+    source = directory/'source'
+    source.mkdir(exist_ok=False)
+    for name, expected in inventory.items():
+        path = local_source_path(source_root, name)
+        if path is None:
+            raise DeploymentStopped('Saved source changed while creating the snapshot; rerun deployment')
+        contents = path.read_bytes()
+        if hashlib.sha256(contents).hexdigest() != expected:
+            raise DeploymentStopped('Saved source changed while creating the snapshot; rerun deployment')
+        target = source.joinpath(*PurePosixPath(name).parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(contents)
+    if local_source_inventory(source_root, runner) != inventory or runner.capture(command).strip() != commit:
+        raise DeploymentStopped('Saved source changed while creating the snapshot; rerun deployment')
+    for relative in ('ags_frontend/Dockerfile','ags_backend/Dockerfile','ags_database/install.sql',
+                     'ags_database/deploy-oci-database.ps1'):
+        if not (source/relative).is_file():
+            raise DeploymentStopped('Saved source lacks required release files: '+relative)
+    release_helper(source)
+    (directory/'source-manifest.json').write_text(json.dumps(
+        {'mode':'working-tree','base_commit':commit,'files':inventory},indent=2),encoding='utf-8')
+    return source, commit
+
 def source_fingerprint(source):
     hashes = {}
     for prefix in ('ags_frontend', 'ags_backend', 'ags_database'):
@@ -277,8 +353,9 @@ EXIT SUCCESS
 class Workflow:
     requires_powershell = True
 
-    def __init__(self, values, check_only=False, runner=None, input_fn=input):
+    def __init__(self, values, check_only=False, runner=None, input_fn=input, working_tree=False):
         self.values = dict(values)
+        self.working_tree = working_tree
         self.frontend = flag(values.get('DeployFrontend', 'Y'), 'DeployFrontend', True)
         self.backend = flag(values.get('DeployBackend', 'Y'), 'DeployBackend', True)
         self.db_release = None
@@ -339,12 +416,19 @@ class Workflow:
         self.action = action
         root_value = self.values.get('SourcePath') or str(ROOT)
         self.source_root = Path(root_value).expanduser().resolve(strict=True)
-        ref = self.values.get('Ref') or 'ags_sprint1'
+        ref = 'HEAD' if self.working_tree else (self.values.get('Ref') or 'ags_sprint1')
         require_pattern(ref, r'[A-Za-z0-9_][A-Za-z0-9_./-]*', 'source ref')
         self.release = 'release-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:6]
         self.directory = self.source_root/'ags_deploy/deployment-records'/self.release
         self.directory.mkdir(parents=True, exist_ok=False)
-        self.source, self.commit = export_commit(self.source_root, ref, self.directory, self.runner)
+        if self.working_tree:
+            self.source, self.commit = export_working_tree(self.source_root, self.directory, self.runner)
+            self.record.update(source_mode='working-tree', source_reference='Saved local files; JSON Ref is ignored',
+                               source_manifest=str(self.directory/'source-manifest.json'))
+            print('Source: saved local files (no commit required); base commit '+self.commit, flush=True)
+        else:
+            self.source, self.commit = export_commit(self.source_root, ref, self.directory, self.runner)
+            self.record.update(source_mode='committed', source_reference=ref)
         self.source_hash = source_fingerprint(self.source)
         if len(self.components) == 1 and 'AEGIS_COMPONENT_SELECTION_V1' not in release_helper(self.source).read_text(encoding='utf-8-sig'):
             raise DeploymentStopped('The selected source commit predates component selection; choose a commit containing the updated release helper')
@@ -740,9 +824,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inputs', type=Path, help='Non-secret destination JSON; missing values are prompted/discovered')
     parser.add_argument('--check-only', action='store_true', help='Read-only target/schema preflight; no builds, DDL, push or rollout')
+    parser.add_argument('--working-tree', action='store_true', help='Freeze saved local application/database files, including non-ignored new files; Ref is ignored')
     options = parser.parse_args()
     try:
-        Workflow(load_inputs(options.inputs), options.check_only).run()
+        Workflow(load_inputs(options.inputs), options.check_only, working_tree=options.working_tree).run()
     except (DeploymentStopped, ORACLE_RELEASE.OracleReleaseError, GUARD.ReleaseCheckError, SCHEMA.SchemaMismatch, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print('Aegis deployment stopped: '+str(error), file=sys.stderr)
         return 1

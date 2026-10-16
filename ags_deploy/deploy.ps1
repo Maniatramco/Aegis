@@ -5,7 +5,8 @@
 One command for an Aegis database/schema and frontend/API/worker code release.
 .DESCRIPTION
 Without -Inputs, uses aegis-oci-inputs.json beside this script when present, then prompts for missing non-secret inputs. -Inputs accepts a JSON
-file based on deployment-inputs.example.json. Requires prepared OCI resources,
+file based on deployment-inputs.example.json. Builds saved local files by default;
+-CommittedSource exports the committed Ref instead. Requires prepared OCI resources,
 existing authentication and Python 3.10+. DB_Object, DeployFrontend and DeployBackend
 use Y/N. DB_ReleaseFile selects the ordered database release JSON. DB_Object=Y needs
 python-oracledb, a wallet and existing database access. The release file can permit
@@ -24,9 +25,14 @@ in private SQLcl prompts. -CheckOnly makes no database or deployment changes.
 Credits: uses the existing Aegis database and application release helpers.
 #>
 [CmdletBinding()]
-param([string]$Inputs, [switch]$CheckOnly, [string]$Python)
+param([string]$Inputs, [switch]$CheckOnly, [string]$Python, [switch]$CommittedSource)
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
+$toolEnvironment = Join-Path $PSScriptRoot 'scripts\deployment-environment.ps1'
+if (Test-Path -LiteralPath $toolEnvironment -PathType Leaf) {
+    . $toolEnvironment
+    Initialize-AegisDeploymentEnvironment $repository
+}
 if (-not $Inputs) {
     $defaultInputs = Join-Path $PSScriptRoot 'aegis-oci-inputs.json'
     if (Test-Path -LiteralPath $defaultInputs -PathType Leaf) { $Inputs = $defaultInputs }
@@ -42,9 +48,11 @@ if (-not $Python) {
 $cliArguments = @('-u', '-B', '-X', 'utf8', (Join-Path $PSScriptRoot 'scripts\release_cli.py'))
 if ($Inputs) { $cliArguments += @('--inputs', $Inputs) }
 if ($CheckOnly) { $cliArguments += '--check-only' }
+if (-not $CommittedSource) { $cliArguments += '--working-tree' }
 Write-Host ('Python: ' + $Python)
 if ($Inputs) { Write-Host ('Inputs: ' + $Inputs) }
-Write-Host 'Preparing committed source and target inputs...'
+if ($CommittedSource) { Write-Host 'Preparing committed source selected by JSON Ref and target inputs...' }
+else { Write-Host 'Preparing saved local source snapshot and target inputs (JSON Ref ignored)...' }
 & $Python @cliArguments
 $deploymentExitCode = $LASTEXITCODE
 Write-Host ('Aegis deployment process exited with code {0}.' -f $deploymentExitCode)

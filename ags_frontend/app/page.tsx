@@ -985,7 +985,7 @@ export default function App() {
           </section>}
           {view === "Storage" && user.is_admin && <StorageConfiguration api={api} connections={<ConnectionSettings api={api} onChanged={reload} onModels={()=>navigate("Model Registration")}/>} onChanged={reload} onFreshStart={()=>{changeDataset('');setExtraction(null);setReviewReturn(null);Object.keys(sessionStorage).filter(key=>key.startsWith('aegis-agent-v2:')||key.startsWith('aegis-review-return-')).forEach(key=>sessionStorage.removeItem(key));}}/>}
         </main>
-        <ConnectionStatus api={api} revision={refresh}/>
+        <ConnectionStatus api={api} revision={refresh} datasets={kbs} datasetId={selectedDataset?.id}/>
       </div>
       {toast && (
         <div className="toast" role="status">
