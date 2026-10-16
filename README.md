@@ -20,6 +20,40 @@ The two PDFs above are the documents to share for architecture/technology and pr
 
 ## Architecture diagram
 
+GitHub renders this overview directly in the README. The approved detailed Mural diagram follows it.
+
+```mermaid
+flowchart TB
+    Browser["User browser"] -->|HTTPS| LB["OCI load balancer"]
+    LB --> Web
+
+    subgraph OKE["Existing OCI OKE application"]
+        Web["Caddy HTTPS proxy / Next.js WebApp"] --> API["FastAPI / LangGraph agents"]
+        API --> Chat["Unified Chat workflow"]
+        Worker["Python processing worker"]
+        Reranker["CPU reranker in the backend"]
+        Chat -->|Reranks retrieved evidence| Reranker
+    end
+
+    subgraph Data["Existing OCI data services"]
+        DB[("Oracle Database: application records, SQL job queue and vector search")]
+        Storage["Oracle Object Storage: originals, JSON and Parquet results"]
+    end
+
+    API -->|Approved processing jobs| DB
+    DB -->|Claim queued jobs| Worker
+    Worker -->|Save status and searchable knowledge| DB
+    API <-->|Read and write files| Storage
+    Worker <-->|Read originals and save results| Storage
+    Chat -->|Scoped hybrid retrieval| DB
+    Chat -->|Model calls| Models["Configured model endpoints: Gemini on GCP, local Ollama or other mapped providers"]
+    Worker -->|OCR, embeddings and extraction| Models
+```
+
+Every Unified Chat answer follows **scope/access checks -> hybrid retrieval -> CPU reranking -> model generation -> answer and citation validation**. Processing jobs retain their confirmation and external-data consent requirements. Model providers follow saved dataset mappings; the diagram does not imply all providers are running or required.
+
+### Approved detailed architecture
+
 ![Aegis component architecture showing OCI services, web application, FastAPI and worker, AI providers, database and storage](ags_docs/assets/aegis-architecture.png)
 
 [Open the full-resolution diagram](ags_docs/assets/aegis-architecture.png). This is the approved Mural diagram reused from the [architecture handover](ags_docs/Aegis_Architecture_Handover.pdf). Its provisioned-services configuration snapshot is dated **15 October 2026**; cloud provider blocks show supported hosting alternatives. Effective model connections follow each environment's saved dataset mappings.
