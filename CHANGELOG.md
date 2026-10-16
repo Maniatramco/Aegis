@@ -10,7 +10,7 @@ The application version and in-app feature history are maintained in `ags_fronte
 - Added **About** navigation and a footer version link, with version-by-version feature notes.
 - Kept the original Aegis Agent, Dataset onboarding, extraction/re-extraction, model mappings and backend APIs unchanged.
 
-Validation: 207 frontend unit tests, 4 browser checks and app/test TypeScript checks passed. Browser scope, drag/drop, scroll and mobile checks used synthetic data. Local preview awaits visual review before tagging/pushing; not deployed live.
+Validation: 207 frontend unit tests, 4 browser checks and app/test TypeScript checks passed. Browser scope, drag/drop, scroll and mobile checks used synthetic data. Rendered previews reviewed. The user has authorized version tags and GitHub pushes after relevant checks pass, without repeated approval. Live deployment is tracked separately by its receipt.
 
 ## v26.1.0.0 - baseline through 17 October 2026
 
@@ -26,5 +26,5 @@ The base version was introduced on 16 October. Releases through commit `0116318`
 
 1. Increment the four-part application version for an approved release: a feature increments the third component; a fix increments the fourth.
 2. Add a dated feature entry in `application-version.json` and this file. Keep prior entries intact and update the current README version.
-3. Test the actual changes and record the evidence. Review the local result before publishing.
-4. After publication is approved, commit the release, push the approved branch, and create an annotated `vVERSION` tag when a versioned repository release is requested. Record the exact commit and deployment receipt; never move an existing version tag.
+3. Test the actual changes, review the rendered local result for UI changes, and record the evidence and its limits.
+4. After the relevant end-to-end checks pass, commit the release, create an annotated `vVERSION` tag when a versioned repository release is requested, and push to the approved branch without asking again. Record the exact commit and any deployment receipt; never move an existing version tag.
