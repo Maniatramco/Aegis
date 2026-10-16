@@ -18,6 +18,12 @@ Aegis turns documents into searchable knowledge and structured, reviewable resul
 
 The two PDFs above are the documents to share for architecture/technology and provisioning/deployment. Deployment PDF Section 2 (pages 8-18) includes the workflow on page 9, Windows and Cloud Shell instructions, component selection, approvals, verification and recovery. Provisioning and initial application configuration are separate from the code/object release scripts and deployment skill.
 
+## Architecture diagram
+
+![Aegis component architecture showing OCI services, web application, FastAPI and worker, AI providers, database and storage](ags_docs/assets/aegis-architecture.png)
+
+[Open the full-resolution diagram](ags_docs/assets/aegis-architecture.png). This is the approved Mural diagram reused from the [architecture handover](ags_docs/Aegis_Architecture_Handover.pdf). Its provisioned-services configuration snapshot is dated **15 October 2026**; cloud provider blocks show supported hosting alternatives. Effective model connections follow each environment's saved dataset mappings.
+
 ## Prerequisites before deployment
 
 The normal Windows workflow is **Setup-Aegis.ps1, then Deploy-Aegis.ps1**. Have these ready first:
