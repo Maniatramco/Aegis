@@ -1,0 +1,51 @@
+.aegis-workflow-overview{min-width:0;margin-bottom:26px;color:#24364b}
+.aegis-overview-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px}
+.aegis-guide-eyebrow{display:block;color:#547295;font-size:10px;font-weight:650;letter-spacing:.11em;line-height:1.6}
+body .shell .workspace-region .aegis-overview-heading h2{font-size:27px;line-height:1.3;letter-spacing:-.7px;margin:5px 0}
+.aegis-overview-heading p,.aegis-workflow-panel>header p{font-size:13px;color:#64758c;line-height:1.6;margin:4px 0 0}
+.aegis-overview-identity{display:flex;gap:9px;align-items:center;flex-shrink:0;color:#163c68;font-size:17px;font-weight:650}
+.aegis-overview-identity>span>span{display:block;font-size:10px;color:#6d819a;font-weight:450;margin-top:1px}
+.aegis-workflow-panel{border:1px solid #d7e2ef;border-radius:12px;background:#fff;padding:20px;box-shadow:0 3px 12px #143a6404}
+.aegis-workflow-panel>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+body .shell .workspace-region .aegis-workflow-panel>header h3{font-size:16px;letter-spacing:-.2px;margin:0}
+.aegis-guide-expand,.aegis-feature-toggle,.aegis-guide-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+body .shell .workspace-region .aegis-guide-expand,body .shell .workspace-region .aegis-feature-toggle{font-size:12px;min-height:34px;padding:7px 10px}
+.aegis-flow-scroll-hint{display:none}
+.aegis-flow-scroll{width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#bfd1e7 #f3f7fc;padding:2px 0 8px}
+.aegis-workflow-map{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));min-width:720px;gap:0;border:1px dashed #bccfe3;border-radius:6px;background:#fcfdff;overflow:visible}
+.aegis-workflow-zone{position:relative;min-width:0;padding:15px 0 12px;border-left:1px dashed #c5d4e5}
+.aegis-workflow-zone:first-child{border-left:0}
+.aegis-flow-phase{display:flex;align-items:center;justify-content:center;gap:7px;appearance:none;cursor:pointer;font:inherit;color:#315f8e;border:0;background:transparent;min-height:37px;width:100%;padding:0 8px}
+.aegis-flow-phase strong{font-size:clamp(11px,.9vw,13px);line-height:1.5;font-weight:650}
+.aegis-stage-number{width:21px;height:21px;display:grid;place-items:center;border:1px solid #c7d8e9;background:#eef5fc;border-radius:50%;font-size:10px;color:#3c6b9b;flex-shrink:0}
+.aegis-flow-phase:hover{color:#194f88}.aegis-flow-phase[aria-pressed=true] .aegis-stage-number{background:#245f9e;color:white;border-color:#245f9e}
+.aegis-flow-tools{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:20px 0 16px;min-height:91px}
+.aegis-flow-tools:before{content:"";position:absolute;left:0;right:0;top:23px;border-top:1px solid #94b5d8}
+.aegis-workflow-zone:first-child .aegis-flow-tools:before{left:16%}
+.aegis-workflow-zone:last-child .aegis-flow-tools:before{right:16%}
+.aegis-flow-node{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;gap:11px;text-align:center}
+.aegis-flow-icon{position:relative;z-index:1;display:grid;place-items:center;width:46px;height:46px;color:#3675af;background:#fcfdff}
+.aegis-flow-label{font-size:clamp(10px,.8vw,12px);font-weight:550;color:#3d5d7d;line-height:1.5;max-width:90%;min-height:34px}
+.aegis-flow-arrow{position:absolute;z-index:2;top:15px;left:calc(100% - 9px);color:#4f89bd;background:#fcfdff}
+.aegis-flow-summary{font-size:11px;color:#6a7e93;line-height:1.7;min-height:38px;margin:0 13px 12px;text-align:center}
+.aegis-flow-output{display:block;text-align:center;font-size:10px;font-weight:550;color:#507897;border-top:1px solid #e0eaf3;padding:10px 7px 0;margin:0 10px}
+.aegis-flow-caption{display:flex;align-items:flex-start;gap:7px;font-size:11px;line-height:1.7;color:#6f8298;margin:9px 0 15px}.aegis-flow-caption>svg{flex-shrink:0;margin-top:2px}
+.aegis-flow-shared{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid #e0eaf3;border-bottom:1px solid #e0eaf3;padding:12px 0;color:#5a7490;font-size:11px}
+.aegis-flow-shared>span:first-child{display:inline-flex;align-items:center;gap:7px;color:#326793}.aegis-flow-shared strong{font-weight:600}
+.aegis-flow-feature-links{display:flex;align-items:center;flex-wrap:wrap;gap:4px 18px;padding:12px 0 7px}
+.aegis-flow-feature-link{display:inline-flex;align-items:center;gap:6px;appearance:none;font:inherit;font-size:11px;line-height:1.5;cursor:pointer;border:0;padding:6px 0;background:transparent;color:#3c6b96}
+.aegis-flow-feature-link:hover{color:#164f8c;text-decoration:underline}.aegis-flow-feature-link>svg:last-child{color:#8aa5bf}
+.aegis-flow-detail-toggle{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:10px}.aegis-flow-detail-toggle>span{font-size:10px;color:#8291a3}
+.aegis-stage-detail{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:19px;padding:21px 4px 0;border-top:1px solid #e6edf5}
+.aegis-stage-detail h3{margin:5px 0 7px;font-size:16px;color:#233f60}.aegis-stage-detail p{font-size:12px;line-height:1.75;color:#64758c;margin:0}
+body .shell .workspace-region .aegis-guide-action{font-size:12px;padding:7px 11px;min-height:34px;margin-top:13px}
+.aegis-stage-detail ul{list-style:none;padding:0;margin:2px 0 12px;display:grid;gap:9px}.aegis-stage-detail li{display:flex;gap:8px;font-size:12px;line-height:1.6;color:#49627e}
+.aegis-stage-detail li svg{flex-shrink:0;margin-top:2px;color:#4a8b7a}.aegis-stage-detail .aegis-guide-boundary{display:flex;gap:7px;border-top:1px solid #e6edf5;padding-top:11px;color:#527397;font-size:11px}.aegis-guide-boundary svg{flex-shrink:0;margin-top:3px}
+.aegis-feature-toggle svg{transition:transform .15s}.aegis-feature-toggle svg.is-open{transform:rotate(180deg)}
+.aegis-admin-features{margin-top:13px;border-top:1px solid #dce5ef;padding-top:9px}.aegis-admin-features>summary{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:#58738e;list-style:none;min-height:30px}.aegis-admin-features>summary::-webkit-details-marker{display:none}.aegis-admin-features>summary>span{flex:1;font-size:10px;color:#8999a9;text-align:right}.aegis-admin-features[open]>summary>svg:last-child{transform:rotate(180deg)}
+.aegis-workflow-overview :is(button,summary,.aegis-flow-scroll):focus-visible,.aegis-workflow-dialog :is(button,.aegis-flow-scroll):focus-visible{outline:2px solid #2869b2;outline-offset:3px}
+.aegis-workflow-dialog{width:min(1360px,calc(100% - 40px));max-height:calc(100dvh - 48px);padding:0;border:1px solid #cbd9ea;border-radius:15px;background:#fff;color:#24364b;box-shadow:0 16px 70px #12315138;overflow:auto}.aegis-workflow-dialog::backdrop{background:#12243b70;backdrop-filter:blur(3px)}.aegis-workflow-dialog-inner{padding:27px}.aegis-workflow-dialog-inner>header{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:24px}.aegis-workflow-dialog h2{font-size:25px;margin:5px 0;color:#203e60}.aegis-workflow-dialog .btn{font-family:inherit}.aegis-workflow-dialog .aegis-guide-action{margin-top:14px}.aegis-workflow-dialog .aegis-flow-phase strong{font-size:14px}
+.home-workflow-datasets-heading{display:flex;align-items:center;gap:9px;margin:24px 0 15px;font-size:17px;color:#29476b}
+@media(max-width:850px){.aegis-overview-identity{display:none}.aegis-flow-shared{justify-content:flex-start;gap:8px 20px}.aegis-flow-detail-toggle>span{display:none}}
+@media(max-width:650px){.aegis-flow-scroll-hint{display:flex;align-items:center;gap:5px;font-size:10px;color:#6f8298;margin:0 0 8px}body .shell .workspace-region .aegis-overview-heading h2{font-size:23px}.aegis-workflow-panel{padding:14px}.aegis-workflow-panel>header{gap:9px}.aegis-workflow-panel>header p{font-size:12px}.aegis-guide-expand span{display:none}.aegis-stage-detail{grid-template-columns:minmax(0,1fr);gap:16px;padding-top:17px}.aegis-workflow-dialog{width:calc(100% - 20px);max-height:calc(100dvh - 20px)}.aegis-workflow-dialog-inner{padding:18px}.aegis-admin-features>summary>span{display:none}.aegis-flow-feature-links{gap:4px 13px}.aegis-flow-scroll{padding-bottom:12px}.aegis-flow-caption{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.aegis-workflow-overview *{transition:none!important}}
