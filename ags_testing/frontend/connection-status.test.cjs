@@ -3,7 +3,7 @@ const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
 function load(name,overrides={}){
  const filename=path.resolve(__dirname,'../../ags_frontend/app',name),compiled=new Module(filename,module);compiled.filename=filename;compiled.paths=module.paths;
  const original=compiled.require.bind(compiled);compiled.require=id=>Object.hasOwn(overrides,id)?overrides[id]:id.endsWith('.css')?{}:id.startsWith('.')&&fs.existsSync(path.resolve(path.dirname(filename),id+'.ts'))?load(id+'.ts',overrides):original(id);
- compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);return compiled.exports;
+ compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{esModuleInterop:true,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);return compiled.exports;
 }
 const {runtimeConnections,modelConnectionSummary,connectionLocation}=load('runtime-connections.ts');
 const services=runtimeConnections('http://private-user:private-password@api:8000/?token=private-token',{AEGIS_DEPLOYMENT_TARGET:'oci',AEGIS_API_LOCATION:'oci',AEGIS_WORKER_LOCATION:'oci',AEGIS_MODEL_LOCATION:'local',SECRET_KEY:'never-expose'});
@@ -26,7 +26,7 @@ test('footer reports configured service locations and strips endpoint credential
 });
 test('collapsed footer shows Connections and base version without the expanded service list',()=>{
  const html=renderFooter();
- assert.match(html,/Connections/);assert.match(html,/v26\.1\.0\.0/);assert.match(html,/aria-expanded="false"/);
+ assert.match(html,/href="#About"/);assert.match(html,/Connections/);assert.match(html,/v26\.1\.1\.0/);assert.match(html,/aria-expanded="false"/);
  assert.ok(!html.includes('Connection details'));assert.ok(!html.includes('mk-aegis'));assert.ok(!html.includes('agsora'));
  assert.equal((html.match(/<button/g)||[]).length,1);
 });

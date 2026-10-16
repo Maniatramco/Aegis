@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useState} from 'react';
-import {BookOpen,ChevronRight,Database,FileSearch,FileText,FolderPlus,Layers,Settings2,Table2} from 'lucide-react';
+import {BookOpen,ChevronRight,Database,FileSearch,FileText,FolderPlus,Info,Layers,Settings2,Table2} from 'lucide-react';
 import {AgentLogo} from './agent-logo';
 
 type Item={name:string;icon:typeof Database};
@@ -21,5 +21,6 @@ export function WorkspaceNavigation({view,isAdmin,onNavigate,adminItems,adminOpe
   </div>
   <button className={`nav-item nav-more${modelViews.includes(view)?' group-active':''}`} aria-label="Manage workspace" aria-expanded={adminOpen} aria-controls="admin-navigation" onClick={onAdminToggle}><Settings2 size={18}/><span className="nav-item-label">Manage workspace</span><ChevronRight size={14} className={adminOpen?'rotated':''}/></button>
   {adminOpen&&<div id="admin-navigation" className="admin-navigation">{isAdmin&&<>{link('Model Registration','Model Registration',Layers)}{link('Model Mapping','Model Mapping',BookOpen)}</>}{adminItems.map(item=>link(item.name,item.name,item.icon))}</div>}
+  {link('About','About',Info)}
  </nav>;
 }

@@ -1,8 +1,9 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const filename=path.resolve(__dirname,'../../ags_frontend/app/dataset-dashboard.tsx'),compiled=new Module(filename,module);compiled.filename=filename;compiled.paths=module.paths;
+const scopeFile=path.resolve(__dirname,'../../ags_frontend/app/dataset-knowledge-scope.ts'),scopeModule=new Module(scopeFile,module);scopeModule.filename=scopeFile;scopeModule.paths=module.paths;scopeModule._compile(ts.transpileModule(fs.readFileSync(scopeFile,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,scopeFile);
 let hooks=[],cursor=0;
 const original=compiled.require.bind(compiled);
-compiled.require=id=>id==='react'?{useState(initial){const slot=cursor++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];}}:id.endsWith('.css')?{}:id==='./dataset-knowledge-picker'?{DatasetKnowledgePicker:props=>({type:'picker',props})}:id==='lucide-react'||id==='./agent-logo'?new Proxy({},{get:()=>()=>null}):original(id);
+compiled.require=id=>id==='./dataset-knowledge-scope'?scopeModule.exports:id==='react'?{useState(initial){const slot=cursor++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];}}:id.endsWith('.css')?{}:id==='./dataset-knowledge-picker'?{DatasetKnowledgePicker:props=>({type:'picker',props})}:id==='lucide-react'||id==='./agent-logo'?new Proxy({},{get:()=>()=>null}):original(id);
 compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
 const {DatasetDashboard,datasetDocuments,datasetReadiness}=compiled.exports;
 const datasets=[{id:'a',name:'Invoices'},{id:'b',name:'Policies'}],documents=[{id:'one',parent_id:'a',name:'invoice.txt',status:'ready'},{id:'two',dataset_id:'b',name:'policy.txt',status:'ready'},{id:'stale',kb_id:'a',name:'old.txt',status:'ready',requires_reindex:true}];
@@ -56,4 +57,40 @@ test('including available knowledge opens a bounded cross-dataset scope',()=>{
 
 test('Dashboard does not initialize chat on first load, including a preselected dataset',()=>{
  for(const selectedId of ['', 'a']){const v=mount({selectedId});assert.equal(v.agents.length,0);v.render();assert.equal(v.agents.length,0);assert.ok(v.nodes.some(n=>n.type==='button'&&text(n)==='Open chat'));find(v,'Ask Aegis about Policies').props.onClick();v.render();assert.deepEqual(v.agents.map(a=>a.id),['b']);}
+});
+
+
+test('sticky knowledge action remains outside the scrollable source list and collapsed sources',()=>{
+ const v=mount();const toolbar=v.nodes.find(n=>n.props?.['aria-label']==='Dataset knowledge actions');
+ assert.ok(all(toolbar).some(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge'));
+ const content=v.nodes.find(n=>n.props?.id==='notebook-source-content');assert.equal(all(content).some(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge'),false);
+ find(v,'Collapse sources').props.onClick();v.render();assert.equal(v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.disabled,false);
+});
+
+test('dataset checkboxes combine scopes and preserve individual file exclusions',()=>{
+ const v=mountChat({selectedId:'a'});find(v,'Include source invoice.txt').props.onChange();v.render();
+ find(v,'Include dataset Policies in knowledge').props.onChange();v.render();
+ assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['two']});
+ find(v,'Include dataset Invoices in knowledge').props.onChange();v.render();
+ assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['b'],documentIds:['two']});
+ find(v,'Include dataset Policies in knowledge').props.onChange();v.render();
+ assert.equal(v.agents.length,0);assert.ok(v.nodes.some(n=>n.type==='h3'&&text(n)==='Choose knowledge for this chat'));
+});
+
+test('dragging a dataset onto collapsed Sources adds only permitted ready knowledge without duplicates',()=>{
+ const v=mountChat({selectedId:'a'}),type='application/x-aegis-dataset-ids';find(v,'Collapse sources').props.onClick();v.render();
+ let payload;const tile=v.nodes.find(n=>n.props?.className==='dashboard-dataset-tile'&&all(n).some(c=>c.props?.['aria-label']==='Ask Aegis about Policies'));
+ tile.props.onDragStart({preventDefault(){assert.fail('Valid dataset should drag');},dataTransfer:{setData:(mime,data)=>{assert.equal(mime,type);payload=data;}}});
+ const drop=()=>find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:mime=>mime===type?payload:''}});
+ drop();v.render();assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['one','two']});
+ assert.equal(v.nodes.find(n=>n.props?.id==='notebook-source-content').props.hidden,false);
+ drop();v.render();assert.deepEqual(v.agents[0].knowledgeScope.documentIds,['one','two']);
+ const before=v.agents[0].knowledgeScope;find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:()=>JSON.stringify(['unauthorized'])}});v.render();assert.deepEqual(v.agents[0].knowledgeScope,before);
+});
+
+test('active chat disables multi-selection and ignores dropped datasets',()=>{
+ const v=mountChat({selectedId:'a'});v.agents[0].onBusy(true);v.render();
+ assert.equal(find(v,'Include dataset Policies in knowledge').props.disabled,true);
+ assert.equal(v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.disabled,true);
+ find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:()=>JSON.stringify(['b'])}});v.render();assert.equal(v.agents[0].id,'a');
 });

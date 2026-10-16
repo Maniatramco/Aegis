@@ -1,3 +1,27 @@
 {
-  "version": "26.1.0.0"
+  "version": "26.1.1.0",
+  "releases": [
+    {
+      "version": "26.1.1.0",
+      "date": "2026-10-17",
+      "title": "Dataset knowledge, within easy reach",
+      "changes": [
+        "Add Dataset Knowledge stays visible in a sticky toolbar while sources and chat scroll, including when Sources is collapsed.",
+        "Combine multiple datasets using the Include dataset checkboxes or the indexed-file picker.",
+        "Drag dataset cards into Sources to include their accessible indexed files, preserving other selected sources.",
+        "Find the current version and version-by-version feature history on the About screen."
+      ]
+    },
+    {
+      "version": "26.1.0.0",
+      "date": "2026-10-17",
+      "title": "Aegis baseline and Dashboard foundation",
+      "changes": [
+        "Document onboarding, uploads, model mappings, extraction, review and the original Aegis Agent.",
+        "Dashboard with dataset cards, permitted Unified Knowledge sources and a separate read-only Dataset Knowledge Chat.",
+        "Chat opens on demand. Greetings and self-contained general questions use the selected model without knowledge lookup; dataset questions retain retrieval, reranking and citations.",
+        "Compact Connections footer with model hosting details. Original Dataset onboarding remains in its existing workspace."
+      ]
+    }
+  ]
 }

@@ -2,9 +2,10 @@
 import {useCallback,useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Cloud,HardDrive,CircleHelp,Network,ChevronUp,X} from 'lucide-react';
-import {version} from './application-version.json';
+import application from './application-version.json';
 import {connectionLocation,modelConnectionSummary,type ModelDataset} from './runtime-connections';
 import './connection-status.css';
+const {version}=application;
 
 type Destination={provider:string;name:string;region?:string;endpoint?:string;detail?:string;locations?:string[]};
 type Connections=Record<'files'|'database'|'knowledge',Destination>&{services?:Record<string,Destination>};
@@ -69,7 +70,7 @@ export function ConnectionStatus({api,revision,datasets,datasetId}:{api:Api;revi
   <button ref={trigger} type="button" className="connection-status-trigger" aria-expanded={open} aria-controls={open?popupId:undefined} onMouseEnter={show} onMouseLeave={leave} onFocus={show} onBlur={event=>blur(event.relatedTarget)} onClick={()=>{if(pinned.current)close();else{pinned.current=true;show();}}}>
    <Network size={14} aria-hidden="true"/><span>Connections</span><ChevronUp size={12} aria-hidden="true"/>
   </button>
-  <span className="application-version" aria-label={`Application version v${version}`}>v{version}</span>
+  <a className="application-version application-version-link" href="#About" aria-label={`About Aegis, application version v${version}`}>v{version}</a>
  </footer>{open&&typeof document!=='undefined'&&createPortal(<section ref={popup} id={popupId} role="region" aria-label="Connection details" className="connection-status-popup" style={{left:position.left,bottom:position.bottom,maxHeight:position.maxHeight}} onMouseEnter={clearClose} onMouseLeave={leave} onFocus={clearClose} onBlur={event=>blur(event.relatedTarget)}>
   <header><h2>Connections</h2><button type="button" aria-label="Close connection details" onClick={()=>{trigger.current?.focus();close();}}><X size={15} aria-hidden="true"/></button></header>
   {!connections?<p className="connection-status-pending" role="status">{unavailable?'Status unavailable · refresh to retry':'Checking destinations…'}</p>:<div className="connection-status-grid">{items.map(item=>{

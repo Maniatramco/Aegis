@@ -11,7 +11,7 @@ if (mode === 'unit') {
   args = ['--test', ...extra, ...files];
 } else if (mode === 'e2e' || mode === 'screenshots') {
   const cli = require.resolve('@playwright/test/cli', { paths: [frontend] });
-  const suites = mode === 'e2e' ? ['current-workspace.spec.ts', 'recovery.spec.ts', 'review-flow.spec.ts'] : ['current-workspace.spec.ts', '-g', 'current.screens.fit'];
+  const suites = mode === 'e2e' ? ['current-workspace.spec.ts', 'dashboard-knowledge.spec.ts', 'recovery.spec.ts', 'review-flow.spec.ts'] : ['current-workspace.spec.ts', '-g', 'current.screens.fit'];
   args = [cli, 'test', '--config', path.join(__dirname, 'playwright.config.ts'), ...suites, ...extra];
 } else {
   console.error('Use unit, e2e or screenshots.');
