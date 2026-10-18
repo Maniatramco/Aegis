@@ -1,12 +1,15 @@
 "use client";
 import {useState,type ReactNode,type DragEvent} from 'react';
-import {ArrowRight,CheckCircle2,Database,FileText,FolderOpen,ShieldCheck,Search,Plus,PanelLeftClose,PanelLeftOpen,ChevronDown,GripVertical} from 'lucide-react';
+import dynamic from 'next/dynamic';
+import {ArrowRight,CheckCircle2,Database,FileText,FolderOpen,ShieldCheck,Search,Plus,PanelLeftClose,PanelLeftOpen,ChevronDown,GripVertical,Network} from 'lucide-react';
 import {AgentLogo} from './agent-logo';
 import {DatasetKnowledgePicker,type DatasetKnowledgeScope} from './dataset-knowledge-picker';
 import {availableKnowledge,boundedKnowledge,addDatasetKnowledge,removeDatasetKnowledge,DATASET_DRAG_TYPE,droppedDatasetIds} from './dataset-knowledge-scope';
 import './dataset-dashboard.css';
+import './metadata-relationships.css';
 
 type Entity=Record<string,any>;
+const MetadataRelationships=dynamic(()=>import('./metadata-relationships').then(module=>module.MetadataRelationships),{ssr:false});
 export function datasetDocuments(documents:Entity[],id:string){return documents.filter(doc=>(doc.dataset_id||doc.kb_id||doc.parent_id)===id);}
 export function datasetReadiness(dataset:Entity,documents:Entity[]){
  const ready=documents.filter(doc=>doc.status==='ready'&&!doc.requires_reindex).length;
@@ -17,11 +20,12 @@ export function datasetReadiness(dataset:Entity,documents:Entity[]){
 }
 
 type SourceSelection={datasetId:string;ids:string[]}|null;
-export function DatasetDashboard({username,datasets,documents,loading,search,onClearSearch,onBrowse,canManage,renderAgent,guide,selectedId,onSelect}:{username:string;selectedId:string;onSelect:(id:string)=>void;datasets:Entity[];documents:Entity[];loading:boolean;search:string;onClearSearch:()=>void;onBrowse:()=>void;canManage:boolean;renderAgent:(id:string,onBusy:(busy:boolean)=>void,sourceScope:string[]|null,onSourceChange:(ids:string[])=>void,knowledgeScope?:DatasetKnowledgeScope)=>ReactNode;guide:ReactNode}){
+export function DatasetDashboard({username,datasets,documents,loading,search,onClearSearch,onBrowse,canManage,renderAgent,guide,selectedId,onSelect,metadataApi,onMetadataReview}:{metadataApi:(path:string,method?:string,body?:unknown,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;onMetadataReview:(id:string)=>void;username:string;selectedId:string;onSelect:(id:string)=>void;datasets:Entity[];documents:Entity[];loading:boolean;search:string;onClearSearch:()=>void;onBrowse:()=>void;canManage:boolean;renderAgent:(id:string,onBusy:(busy:boolean)=>void,sourceScope:string[]|null,onSourceChange:(ids:string[])=>void,knowledgeScope?:DatasetKnowledgeScope)=>ReactNode;guide:ReactNode}){
  const [busy,setBusy]=useState(false),[sourcesCollapsed,setSourcesCollapsed]=useState(false),[chatOpen,setChatOpen]=useState(false);
  const [sourceSearch,setSourceSearch]=useState(''),[selection,setSelection]=useState<SourceSelection>(null);
  const [pickerOpen,setPickerOpen]=useState(false),[included,setIncluded]=useState<DatasetKnowledgeScope|null>(null);
  const [dropActive,setDropActive]=useState(false),[notice,setNotice]=useState('');
+ const [metadataOpen,setMetadataOpen]=useState(false);
  const selected=datasets.find(d=>d.id===selectedId);
  const visible=datasets.filter(d=>`${d.name} ${d.description||''}`.toLowerCase().includes(search.trim().toLowerCase()));
  const workspace=!selectedId;
@@ -41,7 +45,7 @@ export function DatasetDashboard({username,datasets,documents,loading,search,onC
  const drop=(event:DragEvent<HTMLElement>)=>{event.preventDefault();setDropActive(false);if(busy)return;const ids=droppedDatasetIds(event.dataTransfer.getData(DATASET_DRAG_TYPE),datasets).filter(id=>availableKnowledge(datasets,documents).some(doc=>(doc.dataset_id||doc.kb_id||doc.parent_id)===id));if(!ids.length){setNotice('Choose an accessible dataset with indexed files to add knowledge.');return;}include(addDatasetKnowledge(currentScope,ids,datasets,documents));setNotice(`${ids.map(id=>datasets.find(d=>d.id===id)?.name).join(', ')} included in this chat's knowledge.`);};
  const dragOver=(event:DragEvent<HTMLElement>)=>{if(!busy&&event.dataTransfer.types.includes(DATASET_DRAG_TYPE)){event.preventDefault();event.dataTransfer.dropEffect='copy';setDropActive(true);}};
  return <section className="dataset-dashboard notebook-dashboard" aria-label="Dataset dashboard">
-  <header className="notebook-heading"><div><Database size={19}/><h2>{username}'s Knowledge Source</h2><span className="notebook-private"><ShieldCheck size={12}/>Dataset access protected</span></div>{!canManage&&<button type="button" className="btn" onClick={onBrowse}><Plus size={15}/>Browse datasets</button>}</header>
+  <header className="notebook-heading"><div><Database size={19}/><h2>{username}'s Knowledge Source</h2><span className="notebook-private"><ShieldCheck size={12}/>Dataset access protected</span></div><div className="metadata-dashboard-actions"><button data-open-metadata type="button" className="btn" disabled={busy||loading} onClick={()=>setMetadataOpen(true)}><Network size={16}/>Metadata Relationships</button>{!canManage&&<button type="button" className="btn" onClick={onBrowse}><Plus size={15}/>Browse datasets</button>}</div></header>
   <div className="dashboard-section-label"><h3>Onboarded datasets <span>{datasets.length}</span></h3><span>{busy?'Finish the current chat request before changing knowledge.':'Open a dataset, select several, or drag a card into Sources.'}</span></div>
   <div className="dashboard-dataset-rail" role="region" aria-label="Onboarded datasets" tabIndex={0} aria-busy={loading}>
    {datasets.length>0&&<button type="button" className="dashboard-dataset workspace-knowledge-card" aria-label="Chat with all accessible dataset knowledge" aria-pressed={workspace&&!included} disabled={busy} onClick={()=>choose('')}><span className="dashboard-dataset-icon"><Database size={17}/></span><span className="notebook-card-copy"><strong>All accessible knowledge</strong><span>{datasets.filter(d=>d.active!==false).length} datasets · Ask across datasets</span></span>{workspace&&!included?<CheckCircle2 size={16}/>:<ArrowRight size={16}/>}</button>}
@@ -64,6 +68,7 @@ export function DatasetDashboard({username,datasets,documents,loading,search,onC
    <section className="dashboard-agent notebook-chat notebook-panel" aria-label="Dataset knowledge workspace chat"><header className="notebook-panel-heading"><h3><AgentLogo size={24}/>Dataset Knowledge Chat</h3><span className="notebook-chat-scope">{workspace?included?`${workspaceIds.length} included datasets`:'All accessible datasets':allSelected?'All indexed sources':`${selectedSources.length} selected sources`}</span></header>{selected?.active===false?<div className="dashboard-agent-empty"><h3>This dataset is inactive</h3><p>Activate it in the dataset workspace before starting new work.</p></div>:workspace&&included&&!workspaceIds.length?<div className="dashboard-agent-empty"><AgentLogo size={55}/><h3>Choose knowledge for this chat</h3><p>Select dataset checkboxes, drag a dataset into Sources, or use Add Dataset Knowledge.</p></div>:(selected||workspace&&datasets.length>0)?chatOpen?renderAgent(selected?.id||'',setBusy,workspace?null:sourceScope,setSources,workspace?knowledgeScope:undefined):<div className="dashboard-agent-empty"><AgentLogo size={65}/><h3>Ask about your knowledge</h3><p>Choose a dataset above or open chat when you are ready. No summary runs automatically.</p><button type="button" className="btn primary" onClick={()=>setChatOpen(true)}>Open chat</button></div>:<div className="dashboard-agent-empty"><AgentLogo size={65}/><h3>Your sources. A conversation away.</h3><p>Choose an onboarded dataset to ask questions, connect details across documents and follow the evidence.</p><div className="notebook-empty-prompts"><span>Summarize key findings<ArrowRight size={13}/></span><span>Find important terms and dates<ArrowRight size={13}/></span><span>Compare details across sources<ArrowRight size={13}/></span></div></div>}</section>
   </div>
   {pickerOpen&&<DatasetKnowledgePicker datasets={datasets} documents={documents} initial={currentScope} onInclude={scope=>{include(scope);setNotice('Selected dataset knowledge is included in this chat.');}} onClose={()=>setPickerOpen(false)}/>}
+  {metadataOpen&&<MetadataRelationships datasets={datasets} initialDatasetIds={currentScope.datasetIds} api={metadataApi} onReview={onMetadataReview} onClose={()=>{setMetadataOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('[data-open-metadata]')?.focus());}}/>}
   <details className="dashboard-guide"><summary>How Aegis works <span>Explore the end-to-end document workflow</span><ChevronDown size={13}/></summary>{guide}</details>
  </section>;
 }

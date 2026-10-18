@@ -2,6 +2,18 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.2.0 - 18 October 2026
+
+- Added a Dashboard header action for the on-demand Metadata Relationships explorer.
+- Added a read-only, access-scoped lineage API covering datasets, documents, extractions, saved prompt versions, reviews and model mappings.
+- Preserved combined-document lineage and distinguished pinned extraction model versions from current dataset mappings.
+- Added scoped counts, category drill-down, search, paginated records, graph/list views, zoom, pan and mobile record details.
+- Applied Aegis blue and navy branding to the light graph canvas, nodes, relationships, controls and list view.
+- Preserved Dashboard chat state and existing onboarding, extraction and review workflows. No graph database, schema change or inference is required.
+- Built from saved metadata catalog records and version snapshots, independently of the knowledge vector store. OCI deployment remains separate.
+
+Validation: 58 backend regression tests, 207 frontend unit tests and app/test TypeScript checks passed. Local browser checks with isolated synthetic data covered dataset scope and counts, empty selection, record search, graph/list views, zoom, saved extraction navigation to Review, preserved chat drafts/source selection and mobile details. The Next.js production build compiled and generated pages successfully (exit 0), with a Windows symlink warning during standalone packaging. An additional production-preview server start was blocked by automatic approval review, so browser checks used the existing local development server. No live OCI deployment or live-model inference was performed.
+
 ## v26.1.1.0 - 17 October 2026
 
 - Moved **Add Dataset Knowledge** to a sticky toolbar outside the scrolling Sources list. It stays available when Sources is collapsed.

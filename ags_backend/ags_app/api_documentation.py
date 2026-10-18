@@ -57,6 +57,7 @@ NOTES = {
     'POST /api/auth/recovery/reset': 'Complete native SQLite desktop recovery with its recovery cookie, X-CSRF-Token, and matching new passwords; supply a token only for the legacy private-grant flow. Loopback and origin checks apply. Oracle and network deployments do not enable this route.',
     'GET /health': 'Basic process liveness check. A running API does not by itself prove that its dependencies are ready.',
     'GET /ready': 'Check the database, the vector service when configured, and the reranker when enabled. This is not a full model-inference test. Inspect the response before sending processing work.',
+    'GET /api/metadata-relationships': 'Read access-scoped workflow lineage, exact category counts, saved prompt/model versions and paginated metadata records. No inference or indexing is started.',
     'GET /api/overview': 'Read workspace totals and recent activity for the dashboard.',
     'GET /api/knowledge-bases': 'List assigned datasets (administrator sees all) through the older knowledge-base route. New integrations should use /api/datasets.',
     'POST /api/knowledge-bases': 'Create a dataset through the older knowledge-base route. Register and map its models before processing documents.',
@@ -159,6 +160,7 @@ PUBLIC = {'GET /health', 'GET /ready', 'GET /api/auth/status', 'POST /api/auth/s
 EXAMPLES = {
     'POST /api/auth/login': {'user': {'id': '<user-id>', 'username': 'your-username'}, 'csrf_token': '<csrf-token>'},
     'GET /health': {'status': 'ok'},
+    'GET /api/metadata-relationships': {'level':'overview','dataset_ids':['<dataset-id>'],'nodes':[{'id':'Dataset','type':'Dataset','label':'Dataset','count':1}],'edges':[],'totals':{'nodes':1,'edges':0,'categories':{'Dataset':1}}},
     'GET /api/overview': {'documents': 10, 'ready': 8, 'jobs': 2, 'knowledge_bases': 1, 'failed': 0},
     'POST /api/documents/upload': {'documents': [{'id': '<document-id>', 'name': 'invoice.pdf', 'status': 'queued'}], 'jobs': [{'id': '<job-id>', 'kind': 'index', 'target_id': '<document-id>', 'status': 'queued', 'progress': 0}]},
     'GET /api/documents/{id}/preview': {'text': 'Invoice total: 42', 'chunks': [], 'document': {'id': '<document-id>', 'name': 'invoice.pdf', 'status': 'ready'}},

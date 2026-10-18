@@ -26,7 +26,8 @@ test('footer reports configured service locations and strips endpoint credential
 });
 test('collapsed footer shows Connections and base version without the expanded service list',()=>{
  const html=renderFooter();
- assert.match(html,/href="#About"/);assert.match(html,/Connections/);assert.match(html,/v26\.1\.1\.0/);assert.match(html,/aria-expanded="false"/);
+ const release=require('../../ags_frontend/app/application-version.json');
+ assert.match(html,/href="#About"/);assert.match(html,/Connections/);assert.ok(html.includes('v'+release.version));assert.match(html,/aria-expanded="false"/);
  assert.ok(!html.includes('Connection details'));assert.ok(!html.includes('mk-aegis'));assert.ok(!html.includes('agsora'));
  assert.equal((html.match(/<button/g)||[]).length,1);
 });

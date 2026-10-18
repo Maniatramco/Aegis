@@ -2,7 +2,13 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current application version: `v26.1.1.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.2.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+## Metadata Relationships
+
+Open **Dashboard → Metadata Relationships** from the top-right of the Knowledge Source header. The graph opens on demand for the Dashboard's selected datasets and can include other accessible datasets, including inactive ones. It shows datasets, documents, extraction runs, saved prompt versions, review revisions and model mappings. Search records, explore categories, inspect connections, switch graph/list views and open an original document or extraction in Review. The graph uses Aegis blue and navy on a light canvas to match the Dashboard.
+
+The endpoint is read-only and does not run chat, inference, knowledge indexing or provider connection tests. Combined extraction lineage uses the saved document list. Current model mappings and pinned extraction model versions are separate links. Graph rendering is bounded; category totals and paginated matching records disclose larger scopes. Relationships come from the authorized metadata catalog and saved record snapshots, independently of the vector store used for knowledge retrieval. No new database tables or Neo4j service are required. This version has been tested locally; OCI deployment is a separate step and has not been performed for v26.1.2.0.
 
 ## Start here
 

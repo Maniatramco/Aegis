@@ -31,3 +31,5 @@
 @media(max-width:900px) and (min-width:761px){.notebook-workspace{height:auto}}
 @media(max-width:760px){.dashboard-dataset-tile{flex-basis:235px}.dashboard-knowledge-toolbar{top:5px;flex-wrap:wrap;gap:10px;padding:11px}.dashboard-knowledge-toolbar .notebook-add-source{min-height:44px;font-size:11px}.dashboard-knowledge-toolbar>div{flex:1;min-width:145px}.notebook-workspace{height:auto;min-height:0}.dashboard-dataset-include{min-height:38px}}
 @media(max-width:420px){.dashboard-knowledge-toolbar .notebook-add-source{width:100%}}
+/* Dashboard entry stays outside Sources and chat scrolling. */
+.notebook-heading>.metadata-dashboard-actions{gap:9px;flex-shrink:0}.metadata-dashboard-actions>.btn{display:flex;align-items:center;gap:6px;font-size:11px;min-height:33px;border-radius:8px;background:#fff;color:#396a9d;border-color:#c9d9e9}.metadata-dashboard-actions>.btn:hover{background:#e6f0fb;border-color:#9db8d7}@media(max-width:700px){.notebook-heading{flex-wrap:wrap;gap:11px}.notebook-heading>.metadata-dashboard-actions{width:100%;justify-content:flex-end}.metadata-dashboard-actions>.btn{font-size:10px;min-height:34px}}

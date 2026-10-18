@@ -1,6 +1,18 @@
 {
-  "version": "26.1.1.0",
+  "version": "26.1.2.0",
   "releases": [
+    {
+      "version": "26.1.2.0",
+      "date": "2026-10-18",
+      "title": "Explore metadata relationships",
+      "changes": [
+        "Open Metadata Relationships from the Dashboard Knowledge Source header, on demand.",
+        "Explore access-scoped datasets, documents, saved extraction runs, prompt versions, review revisions and mapped models.",
+        "Inspect records and relationships with dataset selection, search, graph/list views, zoom, pan and mobile details.",
+        "Aegis blue and navy relationship graph on a light canvas, with matching controls and record details.",
+        "Read-only metadata inspection preserves Dashboard chat and processing workflows; no model calls, graph database or schema changes are required."
+      ]
+    },
     {
       "version": "26.1.1.0",
       "date": "2026-10-17",
