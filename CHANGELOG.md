@@ -9,10 +9,12 @@ The application version and in-app feature history are maintained in `ags_fronte
 - Preserved combined-document lineage and distinguished pinned extraction model versions from current dataset mappings.
 - Added scoped counts, category drill-down, search, paginated records, graph/list views, zoom, pan and mobile record details.
 - Applied Aegis blue and navy branding to the light graph canvas, nodes, relationships, controls and list view.
+- Completed the API reference entries for the five existing Dashboard Dataset Knowledge Chat routes, including scope, history and streaming behavior.
+- Registered metadata routes before the API documentation catalog is finalized so their descriptions appear in the exported contract.
 - Preserved Dashboard chat state and existing onboarding, extraction and review workflows. No graph database, schema change or inference is required.
 - Built from saved metadata catalog records and version snapshots, independently of the knowledge vector store. OCI deployment remains separate.
 
-Validation: 58 backend regression tests, 207 frontend unit tests and app/test TypeScript checks passed. Local browser checks with isolated synthetic data covered dataset scope and counts, empty selection, record search, graph/list views, zoom, saved extraction navigation to Review, preserved chat drafts/source selection and mobile details. The Next.js production build compiled and generated pages successfully (exit 0), with a Windows symlink warning during standalone packaging. An additional production-preview server start was blocked by automatic approval review, so browser checks used the existing local development server. No live OCI deployment or live-model inference was performed.
+Validation: 60 backend regression and API documentation tests, 207 frontend unit tests and app/test TypeScript checks passed. Local browser checks with isolated synthetic data covered dataset scope and counts, empty selection, record search, graph/list views, zoom, saved extraction navigation to Review, preserved chat drafts/source selection and mobile details. The Next.js production build compiled and generated pages successfully (exit 0), with a Windows symlink warning during standalone packaging. An additional production-preview server start was blocked by automatic approval review, so browser checks used the existing local development server. No live OCI deployment or live-model inference was performed.
 
 ## v26.1.1.0 - 17 October 2026
 

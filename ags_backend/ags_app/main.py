@@ -1140,8 +1140,8 @@ agent_onboarding.install(app, auth)
 from . import knowledge
 knowledge.install(app, auth)
 
-from . import api_documentation
-api_documentation.install(app,auth)
-
 from . import metadata_relationships
 metadata_relationships.install(app, auth)
+
+from . import api_documentation
+api_documentation.install(app,auth)

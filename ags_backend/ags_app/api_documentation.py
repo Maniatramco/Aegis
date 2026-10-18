@@ -5,6 +5,11 @@ from fastapi.routing import APIRoute
 
 # Keyed by method and path so similar operations cannot share misleading notes.
 NOTES = {
+    'GET /api/dataset-chat/catalog': 'Read the authorized dataset, document, prompt and model catalog for Dashboard Dataset Knowledge Chat without starting a conversation or inference.',
+    'GET /api/dataset-chat/conversations': 'List the signed-in user\'s separate Dashboard chat history, omitting conversations whose saved dataset/document scope is no longer accessible.',
+    'GET /api/dataset-chat/conversations/{id}': 'Read an owned Dashboard conversation and its saved messages after rechecking access to its dataset and document scope.',
+    'POST /api/dataset-chat/messages': 'Answer in the separate Dashboard chat using the selected mapped Chat model and persist its scoped history. Self-contained general questions skip knowledge lookup; dataset, private, mixed and uncertain questions use scoped retrieval, reranking and citation validation. Original Agent processing workflows are unchanged.',
+    'POST /api/dataset-chat/reply': 'Stream the separate Dashboard chat response and actual workflow events as server-sent events, with the same scope, model routing and saved-history checks as the non-streaming messages route. Read the terminal done or error event; HTTP 200 alone does not prove an answer completed.',
     'GET /api/runtime-config': 'Administrator only: read validated operational settings and explicit overrides without credentials; this does not apply configuration changes.',
     'GET /api/dataset-trash': 'Administrator only: list recoverably deleted datasets and their retained archive information.',
     'DELETE /api/datasets/{id}': 'Administrator only: recoverably delete a dataset after confirmation while retaining its archived content for restoration.',
@@ -147,7 +152,7 @@ GROUPS = {
     'auth': 'Authentication', 'datasets': 'Datasets', 'knowledge-bases': 'Datasets',
     'models': 'Models', 'model-registrations': 'Models', 'model-providers': 'Models', 'local-models': 'Models',
     'documents': 'Documents', 'conversations': 'Chat', 'messages': 'Chat',
-    'temporary-chat': 'Temporary chat', 'templates': 'Prompt templates',
+    'temporary-chat': 'Temporary chat', 'dataset-chat': 'Dashboard knowledge chat', 'templates': 'Prompt templates',
     'extractions': 'Extraction & review', 'jobs': 'Jobs & workflow',
     'index': 'Index & search', 'settings': 'Settings & connections',
     'overview': 'Workspace & services', 'capabilities': 'Workspace & services',
