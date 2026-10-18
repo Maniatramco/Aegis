@@ -1143,5 +1143,8 @@ knowledge.install(app, auth)
 from . import metadata_relationships
 metadata_relationships.install(app, auth)
 
+from . import governance
+governance.install(app, auth)
+
 from . import api_documentation
 api_documentation.install(app,auth)

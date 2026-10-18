@@ -78,8 +78,12 @@ def build(actor, dataset_ids):
         record = records.get(id)
         if not record: raise HTTPException(404, 'Dataset metadata is no longer accessible.')
         data = payload(record); configs[id] = data
+        from .governance import policy
+        governance = policy(record)
         node('dataset:'+id, 'Dataset', record.name, [id], 'inactive' if data.get('active') is False else record.status,
-             record.version, {'Dataset ID': id, 'Description': data.get('description', ''), 'Access': 'Authorized dataset'})
+             record.version, {'Dataset ID': id, 'Description': data.get('description', ''), 'Access': 'Authorized dataset',
+                              'Classification': governance['classification'], 'Accountable owner': governance['owner_name'],
+                              'Data steward': governance['steward'], 'Governance version': governance['version']})
     for record in records.values():
         if record.kind == 'document':
             node('document:'+record.id, 'Document', record.name, [record.parent_id], record.status, record.version,

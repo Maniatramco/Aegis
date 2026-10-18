@@ -2,7 +2,19 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.2.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.3.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+## Data Governance
+
+Open **Dashboard → Data Governance** to browse selected authorized datasets, metadata counts, accountable owners, stewards, sensitivity classifications and business glossary terms. An administrator can save a dataset's business purpose, retention guidance and glossary with an expected version and change reason. Previous policy versions remain in the configured file store; the existing application record catalog points to the current version. No new database tables or graph service are required. Governance follows dataset deletion/restoration and recoverable workspace archives.
+
+The catalog contains metadata, not copies of originals, extracted values, model credentials or private conversations. Existing dataset grants enforce access; policy labels do not add access or mask data. Retention is descriptive and does not schedule deletion. Dataset nodes in Metadata Relationships show ownership and classification. Administrator exports contain complete selected metadata or completed saved document/extraction/review lineage in OpenLineage NDJSON.
+
+The administrator's OCI panel verifies an existing catalog before saving its OCID and region in private runtime configuration. It reuses the configured server-side OCI storage authentication; credentials never enter the browser. Explicit publication mirrors selected dataset policy descriptions, metadata counts and business terms, plus six Aegis concept definitions. Stable dataset IDs and OCI ETags support safe repeat publication; removed terms are marked retired. OCI IAM controls destination visibility independently of Aegis dataset grants. No scheduled publication, IAM changes, private endpoints, Data Safe or document harvesting are enabled.
+
+Live pilot on 18 October 2026: created **Aegis-Governance** in the existing Mumbai account and verified a pilot dataset glossary and six platform definitions. The **Aegis-Application-Metadata** data asset contains a read-only snapshot of eight workflow table definitions, 99 columns and primary/foreign-key descriptions. No database password, harvesting connection or job was registered. The operator helper `ags_deploy/scripts/publish-governance-schema.py` validates the restricted schema snapshot locally by default and publishes only with `--publish`; it does not connect to the database or run DDL. Schema snapshots and dataset policy publication are explicit, not scheduled.
+
+Native Custom Lineage Provider creation was rejected by OCI with `DCAT-11051`; this release therefore keeps lineage in Aegis and its export and does not claim native OCI ingestion. The pilot inventory contained 21 records and 39 saved relationships. Classification remains unclassified and stewardship unassigned until an administrator records the appropriate decisions. Private OCIDs and publication receipts remain under ignored `ags_runtime/governance/`. Application deployment of v26.1.3.0 is separate from creating the OCI catalog.
 
 ## Metadata Relationships
 

@@ -5,6 +5,14 @@ from fastapi.routing import APIRoute
 
 # Keyed by method and path so similar operations cannot share misleading notes.
 NOTES = {
+    'GET /api/governance/catalog': 'Read the selected authorized datasets, ownership, classifications, glossary counts and complete metadata totals; search and pagination never broaden dataset scope. No inference runs.',
+    'GET /api/governance/datasets/{id}': 'Read an authorized dataset governance policy and the latest 20 version-history summaries. Retention and classification are descriptive; existing dataset grants enforce access.',
+    'PUT /api/governance/datasets/{id}': 'Administrator only: save a versioned governance policy with an expected version and change reason. Preserve dataset/model mappings and all source/result data.',
+    'GET /api/governance/export': 'Administrator only: download the complete selected, authorized metadata snapshot. Excludes document text, extracted values, storage credentials and conversations.',
+    'GET /api/governance/lineage-export': 'Administrator only: export completed saved document/extraction/review lineage as OpenLineage NDJSON. This is a download, not proof of native OCI ingestion.',
+    'GET /api/governance/oci': 'Administrator only: read the saved OCI Data Catalog connection and actual last publication status without contacting OCI.',
+    'PUT /api/governance/oci': 'Administrator only: verify an existing active OCI Data Catalog using server-side credentials and save its identifier and region. Does not provision resources or change IAM.',
+    'POST /api/governance/oci/publish': 'Administrator only: explicitly publish selected dataset policy descriptions, metadata counts and glossary terms to OCI. OCI IAM governs destination access. Lineage remains in Aegis and OpenLineage export; partial failures are reported.',
     'GET /api/dataset-chat/catalog': 'Read the authorized dataset, document, prompt and model catalog for Dashboard Dataset Knowledge Chat without starting a conversation or inference.',
     'GET /api/dataset-chat/conversations': 'List the signed-in user\'s separate Dashboard chat history, omitting conversations whose saved dataset/document scope is no longer accessible.',
     'GET /api/dataset-chat/conversations/{id}': 'Read an owned Dashboard conversation and its saved messages after rechecking access to its dataset and document scope.',
@@ -149,7 +157,7 @@ NOTES = {
 }
 
 GROUPS = {
-    'auth': 'Authentication', 'datasets': 'Datasets', 'knowledge-bases': 'Datasets',
+    'auth': 'Authentication', 'datasets': 'Datasets', 'knowledge-bases': 'Datasets', 'governance': 'Data governance',
     'models': 'Models', 'model-registrations': 'Models', 'model-providers': 'Models', 'local-models': 'Models',
     'documents': 'Documents', 'conversations': 'Chat', 'messages': 'Chat',
     'temporary-chat': 'Temporary chat', 'dataset-chat': 'Dashboard knowledge chat', 'templates': 'Prompt templates',

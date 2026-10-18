@@ -53,6 +53,7 @@ def _client(service: str, endpoint: str | None = None, *, region=None, auth_mode
         if endpoint: kwargs['service_endpoint'] = endpoint
         if service == 'storage': return oci.object_storage.ObjectStorageClient(config, **kwargs)
         if service == 'queue': return oci.queue.QueueClient(config, **kwargs)
+        if service == 'data_catalog': return oci.data_catalog.DataCatalogClient(config, **kwargs)
         raise OCIProviderUnavailable('Unknown OCI service')
     except OCIProviderUnavailable:
         raise

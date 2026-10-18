@@ -1,6 +1,18 @@
 {
-  "version": "26.1.2.0",
+  "version": "26.1.3.0",
   "releases": [
+    {
+      "version": "26.1.3.0",
+      "date": "2026-10-18",
+      "title": "Govern your dataset metadata",
+      "changes": [
+        "Open Data Governance from the Dashboard to inspect authorized datasets, accountable owners, stewards and sensitivity classifications.",
+        "Save business purpose, descriptive retention guidance and dataset glossary definitions with version checks and change history.",
+        "Inspect ownership and classification in Metadata Relationships; export complete scoped metadata and saved OpenLineage without original text or extracted values.",
+        "Administrators can verify an existing OCI Data Catalog and explicitly publish policy descriptions, metadata counts and glossary terms using server-side credentials.",
+        "Native OCI lineage ingestion remains disabled; lineage is available in Aegis and its export. Existing grants enforce access, and retention guidance does not delete files."
+      ]
+    },
     {
       "version": "26.1.2.0",
       "date": "2026-10-18",

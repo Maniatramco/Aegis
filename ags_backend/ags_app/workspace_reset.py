@@ -11,9 +11,9 @@ from fastapi import Depends,HTTPException
 from pydantic import BaseModel
 from . import core,relational,dataset_access as access,providers
 
-KINDS={'knowledge_base','document','extraction','template','conversation','agent_plan','agent_onboarding','temporary_session','temporary_document'}
+KINDS={'knowledge_base','document','extraction','template','conversation','agent_plan','agent_onboarding','temporary_session','temporary_document','governance'}
 FOLDERS=('knowledge_base','documents','extraction','template','conversation','agent_plan','agent_onboarding',
-         'temporary_session','temporary_document','temporary-sessions','temporary-documents','jobs','agent-checkpoints','agent-state','executions','knowledge','vectors','upload-receipts')
+         'temporary_session','temporary_document','temporary-sessions','temporary-documents','jobs','agent-checkpoints','agent-state','executions','knowledge','vectors','upload-receipts','governance')
 TABLES=(relational.Review,relational.Extraction,relational.Prompt,relational.Document,relational.DatasetModel,relational.UserDataset,relational.Dataset)
 FLAG='configuration/workspace-maintenance.json'
 
