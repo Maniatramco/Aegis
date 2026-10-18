@@ -58,6 +58,12 @@ async def security_headers(request,call_next):
         endpoint_completed = True
         actor = context['actor']
         if actor and request.url.path.startswith('/api/'):
+            if request.url.path.startswith('/api/governance/') and response.status_code < 400:
+                from .user_features import require_governance
+                try:
+                    require_governance(actor)
+                except HTTPException as error:
+                    response = JSONResponse(status_code=error.status_code, content={'detail': error.detail})
             # Successful dataset retirement intentionally removes its scope.
             # Its endpoint already authorized the mutation; return its receipt
             # without treating the now-retired dataset as a revoked read.
@@ -194,7 +200,8 @@ def login(body:Credentials,response:Response,request:Request):
             if not u or not password_valid(body.password,u.password_hash):raise HTTPException(401,'Invalid username or password')
             token=secrets.token_urlsafe(40);csrf=secrets.token_urlsafe(32)
             s.add(Login(id=hashlib.sha256(token.encode()).hexdigest(),owner=u.id,expires=now+43200,csrf=csrf))
-            user={'id':u.id,'username':u.username,'role':u.role,'is_admin':is_administrator(u.id,s)}
+            from .user_features import summary as feature_access
+            user={'id':u.id,'username':u.username,'role':u.role,'is_admin':is_administrator(u.id,s)} | feature_access(u,s)
     _login_attempts.pop(client,None)
     response.set_cookie('aegis_session',token,httponly=True,secure=os.getenv('COOKIE_SECURE','false')=='true',samesite='strict',max_age=43200,path='/')
     return {'user':user,'csrf_token':csrf,'chat_session_id':hashlib.sha256(('chat:'+hashlib.sha256(token.encode()).hexdigest()).encode()).hexdigest()}
@@ -202,7 +209,8 @@ def login(body:Credentials,response:Response,request:Request):
 def me(request:Request,owner=Depends(auth)):
     with Session() as s:
         u=s.get(User,owner);token=request.cookies.get('aegis_session','');l=s.get(Login,hashlib.sha256(token.encode()).hexdigest())
-        return {'user':{'id':u.id,'username':u.username,'role':u.role,'is_admin':is_administrator(u.id,s)},'csrf_token':l.csrf if l else '', 'chat_session_id':hashlib.sha256(('chat:'+l.id).encode()).hexdigest() if l else ''}
+        from .user_features import summary as feature_access
+        return {'user':{'id':u.id,'username':u.username,'role':u.role,'is_admin':is_administrator(u.id,s)} | feature_access(u,s),'csrf_token':l.csrf if l else '', 'chat_session_id':hashlib.sha256(('chat:'+l.id).encode()).hexdigest() if l else ''}
 @app.post('/api/auth/logout')
 def logout(request:Request,response:Response,owner=Depends(auth)):
     with Session.begin() as s:

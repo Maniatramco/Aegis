@@ -2,6 +2,17 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.5.0 - 19 October 2026
+
+- Initially enable Data Governance only for the exact persisted username `mani`. Other accounts and administrators start disabled.
+- Add administrator per-user Feature access controls, enabled/disabled directory badges, password verification and stale-version protection under Users & passwords.
+- Enforce grants on all governance APIs, exports, OCI publication, policy publication and scheduled signatories; recheck access before releasing successful responses. Existing sessions refresh Dashboard capability state on focus and every 30 seconds while visible.
+- Preserve separate administrator roles, assigned dataset scope, two-person approval, approved masking and legal holds. Hide governance-specific metadata graph attributes from disabled accounts while retaining the original metadata graph.
+- Store audited versioned feature decisions through existing SQL catalog records and immutable shared control-volume snapshots, without schema changes. Preserve settings during workspace reset and archive grants during account deletion.
+- Keep governance code on `data-governance`; `ags_sprint1` remains at its pre-governance source tree. OCI deployment is separate and remains pending.
+
+Validation: 190 selected backend regression tests passed, with a further 39 access/metadata/governance checks passing after the final metadata fallback adjustment. All 223 frontend unit tests and app/test TypeScript checks passed. Synthetic browser checks verified default mani-only access, disabled-administrator access to feature administration, password-confirmed disable/re-enable, cleared password fields, mani catalog access, and 390px/320px layouts without page overflow or console errors. The local optimized Next.js build completed, with a Windows EPERM warning while copying standalone dependency symlinks; standalone runtime/container verification and OCI rollout were not performed. The complete backend suite and live account changes were not run.
+
 ## v26.1.4.0 - 18 October 2026
 
 - Added saved-data quality scans, freshness/review/schema/duplicate checks, configurable field rules and pattern-based sensitivity discovery. Reports contain identifiers/counts and disclose unreadable sources, partial scans and source/policy changes.

@@ -5,6 +5,7 @@ from fastapi.routing import APIRoute
 
 # Keyed by method and path so similar operations cannot share misleading notes.
 NOTES = {
+    'PUT /api/users/{user_id}/features': 'Administrator only: enable or disable per-user Data Governance access using the current administrator password and expected feature-access version. Initially only the exact persisted username mani is enabled, including among administrators. Does not change roles, dataset grants or approved privacy/hold protections. Existing sessions are checked on every governance request.',
     'GET /api/governance/datasets/{id}/controls': 'Read active operational controls, legal hold and the pending approval for an authorized dataset. Descriptive catalog fields remain separate.',
     'POST /api/governance/datasets/{id}/controls/proposals': 'Administrator only: propose versioned privacy, quality, scheduling and retention controls. No operational change takes effect until a different administrator approves it.',
     'POST /api/governance/datasets/{id}/controls/decision': 'Administrator only: approve or reject the current proposal with a reason. Self-approval is blocked and active-version conflicts require a new proposal.',

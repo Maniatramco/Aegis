@@ -3,14 +3,14 @@ const filename=path.resolve(__dirname,'../../ags_frontend/app/dataset-dashboard.
 const scopeFile=path.resolve(__dirname,'../../ags_frontend/app/dataset-knowledge-scope.ts'),scopeModule=new Module(scopeFile,module);scopeModule.filename=scopeFile;scopeModule.paths=module.paths;scopeModule._compile(ts.transpileModule(fs.readFileSync(scopeFile,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,scopeFile);
 let hooks=[],cursor=0;
 const original=compiled.require.bind(compiled);
-compiled.require=id=>id==='./dataset-knowledge-scope'?scopeModule.exports:id==='react'?{useState(initial){const slot=cursor++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];}}:id.endsWith('.css')?{}:id==='./dataset-knowledge-picker'?{DatasetKnowledgePicker:props=>({type:'picker',props})}:id==='lucide-react'||id==='./agent-logo'?new Proxy({},{get:()=>()=>null}):original(id);
+compiled.require=id=>id==='next/dynamic'?{__esModule:true,default:()=>props=>({type:'metadata-dialog',props})}:id==='./dataset-knowledge-scope'?scopeModule.exports:id==='react'?{useState(initial){const slot=cursor++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];}}:id.endsWith('.css')?{}:id==='./dataset-knowledge-picker'?{DatasetKnowledgePicker:props=>({type:'picker',props})}:id==='lucide-react'||id==='./agent-logo'?new Proxy({},{get:()=>()=>null}):original(id);
 compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
 const {DatasetDashboard,datasetDocuments,datasetReadiness}=compiled.exports;
 const datasets=[{id:'a',name:'Invoices'},{id:'b',name:'Policies'}],documents=[{id:'one',parent_id:'a',name:'invoice.txt',status:'ready'},{id:'two',dataset_id:'b',name:'policy.txt',status:'ready'},{id:'stale',kb_id:'a',name:'old.txt',status:'ready',requires_reindex:true}];
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):typeof node.type==='function'?all(node.type(node.props)):[node,...all(node.props?.children)];
 const text=node=>!node?'':typeof node==='string'?node:Array.isArray(node)?node.map(text).join(''):text(node.props?.children);
 function mount(values={}){const state=[],selected=[],agents=[],destinations=[],reviews=[];let root;const props={username:'tester',datasets,documents,loading:false,search:'',onClearSearch(){},onBrowse(){},canManage:false,selectedId:'',onSelect:id=>{selected.push(id);props.selectedId=id;},onNavigate:path=>destinations.push(path),onReview:id=>reviews.push(id),renderAgent:(id,onBusy,sourceScope,onSourceChange,knowledgeScope)=>{agents.push({id,onBusy,sourceScope,onSourceChange,knowledgeScope});return null;},guide:null,...values};
- const render=()=>{hooks=state;cursor=0;agents.length=0;root=DatasetDashboard(props);};render();return {render,get nodes(){return all(root);},selected,agents,destinations,reviews};}
+ const render=()=>{hooks=state;cursor=0;agents.length=0;root=DatasetDashboard(props);};render();return {render,props,get nodes(){return all(root);},selected,agents,destinations,reviews};}
 function find(v,label){return v.nodes.find(n=>n.props?.['aria-label']===label);}
 function mountChat(values={}){const v=mount(values);v.nodes.find(n=>n.type==='button'&&text(n)==='Open chat').props.onClick();v.render();return v;}
 test('source summaries keep dataset boundaries and do not count stale indexes as ready',()=>{
@@ -93,4 +93,21 @@ test('active chat disables multi-selection and ignores dropped datasets',()=>{
  assert.equal(find(v,'Include dataset Policies in knowledge').props.disabled,true);
  assert.equal(v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.disabled,true);
  find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:()=>JSON.stringify(['b'])}});v.render();assert.equal(v.agents[0].id,'a');
+});
+
+
+test('Data Governance is hidden by default and administrator status does not enable it',()=>{
+ const v=mount({canManage:true});
+ assert.equal(v.nodes.some(node=>node.props?.['data-open-governance']),false);
+ assert.ok(v.nodes.some(node=>node.props?.['data-open-metadata']));
+});
+
+test('server feature grant exposes governance and revocation removes an already open view',()=>{
+ const v=mount({canGovern:true});
+ v.nodes.find(node=>node.props?.['data-open-governance']).props.onClick();v.render();
+ assert.ok(v.nodes.some(node=>node.type==='metadata-dialog'));
+ v.props.canGovern=false;v.render();
+ assert.equal(v.nodes.some(node=>node.props?.['data-open-governance']),false);
+ assert.equal(v.nodes.some(node=>node.type==='metadata-dialog'),false);
+ assert.ok(v.nodes.some(node=>node.props?.['data-open-metadata']));
 });

@@ -1,6 +1,17 @@
 {
-  "version": "26.1.4.0",
+  "version": "26.1.5.0",
   "releases": [
+    {
+      "version": "26.1.5.0",
+      "date": "2026-10-19",
+      "title": "Control Data Governance access per user",
+      "changes": [
+        "Data Governance starts enabled only for the exact username mani. Other users and administrators start disabled.",
+        "Administrators can grant or revoke Data Governance under Users & passwords > Feature access, with their password and a saved-version check.",
+        "Enforce per-user access on governance reads, edits, exports, OCI publication and automation. Recheck access before releasing responses or publishing policies.",
+        "Keep roles, dataset assignments, approved privacy protections and legal holds independent of module access. Existing sessions refresh feature visibility."
+      ]
+    },
     {
       "version": "26.1.4.0",
       "date": "2026-10-18",

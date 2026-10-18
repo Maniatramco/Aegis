@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
-from ags_app import core, main, relational, governance, governance_oci
+from ags_app import core, main, relational, governance, governance_oci, user_features
 from test_dataset_models import system, dataset, upload, template
 from test_metadata_relationships import run_record
 
@@ -11,6 +11,7 @@ from test_metadata_relationships import run_record
 def admin(s):
     with s.session.begin() as db:
         db.add(core.User(id='alice', username='governance-admin', password_hash='unused-synthetic-hash', role='administrator'))
+    user_features.save('alice', 'alice', {'data_governance': True}, 0)
 
 
 def values(**extra):
@@ -47,6 +48,7 @@ def test_real_role_required_and_revocation_applies_to_all_reads(system):
     with s.session.begin() as db:
         db.add(core.User(id='bob',username='reader',password_hash='unused-synthetic-hash'))
         db.add(relational.UserDataset(user_id='bob',dataset_id=d['id'],enabled=True))
+    user_features.save('alice', 'bob', {'data_governance': True}, 0)
     s.owner='bob'
     assert catalog(s,[d['id']]).json()['items'][0]['policy']['classification']=='confidential'
     assert s.api.get('/api/governance/datasets/'+d['id']).status_code==200

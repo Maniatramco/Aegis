@@ -29,3 +29,8 @@ Mixed requests, Aegis/application guidance, private/business facts, dataset/docu
 ## Application version and change history
 
 For each feature/fix release, update `ags_frontend/app/application-version.json`, append the version's included changes to root `CHANGELOG.md`, and update the README's current version. The footer and About screen share that JSON. Preserve prior history; do not invent retroactive version tags or claim a local preview is deployed. After the relevant end-to-end checks pass, Git commits, version tags and pushes to the approved repository/branch are pre-authorized; do not ask for repeated push approval. Review the rendered result when UI changes are involved, report the tests and their limits, and never move an existing version tag. This standing user instruction was confirmed on 17 October 2026 and concerns Git publication.
+
+
+## Data Governance branch and access (19 October 2026)
+
+Keep Data Governance implementation and publication on `data-governance`. Do not add governance features to `ags_sprint1` without a new explicit user instruction. The initial enabled account is the exact persisted username `mani`; other users and administrators start disabled. Administrators manage per-user module access under Users & passwords > Feature access. Module grants do not confer administrator roles or dataset access. Enforce grants on the backend and preserve approved privacy protections and legal holds when a user's module access is disabled.

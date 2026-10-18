@@ -6,7 +6,7 @@ from . import core, relational
 
 request_actor = ContextVar('aegis_request_actor', default=None)
 SHARED = {'document', 'template', 'extraction'}
-PRIVATE = {'conversation', 'agent_plan', 'agent_onboarding', 'temporary_session', 'temporary_document'}
+PRIVATE = {'conversation', 'agent_plan', 'agent_onboarding', 'temporary_session', 'temporary_document', 'user_feature_access'}
 
 
 def require_admin(actor):
@@ -31,6 +31,8 @@ def dataset_ids(actor, session):
 def allowed(record, actor, session, datasets=None, models=None):
     if not record:
         return False
+    if record.kind == 'user_feature_access':
+        return False  # Feature grants are exposed only through administrator APIs.
     datasets = dataset_ids(actor, session) if datasets is None else datasets
     if record.kind == 'knowledge_base':
         return record.id in datasets

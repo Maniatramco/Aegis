@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 
-from . import core, dataset_access as access
+from . import core, dataset_access as access, user_features
 
 CLASSIFICATIONS = ('unclassified', 'public', 'internal', 'confidential', 'restricted')
 FIELDS = ('owner_name', 'steward', 'classification', 'purpose', 'retention_days', 'glossary')
@@ -41,6 +41,7 @@ class PolicyInput(BaseModel):
 
 
 def require_manager(actor):
+    user_features.require_governance(actor)
     # Persisted roles are mandatory here, including calls from test/CLI contexts.
     from . import governance_audit
     context = governance_audit.request_context.get()
@@ -50,6 +51,7 @@ def require_manager(actor):
 
 
 def scope(actor, ids, allow_retired=False):
+    user_features.require_governance(actor)
     selected = set(ids)
     if len(selected) > 100:
         raise HTTPException(422, 'Choose up to 100 datasets.')
@@ -136,6 +138,7 @@ def save(actor, dataset_id, body):
             core.store.put_json(reference, data)
             # Recheck role/access in the publishing transaction after the object write.
             with core.Session.begin() as transaction:
+                user_features.require_governance(actor, transaction)
                 if not core.is_administrator(actor, transaction) or dataset_id not in access.dataset_ids(actor, transaction):
                     raise HTTPException(403, 'Governance access changed before saving.')
                 record = transaction.get(core.Record, id)
@@ -183,6 +186,11 @@ def catalog(actor, ids, search='', classification='', offset=0, limit=25):
 
 
 def install(app, auth):
+    def enabled_actor(actor=Depends(auth)):
+        user_features.require_governance(actor)
+        return actor
+
+    auth = enabled_actor
     @app.get('/api/governance/catalog')
     def get_catalog(dataset_id: list[str] = Query(default=[]), search: str = Query('', max_length=200),
                     classification: str = Query('', pattern='^(|unclassified|public|internal|confidential|restricted)$'),

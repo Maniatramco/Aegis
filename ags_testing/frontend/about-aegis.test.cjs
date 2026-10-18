@@ -4,6 +4,6 @@ mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{e
 const release=require('../../ags_frontend/app/application-version.json');
 test('About presents the current version and complete prior feature history from the shared version source',()=>{
  const html=renderToStaticMarkup(React.createElement(mod.exports.AboutAegis));assert.match(release.version,/^\d+\.\d+\.\d+\.\d+$/);assert.ok(release.releases.some(item=>item.version==='26.1.1.0'));assert.equal(release.releases[0].version,release.version);
- for(const entry of release.releases){assert.ok(html.includes('v'+entry.version));for(const change of entry.changes)assert.ok(html.includes(change.replaceAll('&','&amp;')),change);}
+ for(const entry of release.releases){assert.ok(html.includes('v'+entry.version));for(const change of entry.changes)assert.ok(html.includes(change.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#x27;')),change);}
  const changelog=fs.readFileSync(path.resolve(__dirname,'../../CHANGELOG.md'),'utf8');for(const entry of release.releases)assert.ok(changelog.includes(entry.version));assert.match(html,/Current version/);
 });

@@ -18,6 +18,8 @@ def build(actor, dataset_ids):
         allowed = access.dataset_ids(actor, session)
         if not selected <= allowed:
             raise HTTPException(404, 'Dataset metadata is no longer accessible.')
+        from .user_features import summary as feature_access
+        show_governance = feature_access(session.get(core.User, actor), session)['features']['data_governance']
         model_ids = set(session.scalars(select(relational.DatasetModel.model_id).where(
             relational.DatasetModel.dataset_id.in_(allowed), relational.DatasetModel.enabled == True)))
         records = {r.id: r for r in session.scalars(select(core.Record).where(
@@ -79,11 +81,11 @@ def build(actor, dataset_ids):
         if not record: raise HTTPException(404, 'Dataset metadata is no longer accessible.')
         data = payload(record); configs[id] = data
         from .governance import policy
-        governance = policy(record)
+        governance = policy(record) if show_governance else None
         node('dataset:'+id, 'Dataset', record.name, [id], 'inactive' if data.get('active') is False else record.status,
              record.version, {'Dataset ID': id, 'Description': data.get('description', ''), 'Access': 'Authorized dataset',
-                              'Classification': governance['classification'], 'Accountable owner': governance['owner_name'],
-                              'Data steward': governance['steward'], 'Governance version': governance['version']})
+                              **({'Classification': governance['classification'], 'Accountable owner': governance['owner_name'],
+                                  'Data steward': governance['steward'], 'Governance version': governance['version']} if governance else {})})
     for record in records.values():
         if record.kind == 'document':
             node('document:'+record.id, 'Document', record.name, [record.parent_id], record.status, record.version,

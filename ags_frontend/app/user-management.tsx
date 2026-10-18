@@ -4,24 +4,27 @@ import { useEffect, useRef, useState } from "react";
 import { KeyRound, RefreshCw, Search, Users } from "lucide-react";
 import "./user-management.css";
 import { DatasetAssignments } from "./dataset-assignments";
+import {UserFeatureAccess, type FeatureAccount} from './user-feature-access';
 
 type Role = "user" | "administrator";
-type Account = {id:string;username:string;role:Role;is_admin:boolean;created_at:number;updated_at:number;created_by?:string;updated_by?:string};
+type Account = FeatureAccount & {role:Role;is_admin:boolean;created_at:number;updated_at:number;created_by?:string;updated_by?:string};
 type Props = {
  api:(path:string,method?:string,body?:any)=>Promise<any>;
  user:{id:string;username:string;is_admin?:boolean};
  onPasswordChanged:()=>void;
  onRoleChanged:()=>void;
+ onFeaturesChanged?:(account:Account)=>void;
 };
 type Operation = {kind:"create"|"reset"|"self"|"role"|"delete";account?:Account};
 const empty = {username:"",current_password:"",password:"",confirmation:"",role:"user" as Role};
 
-export function UserManagement({api,user,onPasswordChanged,onRoleChanged}:Props){
+export function UserManagement({api,user,onPasswordChanged,onRoleChanged,onFeaturesChanged}:Props){
  const [accounts,setAccounts]=useState<Account[]>([]),[search,setSearch]=useState("");
  const [operation,setOperation]=useState<Operation|null>(null),[values,setValues]=useState(empty);
  const [mappingAccount,setMappingAccount]=useState<Account|null>(null);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
  const formRef=useRef<HTMLFormElement>(null),mounted=useRef(true);
+ const [featureAccount,setFeatureAccount]=useState<Account|null>(null);
  const isAdmin=Boolean(user.is_admin);
  async function load(){
   setLoading(true);
@@ -32,6 +35,7 @@ export function UserManagement({api,user,onPasswordChanged,onRoleChanged}:Props)
  useEffect(()=>{mounted.current=true;if(isAdmin)void load();return()=>{mounted.current=false;};},[isAdmin,user.id]);
  useEffect(()=>{if(operation){formRef.current?.scrollIntoView({block:"nearest"});formRef.current?.querySelector<HTMLInputElement>("input")?.focus();}},[operation]);
  function open(next:Operation){
+  setFeatureAccount(null);
   setMappingAccount(null);
   setValues({...empty,role:next.kind==="role"&&!next.account?.is_admin?"administrator":"user"});
   setError("");setNotice("");setOperation(next);
@@ -76,6 +80,7 @@ export function UserManagement({api,user,onPasswordChanged,onRoleChanged}:Props)
    <ActionButton className="btn" disabled={busy} onClick={()=>open({kind:"self"})} label="Change my password" action="password"/>
   </section>
   {notice&&<div role="status" className="notice">{notice}</div>}
+  {isAdmin&&featureAccount&&<UserFeatureAccess key={featureAccount.id} account={featureAccount} api={api} onBusy={setBusy} onClose={()=>setFeatureAccount(null)} onSaved={(account:Account)=>{setAccounts(rows=>rows.map(row=>row.id===account.id?account:row));setFeatureAccount(account);onFeaturesChanged?.(account);}}/>}
   {isAdmin&&mappingAccount&&<DatasetAssignments api={api} account={mappingAccount} onClose={()=>setMappingAccount(null)}/>}
   {operation&&<form ref={formRef} className="card account-form" onSubmit={submit} aria-label={operation.kind==="delete"?"Delete user":operation.kind==="role"?"Change user role":operation.kind==="create"?"Create user":operation.kind==="reset"?"Reset user password":"Change my password"}>
    <h2>{operation.kind==="delete"?"Delete user — "+operation.account!.username:operation.kind==="role"?"Change role — "+operation.account!.username:operation.kind==="create"?"Create user":operation.kind==="reset"?"Reset password — "+operation.account!.username:"Change my password"}</h2>
@@ -94,14 +99,17 @@ export function UserManagement({api,user,onPasswordChanged,onRoleChanged}:Props)
   {isAdmin&&<section className="card account-directory">
    <div className="account-summary"><h2><Users size={19}/> Users</h2><div className="row"><button title="Refresh users" className="btn" disabled={loading||busy} onClick={()=>void load()} aria-label="Refresh users"><RefreshCw size={15}/></button><ActionButton className="btn primary" disabled={busy} onClick={()=>open({kind:"create"})} label="Add user" action="add"/></div></div>
    <label className="account-search" htmlFor="account-search"><Search size={16}/><input id="account-search" placeholder="Search usernames" value={search} onChange={e=>setSearch(e.target.value)}/></label>
-   <div className="account-table"><table><thead><tr><th>Username</th><th>Access</th><th>Created</th><th>Last updated</th><th>Manage</th></tr></thead><tbody>{accounts.filter(account=>account.username.toLowerCase().includes(search.toLowerCase())).map(account=><tr key={account.id}>
+   <p className="muted small">Data Governance access is controlled per user through Feature access. Administrator roles do not enable it automatically.</p>
+   <div className="account-table"><table><thead><tr><th>Username</th><th>Access</th><th>Data Governance</th><th>Created</th><th>Last updated</th><th>Manage</th></tr></thead><tbody>{accounts.filter(account=>account.username.toLowerCase().includes(search.toLowerCase())).map(account=><tr key={account.id}>
     <td><strong>{account.username}</strong>{account.id===user.id&&<div className="muted small">You</div>}</td>
     <td>{account.is_admin?"Administrator":"User"}</td>
+    <td><span className="feature-access-badge" data-enabled={account.features?.data_governance===true}>{account.feature_access_available===false?'Unavailable':account.features?.data_governance===true?'Enabled':'Disabled'}</span></td>
     <td>{stamp(account.created_at)}<div className="muted small">{names.get(account.created_by||"")||"Creator not recorded"}</div></td>
     <td>{stamp(account.updated_at)}<div className="muted small">{names.get(account.updated_by||"")||"Updater not recorded"}</div></td>
     <td><div className="row">
      <ActionButton className="btn" disabled={busy} onClick={()=>open(account.id===user.id?{kind:"self"}:{kind:"reset",account})} label={`${account.id===user.id?"Change password":"Reset password"} for ${account.username}`} action="password"/>
      <ActionButton className="btn" disabled={busy} aria-label={"Change role for "+account.username} onClick={()=>open({kind:"role",account})} label="Change role" action="role"/>
+     <ActionButton className="btn" disabled={busy} aria-label={"Feature access for "+account.username} onClick={()=>{cancel();setMappingAccount(null);setNotice('');setFeatureAccount(account);}} label="Feature access" action="access"/>
      <ActionButton className="btn" disabled={busy||account.is_admin} title={account.is_admin?"Administrators can access every dataset":undefined} onClick={()=>{cancel();setNotice("");setMappingAccount(account);}} label="Dataset access" action="access"/>
      <ActionButton className="btn account-delete" disabled={busy||account.id===user.id||(account.is_admin&&accounts.filter(row=>row.is_admin).length<=1)} title={account.id===user.id?"You cannot delete your signed-in account":account.is_admin&&accounts.filter(row=>row.is_admin).length<=1?"Keep at least one administrator":"Delete user and remove access"} onClick={()=>open({kind:"delete",account})} label={"Delete user "+account.username} action="remove"/>
     </div>{account.is_admin&&<small className="muted">All datasets</small>}</td>

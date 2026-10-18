@@ -385,6 +385,29 @@ export default function App() {
       .catch(() => {});
   }, []);
   useEffect(() => {
+    if (!user?.id) return;
+    let active=true;
+    const controller=new AbortController();
+    const refreshFeatures=async()=>{
+      if(document.visibilityState==='hidden')return;
+      try{
+        const value=await api('/auth/me','GET',undefined,controller.signal,true);
+        if(active)setUser(current=>{
+          if(!current)return current;
+          const features=value.user?.id===current.id?value.user.features||{data_governance:false}:{data_governance:false};
+          const version=value.user?.feature_access_version??0;
+          return current.features?.data_governance===features.data_governance&&current.feature_access_version===version?current:{...current,features,feature_access_version:version};
+        });
+      }catch(reason){
+        if(active)setUser(current=>current?.features?.data_governance?{...current,features:{...current.features,data_governance:false}}:current);
+      }
+    };
+    const interval=window.setInterval(()=>void refreshFeatures(),30000);
+    window.addEventListener('focus',refreshFeatures);
+    document.addEventListener('visibilitychange',refreshFeatures);
+    return ()=>{active=false;controller.abort();window.clearInterval(interval);window.removeEventListener('focus',refreshFeatures);document.removeEventListener('visibilitychange',refreshFeatures);};
+  },[user?.id,api]);
+  useEffect(() => {
     if (!user) return;
     let active = true;
     setLoading(true);
@@ -802,9 +825,9 @@ export default function App() {
               </button>
             </Notice>
           )}
-          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard metadataApi={api} onMetadataReview={openReview} username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
+          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard metadataApi={api} onMetadataReview={openReview} username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} canGovern={user.features?.data_governance===true} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
           {view === "About" && <AboutAegis/>}
-          {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
+          {view === "Users & passwords" && <UserManagement onFeaturesChanged={account=>{if(account.id===user.id)setUser(current=>current?{...current,...account}:current);}} api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
           {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}
           {view === "Datasets" && <DatasetWorkspace directorySearch={directorySearch} onClearDirectorySearch={()=>setDirectorySearch('')} onDirectoryVisibilityChange={setDatasetDirectoryVisible} canManage={Boolean(user.is_admin)} datasets={kbs} models={models} documents={docs}
             storageKey={`aegis-new-dataset:${user.id}`} defaults={selectedDataset} onSelect={changeDataset} onCreated={d=>{setKbs(current=>[...current.filter(item=>item.id!==d.id),d]);changeDataset(d.id);}}

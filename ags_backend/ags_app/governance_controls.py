@@ -123,10 +123,14 @@ def publish_state(actor, dataset_id, kind, reference, version, proposer=None):
     """SQL publishes a pointer only after its immutable object was persisted."""
     id = ('gctl-' if kind == 'governance_control' else 'ghold-') + governance.policy_id(dataset_id)[4:]
     with core.Session.begin() as session:
+        from .user_features import require_governance
+        require_governance(actor, session)
         if not core.is_administrator(actor, session):
             raise HTTPException(403, 'Administrator access changed before publishing governance.')
         if proposer and not core.is_administrator(proposer, session):
             raise HTTPException(403, 'The proposing administrator lost access before approval.')
+        if proposer:
+            require_governance(proposer, session)
         dataset = session.get(core.Record, dataset_id)
         if not dataset or dataset.kind != 'knowledge_base': raise HTTPException(404, 'Dataset not found.')
         record = session.get(core.Record, id)

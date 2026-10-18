@@ -2,9 +2,15 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.4.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Data Governance branch: `data-governance`. Current working version: `v26.1.5.0` (base: `v26.1.0.0`).** Keep governance work on this separate branch. `ags_sprint1` retains the pre-governance application, including Metadata Relationships. The original source freeze remains tagged `aegis-freeze-2026-10-15`.
 
 ## Data Governance
+
+Data Governance is enabled initially **only for the exact persisted username `mani`**. Every other account, including administrators, starts disabled. Go to **Manage workspace → Users & passwords → Feature access** for a user, switch **Data Governance** on or off, enter your administrator password, and save. The directory shows the current enabled/disabled status. Administrators can manage these switches without enabling the module for themselves. No account is promoted and no dataset is assigned by this setting.
+
+Every governance API, export and OCI operation enforces the grant, including requests from existing sessions. The Dashboard uses server-provided access, refreshes it on focus and every 30 seconds while visible, and removes an open governance view after revocation. Ordinary enabled users retain read-only access to assigned datasets; governance mutations still require the persisted administrator role. Operational approval still requires two different enabled administrators, so initially enabling only mani does not permit self-approval. Revoking either signatory's access suspends scheduled tasks. Approved masking, raw-source restrictions and legal holds continue protecting datasets independently of module visibility.
+
+Feature decisions use immutable files under the shared control volume's `configuration/user-features/` directory, referenced by versioned `user_feature_access` records in the existing SQL catalog. Missing or invalid referenced snapshots deny access. Feature settings survive workspace reset, remain private, are audited without passwords, and are removed from the active catalog when an account is deleted. No new tables, roles, cloud services or DDL are required.
 
 Open **Dashboard → Data Governance** to browse selected authorized datasets, metadata counts, accountable owners, stewards, sensitivity classifications and business glossary terms. An administrator can save a dataset's business purpose, retention guidance and glossary with an expected version and change reason. Previous policy versions remain in the configured file store; the existing application record catalog points to the current version. No new database tables or graph service are required. Governance follows dataset deletion/restoration and recoverable workspace archives.
 
@@ -26,7 +32,7 @@ Live pilot on 18 October 2026: created **Aegis-Governance** in the existing Mumb
 
 Native Custom Lineage Provider creation was rejected again by OCI with `DCAT-11051` on 18 October 2026. An optional provider key is now supported: the application verifies its catalog, active state and Custom Lineage Provider type before submission. Acceptance of events is reported separately from OCI graph visibility. The current Mumbai catalog has no verified provider, so native ingestion remains disabled there; Aegis graph/export remain available. The pilot inventory contained 21 records and 39 saved relationships. Classification remains unclassified and stewardship unassigned until an administrator records the appropriate decisions. Private OCIDs and publication receipts remain under ignored `ags_runtime/governance/`.
 
-Version v26.1.3.0 was published to the existing Mumbai application on 18 October 2026 from commit `49875ca3fabfe8b53035dedc7b669419891894ff`, release `release-20261018-220739-6526e3`. API/worker and web rollouts, image/configuration/schema checks and HTTPS verification passed; no DDL or infrastructure changes were performed. Version v26.1.4.0 operational controls are being verified separately and must not be described as deployed before their release receipt confirms it.
+Version v26.1.3.0 was published to the existing Mumbai application on 18 October 2026 from commit `49875ca3fabfe8b53035dedc7b669419891894ff`, release `release-20261018-220739-6526e3`. API/worker and web rollouts, image/configuration/schema checks and HTTPS verification passed; no DDL or infrastructure changes were performed. Versions v26.1.4.0 operational controls and v26.1.5.0 per-user feature access are source changes on `data-governance`; their OCI rollout remains pending. The previously prepared v26.1.4.0 deployment was cancelled before publication when the branches were separated. Do not describe these versions or the mani-only restriction as live until the matching deployment receipt confirms it.
 
 ## Metadata Relationships
 

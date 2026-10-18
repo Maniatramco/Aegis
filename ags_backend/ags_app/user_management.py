@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import select, delete
 from . import core, relational
+from .user_features import Features
 
 router = APIRouter()
 _attempts = {}
@@ -45,16 +46,24 @@ class DatasetAssignments(BaseModel):
     dataset_ids: list[str] = Field(max_length=1000)
 
 
+class FeatureAccessInput(BaseModel):
+    model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
+    features: Features
+    expected_version: int = Field(ge=0, strict=True)
+    current_password: SecretStr = Field(min_length=1, max_length=200)
+
+
 class DeleteUser(BaseModel):
     model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
     username: str = Field(min_length=1, max_length=120)
     current_password: SecretStr = Field(min_length=1, max_length=200)
 
 
-def public_user(user):
+def public_user(user, session=None):
+    from . import user_features
     return {key: getattr(user, key) for key in (
         'id', 'username', 'role', 'created_at', 'updated_at', 'created_by', 'updated_by')
-    } | {'is_admin': user.role == 'administrator'}
+    } | {'is_admin': user.role == 'administrator'} | user_features.summary(user, session)
 
 
 def matched_password(body):
@@ -174,6 +183,12 @@ def install(app, auth):
                 session.add(user)
                 session.flush()
                 return public_user(user)
+
+    @router.put('/api/users/{user_id}/features')
+    def feature_access(user_id: str, body: FeatureAccessInput, owner=Depends(administrator)):
+        from . import user_features
+        return {'user': user_features.save(owner, user_id, body.features.model_dump(), body.expected_version,
+                                          current_password=body.current_password.get_secret_value())}
 
     @router.post('/api/users/{user_id}/password')
     def reset_password(user_id: str, body: ResetPassword, owner=Depends(administrator)):

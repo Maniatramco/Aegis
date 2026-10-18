@@ -3,7 +3,7 @@ import json
 import time
 import pytest
 from sqlalchemy import select
-from ags_app import core, main, relational, governance_controls as controls
+from ags_app import core, main, relational, user_features, governance_controls as controls
 from ags_app import governance_audit as audit, governance_quality as quality, governance_automation as automation
 from ags_app import governance_retention as retention, governance_oci
 from test_dataset_models import system, dataset, upload, template
@@ -15,6 +15,7 @@ def administrators(s):
     admin(s)
     with s.session.begin() as db:
         db.add(core.User(id='approver', username='Second administrator', password_hash='synthetic', role='administrator'))
+    user_features.save('alice', 'approver', {'data_governance': True}, 0)
 
 
 def propose(s, d, **values):
@@ -38,7 +39,34 @@ def reader(s, d):
     with s.session.begin() as db:
         db.add(core.User(id='reader', username='Masked reader', password_hash='synthetic'))
         db.add(relational.UserDataset(user_id='reader', dataset_id=d['id'], enabled=True))
+    user_features.save('alice', 'reader', {'data_governance': True}, 0)
     s.owner = 'reader'
+
+
+def test_revoked_feature_access_suspends_automation_but_preserves_approved_protection(system, monkeypatch):
+    s=system;administrators(s);d=dataset(s,mapped=False)
+    approve(s,d,auto_quality=True,masking_enabled=True)
+    calls=[]
+    monkeypatch.setattr(quality,'run',lambda *args:calls.append('quality') or {'status':'completed'})
+    automation.tick()
+    assert calls==['quality']
+    user_features.save('alice','approver',{'data_governance':False},1)
+    automation.tick()
+    assert calls==['quality']
+    assert core.store.json(automation.state_ref(d['id']))['status']=='suspended'
+    assert controls.active(d['id'])['controls']['masking_enabled'] is True
+
+
+def test_disabling_feature_access_does_not_allow_reader_to_bypass_masking(system):
+    s=system;administrators(s);d=dataset(s)
+    doc=upload(s,d,run=False)['documents'][0];p=template(s);run=run_record(s,d,[doc],p)
+    approve(s,d,masking_enabled=True)
+    reader(s,d)
+    user_features.save('alice','reader',{'data_governance':False},1)
+    response=s.api.get('/api/extractions/'+run.id)
+    assert response.status_code==200 and response.json()['governance_masked'] is True
+    assert s.api.get('/api/documents/'+doc['id']+'/source').status_code==403
+    assert s.api.get('/api/governance/catalog').status_code==403
 
 
 def test_two_administrator_approval_conflicts_and_rejection(system):
