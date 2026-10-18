@@ -42,17 +42,26 @@ class PolicyInput(BaseModel):
 
 def require_manager(actor):
     # Persisted roles are mandatory here, including calls from test/CLI contexts.
+    from . import governance_audit
+    context = governance_audit.request_context.get()
+    if context is not None and context['actor'] is None: context['actor'] = actor
     if not core.is_administrator(actor):
         raise HTTPException(403, 'Only an administrator can change governance or publish metadata to OCI.')
 
 
-def scope(actor, ids):
+def scope(actor, ids, allow_retired=False):
     selected = set(ids)
     if len(selected) > 100:
         raise HTTPException(422, 'Choose up to 100 datasets.')
     with core.Session() as session:
-        if not selected <= access.dataset_ids(actor, session):
+        allowed = (set(session.scalars(select(core.Record.id).where(core.Record.kind == 'knowledge_base')))
+                   if allow_retired and core.is_administrator(actor, session) else access.dataset_ids(actor, session))
+        if not selected <= allowed:
             raise HTTPException(404, 'Dataset metadata is no longer accessible.')
+    from . import governance_audit
+    context = governance_audit.request_context.get()
+    if context is not None and context['actor'] is None: context['actor'] = actor
+    for id in selected: governance_audit.touch(id)
     return selected
 
 
@@ -204,3 +213,5 @@ def install(app, auth):
 
     from . import governance_oci
     governance_oci.install(app, auth)
+    from . import governance_controls
+    governance_controls.install(app, auth)

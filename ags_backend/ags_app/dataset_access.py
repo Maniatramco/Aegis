@@ -21,8 +21,11 @@ def dataset_ids(actor, session):
     if core.is_administrator(actor,session):
         return set(session.scalars(live))
     if not session.get(core.User, actor) and request_actor.get() is None:
-        return set(session.scalars(live.where(core.Record.owner == actor)))
-    return set(session.scalars(select(relational.UserDataset.dataset_id).where(relational.UserDataset.user_id == actor,relational.UserDataset.enabled == True,relational.UserDataset.dataset_id.in_(live))))
+        selected = set(session.scalars(live.where(core.Record.owner == actor)))
+    else:
+        selected = set(session.scalars(select(relational.UserDataset.dataset_id).where(relational.UserDataset.user_id == actor,relational.UserDataset.enabled == True,relational.UserDataset.dataset_id.in_(live))))
+    from .governance_controls import filter_scope
+    return filter_scope(actor, selected)
 
 
 def allowed(record, actor, session, datasets=None, models=None):
@@ -53,6 +56,11 @@ def allowed(record, actor, session, datasets=None, models=None):
 def get_record(id, actor, kind=None):
     with core.Session() as session:
         record = session.get(core.Record, id)
+        from . import governance_audit
+        context = governance_audit.request_context.get()
+        if context is not None and context['actor'] is None: context['actor'] = actor
+        if record and (record.kind == 'knowledge_base' or record.kind in SHARED | PRIVATE):
+            governance_audit.touch(record.id if record.kind == 'knowledge_base' else record.parent_id)
         if not record or (kind and record.kind != kind) or not allowed(record, actor, session):
             raise HTTPException(404, 'Not found or dataset access removed.')
         return record
@@ -60,11 +68,17 @@ def get_record(id, actor, kind=None):
 
 def rows(actor, kind):
     with core.Session() as session:
+        from . import governance_audit
+        context = governance_audit.request_context.get()
+        if context is not None and context['actor'] is None: context['actor'] = actor
         datasets = dataset_ids(actor, session)
         models = set(session.scalars(select(relational.DatasetModel.model_id).where(
             relational.DatasetModel.dataset_id.in_(datasets), relational.DatasetModel.enabled == True))) if kind == 'model' else set()
-        return [row for row in session.scalars(select(core.Record).where(core.Record.kind == kind).order_by(core.Record.created_at.desc()))
-                if allowed(row, actor, session, datasets, models)]
+        result = [row for row in session.scalars(select(core.Record).where(core.Record.kind == kind).order_by(core.Record.created_at.desc()))
+                  if allowed(row, actor, session, datasets, models)]
+        if kind == 'knowledge_base' or kind in SHARED | PRIVATE:
+            for row in result: governance_audit.touch(row.id if row.kind == 'knowledge_base' else row.parent_id)
+        return result
 
 
 def job_allowed(job, actor, session):

@@ -5,6 +5,17 @@ from fastapi.routing import APIRoute
 
 # Keyed by method and path so similar operations cannot share misleading notes.
 NOTES = {
+    'GET /api/governance/datasets/{id}/controls': 'Read active operational controls, legal hold and the pending approval for an authorized dataset. Descriptive catalog fields remain separate.',
+    'POST /api/governance/datasets/{id}/controls/proposals': 'Administrator only: propose versioned privacy, quality, scheduling and retention controls. No operational change takes effect until a different administrator approves it.',
+    'POST /api/governance/datasets/{id}/controls/decision': 'Administrator only: approve or reject the current proposal with a reason. Self-approval is blocked and active-version conflicts require a new proposal.',
+    'PUT /api/governance/datasets/{id}/hold': 'Administrator only: place an immediate legal hold or release it with an independent administrator and a reason. Holds block document/dataset deletion, retention and workspace reset.',
+    'GET /api/governance/datasets/{id}/quality': 'Read the last saved quality and sensitivity report and whether its source or policy changed. Reports contain counts and identifiers, never extracted values.',
+    'POST /api/governance/datasets/{id}/quality/scan': 'Administrator only: check saved schema, missing/duplicate/freshness/review conditions and configured field rules; discover possible sensitive fields using patterns. Report actual failures without model calls.',
+    'GET /api/governance/datasets/{id}/retention': 'Administrator only: inspect approved inactivity retention, retirement and earliest purge dates. No deletion is performed by this preview.',
+    'POST /api/governance/datasets/{id}/retention/run': 'Administrator only: apply an independently approved retention policy when due. Retirement precedes purge with at least seven days grace; holds, active work, backups and mixed histories block purge. Provider backups/noncurrent versions and external exports are excluded.',
+    'GET /api/governance/automation': 'Administrator only: read actual task attempts and outcomes for explicitly selected authorized datasets. Scheduled governance runs on the existing API shared-volume runtime.',
+    'POST /api/governance/datasets/{id}/automation/run': 'Administrator only: run enabled tasks in the approved policy now, including due retention actions. Recheck signatories, policy and access; never invent successful task outcomes.',
+    'GET /api/governance/audit': 'Administrator only: verify the shared-volume hash-chained access journal and read paginated matching events. Does not return request bodies, tokens or extracted values; this is not external immutable/WORM storage.',
     'GET /api/governance/catalog': 'Read the selected authorized datasets, ownership, classifications, glossary counts and complete metadata totals; search and pagination never broaden dataset scope. No inference runs.',
     'GET /api/governance/datasets/{id}': 'Read an authorized dataset governance policy and the latest 20 version-history summaries. Retention and classification are descriptive; existing dataset grants enforce access.',
     'PUT /api/governance/datasets/{id}': 'Administrator only: save a versioned governance policy with an expected version and change reason. Preserve dataset/model mappings and all source/result data.',
@@ -12,7 +23,7 @@ NOTES = {
     'GET /api/governance/lineage-export': 'Administrator only: export completed saved document/extraction/review lineage as OpenLineage NDJSON. This is a download, not proof of native OCI ingestion.',
     'GET /api/governance/oci': 'Administrator only: read the saved OCI Data Catalog connection and actual last publication status without contacting OCI.',
     'PUT /api/governance/oci': 'Administrator only: verify an existing active OCI Data Catalog using server-side credentials and save its identifier and region. Does not provision resources or change IAM.',
-    'POST /api/governance/oci/publish': 'Administrator only: explicitly publish selected dataset policy descriptions, metadata counts and glossary terms to OCI. OCI IAM governs destination access. Lineage remains in Aegis and OpenLineage export; partial failures are reported.',
+    'POST /api/governance/oci/publish': 'Administrator only: publish selected policy descriptions, counts and glossary terms to OCI. Approved operational policies may schedule the same action. A verified Custom Lineage Provider optionally accepts saved lineage; submission does not prove graph visibility. OCI IAM governs destination access and partial failures are reported.',
     'GET /api/dataset-chat/catalog': 'Read the authorized dataset, document, prompt and model catalog for Dashboard Dataset Knowledge Chat without starting a conversation or inference.',
     'GET /api/dataset-chat/conversations': 'List the signed-in user\'s separate Dashboard chat history, omitting conversations whose saved dataset/document scope is no longer accessible.',
     'GET /api/dataset-chat/conversations/{id}': 'Read an owned Dashboard conversation and its saved messages after rechecking access to its dataset and document scope.',

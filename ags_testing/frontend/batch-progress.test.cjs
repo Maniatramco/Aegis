@@ -100,6 +100,16 @@ test('merged review keeps its filename and exposes all record fields and retaine
  for(const [n,name] of ['Alice','Bob','Carol'].entries()){assert.match(html,new RegExp(`Value /records/${n}/fields/full_name`));assert.match(html,new RegExp(name+'\\.pdf'));}
  assert.match(html,/\/api\/documents\/combined\/merged-sources\/1\/source/);
 });
+
+test('privacy-protected review is read only and offers redacted exports without original or Parquet links',()=>{
+ const {ExtractionReview}=load(path.resolve(__dirname,'../../ags_frontend/app/extraction-review.tsx'));
+ const e={id:'protected-result',name:'Protected result',version:1,status:'ready',governance_masked:true,review_status:'unreviewed',document_ids:['protected-doc'],result:{email:'[REDACTED]',amount:42}};
+ const html=renderToStaticMarkup(React.createElement(ExtractionReview,{extraction:e,documents:[{id:'protected-doc',name:'private.pdf'}],jobs:[],api:async()=>{},onSaved(){},onDirty(){}}));
+ assert.match(html,/Privacy protected/);assert.match(html,/read only/);assert.match(html,/readOnly/i);
+ assert.doesNotMatch(html,/export\?format=parquet|\/api\/documents\/|Save and permanently lock|Reviewed and locked/);
+ for(const format of ['json','csv','xlsx'])assert.ok(html.includes('export?format='+format));
+ assert.match(html,/evidence previews are restricted/);
+});
 test('compact agent progress retains real stage counts and visible failures',()=>{
  const job={kind:'extract',status:'failed',progress:80,error:'Model unavailable',workflow:{current:'generate',stages:{prepare:{status:'completed'},generate:{status:'failed'},validate:{status:'blocked'},ready:{status:'blocked'}}}};
  const html=renderToStaticMarkup(React.createElement(AgentJobProgress,{job}));

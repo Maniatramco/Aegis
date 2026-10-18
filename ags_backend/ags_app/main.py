@@ -26,12 +26,17 @@ async def lifespan(app):
     import asyncio
     from contextlib import suppress
     cleanup = asyncio.create_task(temporary_chat.expiry_loop())
+    from . import governance_automation
+    governance_tasks = asyncio.create_task(governance_automation.loop())
     try:
         yield
     finally:
         cleanup.cancel()
+        governance_tasks.cancel()
         with suppress(asyncio.CancelledError):
             await cleanup
+        with suppress(asyncio.CancelledError):
+            await governance_tasks
 app=FastAPI(title='Aegis AI Data Platform',version='0.1.0',lifespan=lifespan)
 @app.exception_handler(RequestValidationError)
 async def safe_validation_errors(request, error):
@@ -42,12 +47,57 @@ async def safe_validation_errors(request, error):
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv('ALLOWED_ORIGINS','http://localhost:3000,http://127.0.0.1:3000').split(','),allow_credentials=True,allow_methods=['*'],allow_headers=['Content-Type','X-CSRF-Token','Authorization'])
 @app.middleware('http')
 async def security_headers(request,call_next):
+    from . import governance_audit as audit, governance_controls as controls
+    context = {'path': request.url.path, 'method': request.method, 'dataset_ids': set(), 'actor': None, 'request_id': uid()}
+    context_token = audit.request_context.set(context)
     actor_token=access.request_actor.set(None)
     audit_token=relational.actor_override.set(None)
+    endpoint_completed = False
     try:
-        response=await call_next(request);response.headers['X-Content-Type-Options']='nosniff';response.headers['Cache-Control']='no-store';return response
+        response=await call_next(request)
+        endpoint_completed = True
+        actor = context['actor']
+        if actor and request.url.path.startswith('/api/'):
+            # Successful dataset retirement intentionally removes its scope.
+            # Its endpoint already authorized the mutation; return its receipt
+            # without treating the now-retired dataset as a revoked read.
+            deletion_receipt = request.method == 'DELETE' and getattr(request.scope.get('route'), 'path', '') == '/api/datasets/{id}'
+            if response.status_code < 400 and context['dataset_ids'] and not is_administrator(actor) and not deletion_receipt:
+                with Session() as session:
+                    current_scope = access.dataset_ids(actor, session)
+                if not context['dataset_ids'] <= current_scope:
+                    response = JSONResponse(status_code=403, content={'detail': 'Dataset access changed or privacy policy blocks this operation. Refresh your permitted scope.'})
+            # Recheck privacy immediately before releasing any result, including
+            # exports generated while an administrator activated a new policy.
+            protected = controls.restricted_datasets(actor, context['dataset_ids'])
+            if protected and not controls.dashboard_chat_request():
+                if not controls.safe_reader_path():
+                    response = JSONResponse(status_code=403, content={'detail': 'Governance privacy controls block raw access to this dataset.'})
+                elif 'application/json' in response.headers.get('content-type', '') and response.status_code < 400:
+                    payload = b''.join([part async for part in response.body_iterator])
+                    value = json.loads(payload)
+                    from types import SimpleNamespace
+                    for dataset_id in protected: value = controls.masked(actor, SimpleNamespace(parent_id=dataset_id), value)
+                    response = JSONResponse(content=value, status_code=response.status_code,
+                                            headers={key: value for key, value in response.headers.items() if key.lower() not in ('content-length', 'content-type')})
+                elif response.status_code < 400 and any(context.get('masked_versions', {}).get(id) != controls.active(id)['version'] for id in protected):
+                    response = JSONResponse(status_code=403, content={'detail': 'Governance policy changed during this export. Refresh and retry.'})
+        if request.url.path.startswith('/api/') and (actor or response.status_code in (401,403) or request.url.path in ('/api/auth/login','/api/auth/setup')):
+            route = request.scope.get('route')
+            action = request.method + ' ' + getattr(route, 'path', '<unmatched>')
+            from starlette.concurrency import run_in_threadpool
+            await run_in_threadpool(audit.append, actor, action, dataset_ids=context['dataset_ids'],
+                                    status='completed' if response.status_code < 400 else 'denied_or_failed',
+                                    http_status=response.status_code, request_id=context['request_id'])
+        response.headers['X-Content-Type-Options']='nosniff';response.headers['Cache-Control']='no-store';return response
+    except HTTPException as error:
+        return JSONResponse(status_code=error.status_code, content={'detail': error.detail})
+    except (OSError, ValueError):
+        if not endpoint_completed: raise
+        return JSONResponse(status_code=503, content={'detail': 'Governance checks or access auditing are unavailable. No verified response was released.'})
     finally:
         access.request_actor.reset(actor_token);relational.actor_override.reset(audit_token)
+        audit.request_context.reset(context_token)
 
 def authenticate(request:Request):
     token=request.cookies.get('aegis_session','');bearer=request.headers.get('authorization','')
@@ -57,12 +107,24 @@ def authenticate(request:Request):
         login=s.get(Login,hashlib.sha256(token.encode()).hexdigest())
         if not login or login.expires<time.time():raise HTTPException(401,'Session expired')
         if not s.get(User,login.owner):raise HTTPException(401,'Account unavailable')
+        from .governance_audit import request_context
+        context=request_context.get()
+        if context is not None:context['actor']=login.owner
         if request.method not in ('GET','HEAD','OPTIONS') and not bearer.startswith('Bearer ') and not secrets.compare_digest(request.headers.get('x-csrf-token',''),login.csrf):raise HTTPException(403,'Invalid CSRF token')
         return login.owner
 
 async def auth(request:Request):
     from starlette.concurrency import run_in_threadpool
     owner=await run_in_threadpool(authenticate,request)
+    from . import governance_audit
+    context = governance_audit.request_context.get()
+    if context is not None:
+        context['actor'] = owner
+        # Ensure durable auditing is available before an authenticated mutation.
+        if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            route = request.scope.get('route')
+            await run_in_threadpool(governance_audit.append, owner, request.method + ' ' + getattr(route, 'path', '<unmatched>'),
+                                    status='attempted', request_id=context['request_id'])
     from .workspace_reset import paused
     if paused() and not request.url.path.startswith('/api/workspace/'):
         raise HTTPException(503,'Workspace archive operation is running. Try again when it finishes.')
@@ -373,6 +435,12 @@ def reextract_document(id:str,body:ReextractDocument,owner=Depends(auth)):
         return result|{'original_retained':True,'document_version':revision,'reviewed_results_retained':True}
 @app.delete('/api/documents/{id}')
 def delete_document(id:str,owner=Depends(auth)):
+    from .governance_controls import deletion_guard
+    r=get_record(id,owner,'document')
+    with deletion_guard(r.parent_id):
+        return _delete_document(id,owner)
+
+def _delete_document(id,owner):
     r=get_record(id,owner,'document')
     with Session.begin() as s:
         for j in s.scalars(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):j.status='cancelled';j.lease_token=''
@@ -596,6 +664,8 @@ def extract_data_table(owner, dataset_id='', template_id=''):
             data=store.json(r.ref)
             if template_id and data.get('template_id')!=template_id:continue
             data=parquet_results.load(data)
+            from .governance_controls import masked
+            data=masked(owner,r,data)
         except (ValueError,OSError,KeyError):
             raise HTTPException(503,'A saved extraction could not be read. Reload or retry before exporting; no partial results were returned.')
         if data.get('result') is None:raise HTTPException(409,'A completed extraction has no saved result.')
@@ -676,7 +746,9 @@ def extraction(id:str,owner=Depends(auth)):
     from .parquet_results import load
     try:data=load(store.json(r.ref)) if r.status=='ready' else store.json(r.ref)
     except (ValueError,OSError):raise HTTPException(503,'Saved Parquet could not be read. Retry loading; no draft was overwritten.')
-    return representation(r)|data|{'extraction_id':r.id,'prompt_version':data.get('template_version'),'status_name':'completed' if r.status=='ready' else r.status,'output_url':f'/api/extractions/{id}/export?format=parquet' if data.get('output_reference') else None}
+    from .governance_controls import masked
+    get_record(id,owner,'extraction')
+    return masked(owner,r,representation(r)|data|{'extraction_id':r.id,'prompt_version':data.get('template_version'),'status_name':'completed' if r.status=='ready' else r.status,'output_url':f'/api/extractions/{id}/export?format=parquet' if data.get('output_reference') else None})
 
 @app.get('/api/extractions/{id}/merged-file')
 def merged_extraction_file(id:str,owner=Depends(auth)):
@@ -777,7 +849,8 @@ def reextract_result(id:str,body:ReextractInput,owner=Depends(auth)):
 @app.get('/api/extractions/{id}/versions')
 def extraction_versions(id:str,owner=Depends(auth)):
     r=get_record(id,owner,'extraction')
-    return [{'version':n,**store.json(f'extraction/{id}/v{n}.json')} for n in range(1,r.version+1)]
+    from .governance_controls import masked
+    return [masked(owner,r,{'version':n,**store.json(f'extraction/{id}/v{n}.json')}) for n in range(1,r.version+1)]
 
 @app.get('/api/extractions/{id}/source-evidence')
 def extraction_source_evidence(id:str,version:int|None=Query(None,ge=1),record_index:int=Query(0,ge=0),owner=Depends(auth)):
@@ -791,7 +864,10 @@ def export_extraction(id:str,format:str='json',owner=Depends(auth)):
     from .parquet_results import load
     try:data=load(data)
     except (ValueError,OSError):raise HTTPException(503,'Persisted result could not be read; retry.')
+    from .governance_controls import masked
+    data=masked(owner,r,data)
     if format=='parquet':
+        if data.get('governance_masked'):raise HTTPException(403,'Raw Parquet is blocked by privacy policy. Export masked JSON, CSV or XLSX instead.')
         if not data.get('output_reference'):raise HTTPException(409,'This historical result predates Parquet. Save a review revision or re-extract to create Parquet.')
         return Response(store.get(data['output_reference']),media_type='application/vnd.apache.parquet',headers={'Content-Disposition':f'attachment; filename="extraction-v{r.version}.parquet"'})
     from .result_exports import render

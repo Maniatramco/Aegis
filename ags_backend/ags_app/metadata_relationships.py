@@ -106,7 +106,7 @@ def build(actor, dataset_ids):
         data = payload(record); scope = [record.parent_id]
         key = node('extraction:'+record.id, 'Extraction', record.name, scope, record.status, record.version,
                    {'Extraction ID': record.id, 'Version': record.version, 'Review status': data.get('review_status', 'unreviewed'),
-                    'Prompt version': data.get('template_version') or 'Unavailable'}, {'kind': 'extraction', 'id': record.id})
+                    'Prompt version': data.get('template_version') or 'Unavailable', 'Saved at': record.updated_at}, {'kind': 'extraction', 'id': record.id})
         edge('dataset:'+record.parent_id, key, 'has extraction', scope)
         # The saved list, rather than the single-document SQL projection, preserves combined-run lineage.
         ids = set(data.get('document_ids') or [])

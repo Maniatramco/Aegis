@@ -1,6 +1,19 @@
 {
-  "version": "26.1.3.0",
+  "version": "26.1.4.0",
   "releases": [
+    {
+      "version": "26.1.4.0",
+      "date": "2026-10-18",
+      "title": "Operate your data governance policies",
+      "changes": [
+        "Run saved-data quality checks and pattern-based sensitivity discovery, with field rules, review/freshness alerts and source-change detection.",
+        "Propose privacy, quality, scheduling and retention controls for approval by a different administrator. Approved masking protects ordinary-user results and blocks raw source and grounded-chat access.",
+        "Place immediate legal holds, release them independently, and manage holds on retired datasets. Holds block deletion, retention and workspace reset.",
+        "Schedule approved quality scans and OCI metadata publication on the existing runtime. Apply approved inactivity retention through recoverable retirement and a purge grace period.",
+        "Inspect content-free access audit events with journal integrity checks. Purges retain policy/audit proof and exclude provider backups, external exports and noncurrent object versions.",
+        "Optionally verify an OCI Custom Lineage Provider before submitting saved OpenLineage events. Native provider creation is still rejected in the current Mumbai catalog; Aegis lineage and export remain available."
+      ]
+    },
     {
       "version": "26.1.3.0",
       "date": "2026-10-18",

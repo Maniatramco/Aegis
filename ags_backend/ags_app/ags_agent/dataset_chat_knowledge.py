@@ -19,6 +19,8 @@ def validate_workspace_scope(actor,dataset_ids,document_ids=None):
     with core.Session() as session:
         allowed=access.dataset_ids(actor,session)
         if not selected<=allowed:raise HTTPException(404,'Dataset knowledge is no longer accessible.')
+        from ..governance_audit import touch
+        for id in selected: touch(id)
         if document_ids is not None:
             if not document_ids:raise HTTPException(422,'Include at least one available file.')
             for id in document_ids:

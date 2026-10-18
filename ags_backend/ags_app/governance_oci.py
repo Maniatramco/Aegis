@@ -23,6 +23,7 @@ class Connection(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     catalog_id: str = Field(pattern=r'^ocid1\.datacatalog\.[a-z0-9.\-]+$', max_length=255)
     region: str = Field(pattern=r'^[a-z]{2}-[a-z]+-\d+$', max_length=60)
+    lineage_asset_key: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=160)
 
 
 class PublishInput(BaseModel):
@@ -127,25 +128,70 @@ def lineage_events(snapshot):
                 inputs.append({'namespace': 'aegis', 'name': source['id'], 'facets': {}})
         if not inputs:
             continue
-        yield {'eventTime': generated, 'eventType': 'COMPLETE', 'producer': producer,
+        saved_at = node.get('attributes', {}).get('Saved at') or node.get('attributes', {}).get('Reviewed at')
+        event_time = datetime.fromtimestamp(saved_at, timezone.utc).isoformat() if isinstance(saved_at, (int, float)) else generated
+        yield {'eventTime': event_time, 'eventType': 'COMPLETE', 'producer': producer,
                'schemaURL': 'https://openlineage.io/spec/1-0-5/OpenLineage.json',
                'run': {'runId': str(uuid.uuid5(uuid.NAMESPACE_URL, node['id'] + ':' + str(node.get('version')))), 'facets': {}},
                'job': {'namespace': 'aegis', 'name': node['id'], 'facets': {}},
                'inputs': inputs, 'outputs': [{'namespace': 'aegis', 'name': node['id'], 'facets': {}}]}
 
 
-def publish(snapshot, sdk_client, catalog_id):
+def publish(snapshot, sdk_client, catalog_id, lineage_asset_key=None):
     from .oci_adapters import _sdk
     models = _sdk().data_catalog.models
+    if lineage_asset_key:
+        verify_lineage_asset(sdk_client, catalog_id, lineage_asset_key)
     platform = {'id': 'Platform-Glossary', 'name': 'Aegis metadata concepts', 'counts': {},
                 'policy': {'glossary': [{'name': name, 'definition': definition} for name, definition in CONCEPTS.items()]}}
     upsert_glossary(sdk_client, catalog_id, platform, models)
     glossaries = [upsert_glossary(sdk_client, catalog_id, dataset, models) for dataset in snapshot['datasets']]
     # Mumbai rejected Custom Lineage Provider creation during the live pilot.
     # Keep verified glossary publication usable and never claim OCI ingestion.
-    return {'glossaries': len(glossaries), 'platform_terms': len(CONCEPTS),
+    result = {'glossaries': len(glossaries), 'platform_terms': len(CONCEPTS),
             'lineage_submitted': 0, 'lineage_status': 'available_in_aegis_and_export',
             'lineage_note': 'Inspect saved lineage in Aegis Metadata Relationships or export OpenLineage. Native OCI lineage ingestion is not enabled.'}
+    if lineage_asset_key:
+        for event in lineage_events(snapshot):
+            sdk_client.import_lineage(catalog_id, lineage_asset_key,
+                models.ImportLineageDetails(lineage_payload=json.dumps(event, ensure_ascii=False)),
+                opc_retry_token=event['run']['runId'])
+            result['lineage_submitted'] += 1
+        result.update(lineage_status='accepted_not_visibility_verified' if result['lineage_submitted'] else 'no_completed_events',
+                      lineage_note='OCI accepted the submitted events. Graph visibility must be verified in OCI; acceptance alone is not proof of rendering.')
+    return result
+
+
+def verify_lineage_asset(sdk_client, catalog_id, asset_key):
+    asset = sdk_client.get_data_asset(catalog_id, asset_key).data
+    type = sdk_client.get_type(catalog_id, asset.type_key).data
+    if type.name != 'Custom Lineage Provider' or asset.lifecycle_state != 'ACTIVE':
+        raise HTTPException(409, 'Select an active Custom Lineage Provider in this OCI catalog.')
+
+
+def publish_selected(actor, dataset_ids):
+    governance.require_manager(actor)
+    config = read_config()
+    if not config:
+        raise HTTPException(409, 'Connect an active OCI catalog first.')
+    with core.document_lock('workspace-reset'), core.document_lock('governance-oci-publish'):
+        snapshot = governance.inventory(actor, dataset_ids)
+        governance.require_manager(actor)
+        governance.scope(actor, dataset_ids)
+        try:
+            result = publish(snapshot, client(config), config['catalog_id'], **({'lineage_asset_key': config['lineage_asset_key']} if config.get('lineage_asset_key') else {}))
+        except HTTPException:
+            raise
+        except Exception:
+            core.store.put_json(STATE, {'status': 'failed_or_partial', 'at': time.time()})
+            raise HTTPException(502, 'OCI publication failed or was only partially accepted. Refresh OCI before retrying; Aegis policies are preserved.') from None
+        saved = {'status': 'metadata_published', 'at': time.time(), 'dataset_ids': snapshot['dataset_ids'], **result}
+        core.store.put_json(STATE, saved)
+        governance.require_manager(actor)
+        governance.scope(actor, dataset_ids)
+        from .governance_audit import append
+        append(actor, 'governance.oci.published', dataset_ids=dataset_ids)
+        return saved
 
 
 def install(app, auth):
@@ -167,6 +213,8 @@ def install(app, auth):
             catalog = client(body.model_dump()).get_catalog(body.catalog_id).data
             if catalog.lifecycle_state != 'ACTIVE':
                 raise HTTPException(409, 'OCI catalog is not active.')
+            if body.lineage_asset_key:
+                verify_lineage_asset(client(body.model_dump()), body.catalog_id, body.lineage_asset_key)
         except HTTPException:
             raise
         except Exception:
@@ -177,24 +225,4 @@ def install(app, auth):
 
     @app.post('/api/governance/oci/publish')
     def publish_metadata(body: PublishInput, actor=Depends(auth)):
-        governance.require_manager(actor)
-        config = read_config()
-        if not config:
-            raise HTTPException(409, 'Connect an active OCI catalog first.')
-        with core.document_lock('workspace-reset'), core.document_lock('governance-oci-publish'):
-            snapshot = governance.inventory(actor, body.dataset_ids)
-            governance.require_manager(actor)
-            governance.scope(actor, body.dataset_ids)
-            try:
-                result = publish(snapshot, client(config), config['catalog_id'])
-            except HTTPException:
-                raise
-            except Exception:
-                # A partially accepted OCI publication must never be reported as success.
-                core.store.put_json(STATE, {'status': 'failed_or_partial', 'at': time.time()})
-                raise HTTPException(502, 'OCI publication failed or was only partially accepted. Refresh OCI before retrying; Aegis policies are preserved.') from None
-            saved = {'status': 'metadata_published', 'at': time.time(), 'dataset_ids': snapshot['dataset_ids'], **result}
-            core.store.put_json(STATE, saved)
-            governance.require_manager(actor)
-            governance.scope(actor, body.dataset_ids)
-            return saved
+        return publish_selected(actor, body.dataset_ids)
