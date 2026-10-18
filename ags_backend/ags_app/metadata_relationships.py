@@ -78,12 +78,8 @@ def build(actor, dataset_ids):
         record = records.get(id)
         if not record: raise HTTPException(404, 'Dataset metadata is no longer accessible.')
         data = payload(record); configs[id] = data
-        from .governance import policy
-        governance = policy(record)
         node('dataset:'+id, 'Dataset', record.name, [id], 'inactive' if data.get('active') is False else record.status,
-             record.version, {'Dataset ID': id, 'Description': data.get('description', ''), 'Access': 'Authorized dataset',
-                              'Classification': governance['classification'], 'Accountable owner': governance['owner_name'],
-                              'Data steward': governance['steward'], 'Governance version': governance['version']})
+             record.version, {'Dataset ID': id, 'Description': data.get('description', ''), 'Access': 'Authorized dataset'})
     for record in records.values():
         if record.kind == 'document':
             node('document:'+record.id, 'Document', record.name, [record.parent_id], record.status, record.version,
@@ -106,7 +102,7 @@ def build(actor, dataset_ids):
         data = payload(record); scope = [record.parent_id]
         key = node('extraction:'+record.id, 'Extraction', record.name, scope, record.status, record.version,
                    {'Extraction ID': record.id, 'Version': record.version, 'Review status': data.get('review_status', 'unreviewed'),
-                    'Prompt version': data.get('template_version') or 'Unavailable', 'Saved at': record.updated_at}, {'kind': 'extraction', 'id': record.id})
+                    'Prompt version': data.get('template_version') or 'Unavailable'}, {'kind': 'extraction', 'id': record.id})
         edge('dataset:'+record.parent_id, key, 'has extraction', scope)
         # The saved list, rather than the single-document SQL projection, preserves combined-run lineage.
         ids = set(data.get('document_ids') or [])

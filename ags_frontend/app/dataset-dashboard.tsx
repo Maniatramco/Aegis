@@ -7,11 +7,9 @@ import {DatasetKnowledgePicker,type DatasetKnowledgeScope} from './dataset-knowl
 import {availableKnowledge,boundedKnowledge,addDatasetKnowledge,removeDatasetKnowledge,DATASET_DRAG_TYPE,droppedDatasetIds} from './dataset-knowledge-scope';
 import './dataset-dashboard.css';
 import './metadata-relationships.css';
-import './data-governance.css';
 
 type Entity=Record<string,any>;
 const MetadataRelationships=dynamic(()=>import('./metadata-relationships').then(module=>module.MetadataRelationships),{ssr:false});
-const DataGovernance=dynamic(()=>import('./data-governance').then(module=>module.DataGovernance),{ssr:false});
 export function datasetDocuments(documents:Entity[],id:string){return documents.filter(doc=>(doc.dataset_id||doc.kb_id||doc.parent_id)===id);}
 export function datasetReadiness(dataset:Entity,documents:Entity[]){
  const ready=documents.filter(doc=>doc.status==='ready'&&!doc.requires_reindex).length;
@@ -28,7 +26,6 @@ export function DatasetDashboard({username,datasets,documents,loading,search,onC
  const [pickerOpen,setPickerOpen]=useState(false),[included,setIncluded]=useState<DatasetKnowledgeScope|null>(null);
  const [dropActive,setDropActive]=useState(false),[notice,setNotice]=useState('');
  const [metadataOpen,setMetadataOpen]=useState(false);
- const [governanceOpen,setGovernanceOpen]=useState(false);
  const selected=datasets.find(d=>d.id===selectedId);
  const visible=datasets.filter(d=>`${d.name} ${d.description||''}`.toLowerCase().includes(search.trim().toLowerCase()));
  const workspace=!selectedId;
@@ -48,7 +45,7 @@ export function DatasetDashboard({username,datasets,documents,loading,search,onC
  const drop=(event:DragEvent<HTMLElement>)=>{event.preventDefault();setDropActive(false);if(busy)return;const ids=droppedDatasetIds(event.dataTransfer.getData(DATASET_DRAG_TYPE),datasets).filter(id=>availableKnowledge(datasets,documents).some(doc=>(doc.dataset_id||doc.kb_id||doc.parent_id)===id));if(!ids.length){setNotice('Choose an accessible dataset with indexed files to add knowledge.');return;}include(addDatasetKnowledge(currentScope,ids,datasets,documents));setNotice(`${ids.map(id=>datasets.find(d=>d.id===id)?.name).join(', ')} included in this chat's knowledge.`);};
  const dragOver=(event:DragEvent<HTMLElement>)=>{if(!busy&&event.dataTransfer.types.includes(DATASET_DRAG_TYPE)){event.preventDefault();event.dataTransfer.dropEffect='copy';setDropActive(true);}};
  return <section className="dataset-dashboard notebook-dashboard" aria-label="Dataset dashboard">
-  <header className="notebook-heading"><div><Database size={19}/><h2>{username}'s Knowledge Source</h2><span className="notebook-private"><ShieldCheck size={12}/>Dataset access protected</span></div><div className="metadata-dashboard-actions"><button data-open-governance type="button" className="btn" disabled={busy||loading} onClick={()=>setGovernanceOpen(true)}><ShieldCheck size={16}/>Data Governance</button><button data-open-metadata type="button" className="btn" disabled={busy||loading} onClick={()=>setMetadataOpen(true)}><Network size={16}/>Metadata Relationships</button>{!canManage&&<button type="button" className="btn" onClick={onBrowse}><Plus size={15}/>Browse datasets</button>}</div></header>
+  <header className="notebook-heading"><div><Database size={19}/><h2>{username}'s Knowledge Source</h2><span className="notebook-private"><ShieldCheck size={12}/>Dataset access protected</span></div><div className="metadata-dashboard-actions"><button data-open-metadata type="button" className="btn" disabled={busy||loading} onClick={()=>setMetadataOpen(true)}><Network size={16}/>Metadata Relationships</button>{!canManage&&<button type="button" className="btn" onClick={onBrowse}><Plus size={15}/>Browse datasets</button>}</div></header>
   <div className="dashboard-section-label"><h3>Onboarded datasets <span>{datasets.length}</span></h3><span>{busy?'Finish the current chat request before changing knowledge.':'Open a dataset, select several, or drag a card into Sources.'}</span></div>
   <div className="dashboard-dataset-rail" role="region" aria-label="Onboarded datasets" tabIndex={0} aria-busy={loading}>
    {datasets.length>0&&<button type="button" className="dashboard-dataset workspace-knowledge-card" aria-label="Chat with all accessible dataset knowledge" aria-pressed={workspace&&!included} disabled={busy} onClick={()=>choose('')}><span className="dashboard-dataset-icon"><Database size={17}/></span><span className="notebook-card-copy"><strong>All accessible knowledge</strong><span>{datasets.filter(d=>d.active!==false).length} datasets · Ask across datasets</span></span>{workspace&&!included?<CheckCircle2 size={16}/>:<ArrowRight size={16}/>}</button>}
@@ -72,7 +69,6 @@ export function DatasetDashboard({username,datasets,documents,loading,search,onC
   </div>
   {pickerOpen&&<DatasetKnowledgePicker datasets={datasets} documents={documents} initial={currentScope} onInclude={scope=>{include(scope);setNotice('Selected dataset knowledge is included in this chat.');}} onClose={()=>setPickerOpen(false)}/>}
   {metadataOpen&&<MetadataRelationships datasets={datasets} initialDatasetIds={currentScope.datasetIds} api={metadataApi} onReview={onMetadataReview} onClose={()=>{setMetadataOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('[data-open-metadata]')?.focus());}}/>}
-  {governanceOpen&&<DataGovernance datasets={datasets as {id:string;name:string;active?:boolean}[]} initialDatasetIds={currentScope.datasetIds} api={metadataApi} onRelationships={()=>{setGovernanceOpen(false);setMetadataOpen(true);}} onClose={()=>{setGovernanceOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('[data-open-governance]')?.focus());}}/>}
   <details className="dashboard-guide"><summary>How Aegis works <span>Explore the end-to-end document workflow</span><ChevronDown size={13}/></summary>{guide}</details>
  </section>;
 }

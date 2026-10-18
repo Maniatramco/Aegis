@@ -35,7 +35,7 @@ def active_submission(call):
 
 def ensure_idle(dataset, session):
     targets = select(core.Record.id).where((core.Record.parent_id == dataset.id) | (core.Record.id == dataset.id))
-    if session.scalar(select(core.Job.id).where(core.Job.target_id.in_(targets), core.Job.status.in_(['queued', 'running', 'blocked'])).limit(1)):
+    if session.scalar(select(core.Job.id).where(core.Job.target_id.in_(targets), core.Job.status.in_(['queued', 'running'])).limit(1)):
         raise HTTPException(409, 'Finish or cancel this dataset’s processing jobs before deleting it.')
     for row in session.scalars(select(core.Record).where(core.Record.kind.in_(['agent_plan', 'agent_onboarding']), core.Record.parent_id.in_([dataset.id, '']))):
         try:
@@ -51,13 +51,6 @@ def ensure_idle(dataset, session):
 
 
 def delete_dataset(id, body, actor):
-    access.get_record(id, actor, 'knowledge_base')
-    from .governance_controls import deletion_guard
-    with deletion_guard(id):
-        return _delete_dataset(id, body, actor)
-
-
-def _delete_dataset(id, body, actor):
     access.require_admin(actor)
     with core.document_lock('dataset-' + id):
         row = access.get_record(id, actor, 'knowledge_base')

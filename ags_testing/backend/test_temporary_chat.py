@@ -25,8 +25,7 @@ def snapshot(s):
     with core.Session() as db:
         records=[(r.id,r.kind,r.ref,r.version) for r in db.query(core.Record).all()]
         jobs=[(j.id,j.status) for j in db.query(core.Job).all()]
-    # The content-free security journal is control metadata, not saved turns.
-    return {'records':records,'jobs':jobs,'files':{str(p.relative_to(core.DATA)):p.read_bytes() for p in core.DATA.rglob('*') if p.is_file() and p.suffix != '.db' and p.relative_to(core.DATA).parts[0]!='governance-audit'}}
+    return {'records':records,'jobs':jobs,'files':{str(p.relative_to(core.DATA)):p.read_bytes() for p in core.DATA.rglob('*') if p.is_file() and p.suffix != '.db'}}
 
 def test_no_dataset_embedding_search_index_jobs_or_saved_history(system,monkeypatch):
     s=system;model=chat_model(s);before=snapshot(s)
@@ -47,9 +46,6 @@ def test_no_dataset_embedding_search_index_jobs_or_saved_history(system,monkeypa
     assert s.api.get('/api/documents').json()==[] and s.api.get('/api/jobs').json()==[]
     assert s.api.get('/api/conversations').json()==[]
     assert snapshot(s)==before
-    journal=(core.DATA/'governance-audit'/'events.jsonl').read_text(encoding='utf-8')
-    for private in ('Alice is the owner', 'Invoice total is 42', 'Who owns the project?', 'What does the invoice say?', 'invoice.txt'):
-        assert private not in journal
 
 def test_one_document_only_and_atomic_replacement(system):
     s=system

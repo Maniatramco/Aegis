@@ -10,7 +10,7 @@ from . import core, dataset_access as access
 CONTROL = ('configuration/', 'secrets/', 'diagnostics/', 'model/', 'models/', 'locks/', 'workspace-archives/', 'storage-routes/', 'object-cache/')
 FIELDS = ('storage_provider','local_storage_path','oci_storage_namespace','oci_storage_bucket','oci_storage_prefix',
           'oci_storage_region','oci_storage_auth_mode','oci_storage_profile','oci_storage_config_file','oci_storage_key_file')
-ENTITIES={'documents','extraction','knowledge_base','template','conversation','agent_plan','agent_onboarding','agent-state','jobs','temporary_session','temporary_document','governance'}
+ENTITIES={'documents','extraction','knowledge_base','template','conversation','agent_plan','agent_onboarding','agent-state','jobs','temporary_session','temporary_document'}
 
 def active():
     try: cfg=core.DEFAULTS|core.local_store.json('configuration/settings.json')

@@ -13,7 +13,6 @@ __pycache__/
 .venv/
 node_modules/
 .next/
-.next-*/
 out/
 coverage/
 playwright-report/

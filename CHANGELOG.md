@@ -2,32 +2,6 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
-## v26.1.4.0 - 18 October 2026
-
-- Added saved-data quality scans, freshness/review/schema/duplicate checks, configurable field rules and pattern-based sensitivity discovery. Reports contain identifiers/counts and disclose unreadable sources, partial scans and source/policy changes.
-- Added versioned operational policy proposals and independent administrator approval for masking, quality rules, schedules and retention, using the existing SQL catalog and immutable file snapshots without DDL.
-- Enforced approved ordinary-user masking in structured results, saved history and supported exports; blocked originals, previews, raw Parquet, processing and grounded chat for protected datasets. Added pre-release scope/privacy rechecks while preserving model and retrieval contracts.
-- Added immediate legal holds and independent release, including retained datasets. Holds block manual document/dataset deletion, retention and workspace reset.
-- Added policy-driven inactivity retirement and optional active-storage purge after a grace period, with active-job, hold, backup, mixed-history and partial-failure guards. Retained governance/audit proof; provider backups, external exports, noncurrent object versions and historical external index destinations require separate lifecycle controls.
-- Added approved quality/OCI publication/retention schedules on the existing shared-volume runtime and visible task outcomes. Signatory removal/demotion suspends automation; API downtime delays runs.
-- Added content-free access auditing with an fsynced hash-chained shared-volume journal and paginated integrity-verified inspection. This is not external immutable storage.
-- Added optional verified native OCI lineage submission and stable saved-event timestamps. Current Mumbai provider creation still fails with DCAT-11051; no native ingestion success is claimed.
-
-Validation: the broad backend run completed with 1,112 passing and five opt-in integration skips. Eight failures were corrected (retirement receipt rechecks and two assertions affected by intentional guidance/audit additions); all 100 tests from the affected governance, lifecycle, temporary-chat, hybrid-chat, Dashboard-chat and access suites passed on rerun, including new coverage. All 214 frontend unit tests and both TypeScript configurations passed. Synthetic browser checks verified independent approval, holds, ordinary-user scope/read-only controls, redacted result review, and 390px/320px layouts without horizontal overflow or console errors. Production images and the exact application release plan are prepared separately. The entire backend suite was not repeated after the fixes; no real business retention policy, destructive live-data test or live inference/upload/extraction acceptance write was configured.
-
-## v26.1.3.0 - 18 October 2026
-
-- Added the access-scoped Data Governance catalog to the Dashboard, with complete selected metadata counts, search, classification filters and dataset pagination.
-- Added administrator policy editing for ownership, stewardship, sensitivity, business purpose, descriptive retention and glossary terms, with change reasons, version conflicts and saved history.
-- Reused the existing catalog and versioned file storage without schema changes; included governance in recoverable workspace archives.
-- Added governance details to dataset nodes in Metadata Relationships and administrator metadata/OpenLineage exports without document text, extracted values, credentials or private conversations.
-- Added verified OCI catalog connections and explicit policy/glossary publication using existing server-side OCI authentication. OCI IAM remains separate from Aegis dataset grants.
-- Created the Mumbai Aegis-Governance catalog and published one real dataset policy/count snapshot and six Aegis concept definitions. No business classifications or stewards were invented.
-- Registered the Aegis-Application-Metadata asset with eight live workflow table definitions and 99 columns, including key descriptions, using metadata-only inspection. No database credentials, harvesting connection, IAM change or DDL were introduced; an operator helper supports reviewed schema snapshots.
-- Kept native OCI lineage ingestion disabled after OCI rejected Custom Lineage Provider creation with DCAT-11051. Saved lineage remains available in Aegis and OpenLineage export.
-
-Validation: 96 backend checks across governance, metadata, access, storage, dataset lifecycle, API documentation, OCI adapter and schema-publication suites passed; all 207 frontend unit tests and app/test TypeScript checks passed. Both Linux ARM64 production images built using the maintained dependency pins. The production web image served its page, all ten referenced script/style assets and the API proxy successfully. Browser checks against isolated synthetic data verified policy/glossary saves and history, administrator/read-only roles, selected dataset scope and the 390px mobile layout; no browser console errors were recorded. Live OCI checks verified eight workflow tables, 99 column definitions, zero harvesting connections and repeat glossary publication with current ETags. Application release release-20261018-220739-6526e3 was approved and published on 18 October 2026; API/worker and web rollouts, image/configuration/schema checks and HTTPS verification passed. No live upload, extraction or model-inference acceptance tests were run.
-
 ## v26.1.2.0 - 18 October 2026
 
 - Added a Dashboard header action for the on-demand Metadata Relationships explorer.

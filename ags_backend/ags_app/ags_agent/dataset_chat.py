@@ -86,8 +86,6 @@ def answer(body,owner,snapshot,main,progress,on_sources=None,previous=None):
                 'created_at':time.time(),'tool_trace':[],
                 'request_route':{'routing_mode':'dataset_general_chat','knowledge_used':False}}
     # Dataset answers retain the original complete mapping/embedding checks.
-    from ..governance_controls import ensure_grounded_chat_allowed
-    ensure_grounded_chat_allowed(owner, body.dataset_ids)
     with progress.step('Resolving grounded knowledge configuration'):
         if len(set(body.dataset_ids))==1:
             snapshot=routing.execution_snapshot(routing.owned(body.dataset_ids[0],owner,'knowledge_base'),'chat',body.model_id)
@@ -181,9 +179,6 @@ def run(body,owner,main,callback=None,cancelled=None):
     with core.document_lock('dataset-chat-'+id),token_usage.collect() as usage:
         message=answer(body,owner,snapshot,main,progress,sources_update,core.store.json(record.ref).get('messages',[]) if record else None)
         check()
-        if (message.get('request_route') or {}).get('routing_mode') != 'dataset_general_chat':
-            from ..governance_controls import ensure_grounded_chat_allowed
-            ensure_grounded_chat_allowed(owner, body.dataset_ids)
         with progress.step('Saving dataset chat response'):
             # Recheck access after inference before recording a completed reply.
             validate(body,owner)
@@ -213,10 +208,7 @@ def install(app,auth,main):
         result=[]
         for record in records:
             data=core.store.json(record.ref)
-            try:
-                validate_workspace_scope(owner,data['dataset_ids'],data.get('document_ids'))
-                from ..governance_controls import ensure_chat_history_allowed
-                ensure_chat_history_allowed(owner,data)
+            try:validate_workspace_scope(owner,data['dataset_ids'],data.get('document_ids'))
             except HTTPException:continue
             result.append(core.representation(record)|{key:data.get(key) for key in ('dataset_ids','document_ids')})
         return result
@@ -225,8 +217,6 @@ def install(app,auth,main):
     def conversation(id:str,owner=Depends(auth)):
         record=owned_chat(id,owner);data=core.store.json(record.ref)
         validate_workspace_scope(owner,data['dataset_ids'],data.get('document_ids'))
-        from ..governance_controls import ensure_chat_history_allowed
-        ensure_chat_history_allowed(owner,data)
         return {'id':record.id,**data}
 
     @app.post('/api/dataset-chat/messages')

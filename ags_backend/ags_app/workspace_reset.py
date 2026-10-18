@@ -11,9 +11,9 @@ from fastapi import Depends,HTTPException
 from pydantic import BaseModel
 from . import core,relational,dataset_access as access,providers
 
-KINDS={'knowledge_base','document','extraction','template','conversation','agent_plan','agent_onboarding','temporary_session','temporary_document','governance','governance_control','governance_hold'}
+KINDS={'knowledge_base','document','extraction','template','conversation','agent_plan','agent_onboarding','temporary_session','temporary_document'}
 FOLDERS=('knowledge_base','documents','extraction','template','conversation','agent_plan','agent_onboarding',
-         'temporary_session','temporary_document','temporary-sessions','temporary-documents','jobs','agent-checkpoints','agent-state','executions','knowledge','vectors','upload-receipts','governance')
+         'temporary_session','temporary_document','temporary-sessions','temporary-documents','jobs','agent-checkpoints','agent-state','executions','knowledge','vectors','upload-receipts')
 TABLES=(relational.Review,relational.Extraction,relational.Prompt,relational.Document,relational.DatasetModel,relational.UserDataset,relational.Dataset)
 FLAG='configuration/workspace-maintenance.json'
 
@@ -80,10 +80,6 @@ def _restore(id):
 
 def reset(actor):
     with core.document_lock('workspace-reset'):
-        from .governance_controls import ensure_no_hold
-        with core.Session() as session:
-            for id in session.scalars(select(core.Record.id).where(core.Record.kind == 'knowledge_base')):
-                ensure_no_hold(id)
         preview=catalog()
         if preview['active_jobs']:raise HTTPException(409,'Finish or cancel processing jobs before a fresh start.')
         if paused():raise HTTPException(409,'A workspace operation is already running.')
