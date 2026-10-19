@@ -189,3 +189,45 @@ Three diagnostic reruns left the baseline unchanged: two showed invalid aggregat
 filters (`COUNT` in `WHERE`), and another hit the conservative operation allow-list.
 No cloud calls, real-data changes or Aegis Agent integration were performed.
 This baseline is not sufficient evidence for an automatic accuracy upgrade.
+
+`qa/benchmark_gemini_select_ai.py` prepares a separate Gemini comparison using
+these same 40 questions and both fixtures. `--prepare` asks the already isolated
+local Oracle instance for `showprompt` messages (no model inference), verifies
+all 80 expected answers in SQLite and Oracle, and writes an ignored plan/report.
+The offline network, profile, application routes and Aegis Agent remain unchanged.
+
+```powershell
+# References only; no service calls.
+.\.venv\Scripts\python.exe -B ags_testing\qa\benchmark_gemini_select_ai.py
+# Exact Oracle schema/question messages, zero external calls.
+.\.venv\Scripts\python.exe -u -B ags_testing\qa\benchmark_gemini_select_ai.py --prepare
+```
+
+An explicit `--run --output <prepared-directory>` uses the fixed Gemini Developer
+API HTTPS endpoint and `gemini-2.5-flash`; it does not use OCI trial credits.
+Before that, verify the API key's exact project displays **Free tier** on
+[Google AI Studio Projects](https://aistudio.google.com/projects). A model having
+free pricing does not prove that a saved key's project is on that tier. Do not
+link billing, upgrade an account or use a paid fallback for this benchmark.
+Only synthetic schema/questions are sent; document contents and extracted values
+are absent. The local credential/verification file must remain ignored at
+`ags_runtime/select-ai-local/gemini-private.json`, with exactly these fields:
+`api_key`, `project_id`, `model` (`gemini-2.5-flash`), `billing_tier` (`free`),
+`billing_verified_at_utc` (timezone-aware ISO timestamp within 24 hours), and
+`billing_verification_source` (`Google AI Studio Projects: Free tier`). This
+receipt records an actual operator check; the script cannot independently infer
+billing status from an API key. Never paste keys into reports or commit them.
+
+The comparison preserves the original JSON-only instruction, temperature zero,
+768 output-token limit, conservative SQL allow-list and read-only Oracle
+executor. Thinking is disabled using the documented Gemini compatibility
+parameter. Gemini receives Oracle's actual `showprompt` messages directly; this
+does **not** test native Oracle `showsql` response processing or authenticated
+application routing with Gemini. It measures SQL/result accuracy on the same
+fixtures, not complete Aegis Agent accuracy or comparable application latency.
+Quota/authentication/server failures stop and checkpoint the run, without paid
+fallback or automatic quota retries. Resume the same directory after resolving
+the failure, using the same project/model. Partial scores never establish a full
+40-question comparison or an improvement over Aegis Agent. The no-network tests
+in `backend/test_gemini_select_ai_benchmark.py` check cost/configuration gates,
+fixed requests, incomplete outputs and partial-result disclosures.
