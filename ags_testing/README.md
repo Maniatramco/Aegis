@@ -140,3 +140,52 @@ the separately prepared offline Oracle/Qwen services. Only synthetic user `mani`
 starts with Data Governance access; the fixture administrator is disabled.
 See the maintained setup and start/stop commands in `ags_local_use/README.md`.
 This opt-in integration runs real local inference and never uses OCI.
+
+`qa/benchmark_local_select_ai.py` freezes 40 metadata questions against seven
+authorized synthetic datasets and one unassigned private dataset. It includes
+duplicate names, missing stewards, inactive datasets, empty datasets, failed and
+processing records, aggregates, join multiplication, ordering and selected scope.
+Handwritten reference SQL runs independently in SQLite and must agree with Oracle
+on two data fixtures before any model request is submitted. The second fixture
+changes document counts, stewardship and review distribution. A generated query
+must work on both fixtures to pass the stronger consistency check.
+
+```powershell
+# Reference syntax only; no model or Oracle calls.
+.\.venv\Scripts\python.exe -B ags_testing\qa\benchmark_local_select_ai.py
+# Explicit real local inference against the already prepared offline services.
+.\.venv\Scripts\python.exe -u -B ags_testing\qa\benchmark_local_select_ai.py --run
+```
+
+The full run uses a new isolated SQLite workspace and real authenticated API
+requests for fixture A. Fixture B reuses the returned SQL in a fresh Oracle
+temporary-table session with the same read-only executor; it makes no second
+model call. Access, unsupported/adversarial requests, revocation after a real
+model response and session isolation are checked separately. Per-question SQL,
+expected/actual results, timings, source revision and verified network settings
+are saved under ignored `ags_runtime/select-ai-local/benchmark-<timestamp>/` as
+`results.json` and a standalone `report.html`. General model audits remain
+content-free. No real workspace, OCI account or paid provider is used.
+
+Scoring preserves duplicate rows, numeric values and NULLs while allowing output
+column order, extra columns and text case to differ. Requested result ordering
+must match. The benchmark measures the current Select AI pilot; it does not run
+or claim comparative improvement over Aegis Agent. These are curated cases, not
+a statistically representative estimate for all user questions. The companion
+`backend/test_local_select_ai_benchmark.py` validates the reference fixture and
+checks that duplicate collapse, join multiplication and wrong counts fail scoring.
+
+Measured baseline on 19 October 2026, application source `4ecd7ec` (v26.1.6.0),
+local Qwen3 4B: **27/40 correct on both fixtures (67.5%)**, eight incorrect answers
+and five rejected/failed requests. Median full test time was 6.46 seconds, p95
+12.80 seconds; the first cold request took 19.81 seconds. Fourteen boundary checks
+held, including access denial before model calls, revocation after real inference
+and temporary-session isolation. These checks do not establish answer correctness:
+two unsupported requests returned safe but misleading metadata instead of a clear
+refusal, including filenames/run names labelled as original text/invoice amounts.
+Errors included grouping distinct datasets by a shared name, join multiplication,
+case-insensitive filtering with a mismatched literal, and missing top-N limits.
+Three diagnostic reruns left the baseline unchanged: two showed invalid aggregate
+filters (`COUNT` in `WHERE`), and another hit the conservative operation allow-list.
+No cloud calls, real-data changes or Aegis Agent integration were performed.
+This baseline is not sufficient evidence for an automatic accuracy upgrade.
