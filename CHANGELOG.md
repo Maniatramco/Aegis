@@ -2,6 +2,17 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.7.0 - 19 October 2026
+
+- Remove the optional Local Select AI screen, backend query routes and runtime settings from Data Governance.
+- Archive the dedicated Compose setup, SQL bridge, optional requirements, preview and local/Gemini benchmarks under `delete/`, preserving their original relative paths.
+- Exclude the archive from container build contexts and active test discovery; keep private/runtime artifacts ignored.
+- Preserve the existing Data Governance controls, per-user grants, Metadata Relationships, Aegis Agent and processing workflows. Keep the cleanup on `select-ai-local`.
+- Remove this workstation's five dedicated pilot containers and two networks. Keep its detached database/TLS volumes recoverable and preserve the shared local model cache and original Oracle volume.
+- Remove the earlier OCI trial pilot profile, its inference-endpoint HTTP grant and the exact pilot IAM policy/dynamic group after matching their setup receipts. Preserve shared database facilities and the Data Governance catalog; make no inference calls.
+
+Validation: 90 selected backend tests, all 223 frontend unit tests and both TypeScript configurations passed. Authenticated requests to retired SQL routes return 404 and the routes are absent from OpenAPI. The rendered synthetic mani preview retained two authorized governance datasets and showed no Select AI controls or browser console errors. All 18 archived source files match their original Git blobs, archived private state/build output remains ignored, and active backend discovery collected 1,149 tests without the retired suites. Pilot containers/networks and loopback listeners are absent; OCI readback confirms the profile/grant and pilot IAM resources are absent. The optimized Next.js build compiled and generated routes, with the existing Windows EPERM standalone symlink-copy limitation; standalone runtime and a complete backend-suite run were not performed. No OCI application rollout or real-data processing test was performed.
+
 ## v26.1.6.0 - 19 October 2026
 
 - Add an opt-in local Oracle Select AI screen in Data Governance with example metadata questions, generated SQL, read-only tabular results and actual stage timings using the shared WorkflowStepper.

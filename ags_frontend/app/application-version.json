@@ -1,6 +1,16 @@
 {
-  "version": "26.1.6.0",
+  "version": "26.1.7.0",
   "releases": [
+    {
+      "version": "26.1.7.0",
+      "date": "2026-10-19",
+      "title": "Remove the Select AI pilot",
+      "changes": [
+        "Remove the optional Local Select AI screen, backend query routes and runtime configuration from Data Governance.",
+        "Retire the dedicated setup, SQL bridge, optional dependencies, preview and accuracy benchmarks into the repository's delete archive.",
+        "Keep Data Governance, per-user module access, Metadata Relationships and the existing Aegis Agent and processing workflows."
+      ]
+    },
     {
       "version": "26.1.6.0",
       "date": "2026-10-19",

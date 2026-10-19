@@ -223,5 +223,3 @@ def install(app, auth):
     governance_oci.install(app, auth)
     from . import governance_controls
     governance_controls.install(app, auth)
-    from . import local_select_ai
-    local_select_ai.install(app, auth)

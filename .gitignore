@@ -26,6 +26,8 @@ test-results/
 frontend/screenshots/
 ags_frontend/screenshots/
 /ags_runtime/
+/delete/ags_runtime/
+/delete/ags_frontend/.next*/
 
 # Local verification artifacts can contain workspace data and large binaries.
 /output/

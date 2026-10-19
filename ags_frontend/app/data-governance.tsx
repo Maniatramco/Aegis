@@ -2,7 +2,6 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {ArrowLeft,BookOpen,CheckCircle2,ChevronRight,CloudUpload,Database,Download,History,Network,Plus,RefreshCw,Search,ShieldCheck,Trash2,Users} from 'lucide-react';
 import {GovernanceOperations,RetiredGovernance} from './governance-operations';
-import {LocalSelectAI} from './local-select-ai';
 
 type Api=(path:string,method?:string,body?:unknown,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;
 type Dataset={id:string;name:string;active?:boolean};
@@ -60,7 +59,6 @@ export function DataGovernance({datasets,initialDatasetIds,api,onClose,onRelatio
  return <dialog ref={dialog} className="governance-dialog" aria-labelledby="governance-title" onCancel={event=>{event.preventDefault();if(!busy)onClose();}}>
   <header className="governance-heading"><button type="button" className="btn" disabled={busy} onClick={onClose}><ArrowLeft size={15}/>Back to Dashboard</button><div><span className="governance-eyebrow">AEGIS METADATA</span><h2 id="governance-title">Data Governance</h2><p>Find your data. Understand its meaning, ownership and journey.</p></div><button type="button" className="btn" disabled={busy} onClick={onRelationships}><Network size={15}/>Relationships</button></header>
   <div className="governance-body">
-   <LocalSelectAI datasetIds={ids} api={api}/>
    <div className="governance-overview"><div className="governance-intro"><ShieldCheck size={24}/><div><strong>Your governance register</strong><p>Descriptions and connections to your data, with versioned policy decisions.</p></div></div><div className="governance-stats">{[[Database,'Datasets in scope',catalog?.totals.datasets],[ShieldCheck,'Classified',catalog?.totals.classified],[Users,'With a steward',catalog?.totals.with_steward],[BookOpen,'Glossary terms',catalog?.totals.glossary_terms]].map(([Icon,label,value]:any)=><div key={label}><Icon size={16}/><strong>{value??'—'}</strong><span>{label}</span></div>)}</div></div>
    <div className="governance-workspace"><section className="governance-catalog" aria-label="Governance dataset catalog" aria-busy={loading}>
     <div className="governance-section-title"><h3>Dataset catalog</h3><button type="button" className="btn icon" aria-label="Refresh governance catalog" disabled={busy||loading} onClick={()=>setRevision(value=>value+1)}><RefreshCw size={15}/></button></div>

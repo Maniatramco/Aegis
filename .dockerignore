@@ -12,6 +12,7 @@ data
 **/__pycache__
 **/.pytest_cache
 ags_runtime
+delete
 output
 work
 local-models
