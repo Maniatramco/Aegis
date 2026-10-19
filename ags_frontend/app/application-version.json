@@ -1,6 +1,16 @@
 {
-  "version": "26.1.2.1",
+  "version": "26.1.2.2",
   "releases": [
+    {
+      "version": "26.1.2.2",
+      "date": "2026-10-19",
+      "title": "Compact chat layout controls",
+      "changes": [
+        "Use icons for showing or hiding Sources and expanding or restoring the Dashboard chat layout.",
+        "Keep descriptive tooltips, accessible labels and larger mobile touch targets for the layout controls.",
+        "Preserve the selected knowledge, draft and conversation when changing the layout."
+      ]
+    },
     {
       "version": "26.1.2.1",
       "date": "2026-10-19",

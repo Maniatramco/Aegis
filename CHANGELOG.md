@@ -2,6 +2,13 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.2.2 - 19 October 2026
+
+- Refine [#18](https://github.com/Maniatramco/Aegis/issues/18): replace the visible Show/Hide sources and Restore Dashboard/Expand chat labels with compact icons.
+- Retain descriptive tooltips, accessible labels and 44px mobile touch targets. Preserve the existing layout behavior and selected knowledge, draft and conversation.
+
+Validation: all 210 frontend unit tests and both app/test TypeScript checks passed. Targeted desktop and 390px mobile browser checks verified icon-only controls with descriptive tooltips, 44px mobile touch targets, preserved draft/conversation and selected knowledge across layout changes, no horizontal overflow, and the composer above the footer. No backend changes, real model inference or OCI rollout were performed; the preview uses synthetic data. The complete browser regression suite was not run for this styling refinement.
+
 ## v26.1.2.1 - 19 October 2026
 
 - Fix [#18](https://github.com/Maniatramco/Aegis/issues/18): expand Dataset Knowledge Chat after indexed knowledge is included, collapsing the surrounding dataset cards, Sources and guidance.

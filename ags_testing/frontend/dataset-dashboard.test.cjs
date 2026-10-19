@@ -102,7 +102,7 @@ test('including indexed knowledge expands chat, collapses surrounding panels and
  assert.equal(find(v,'Onboarded datasets').props.hidden,true);assert.equal(find(v,'Dataset sources').props.hidden,true);
  assert.equal(v.nodes.find(n=>n.type==='details').props.hidden,true);
  assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['one','two']});
- assert.ok(find(v,'Restore Dashboard layout'));assert.ok(v.nodes.some(n=>n.type==='button'&&text(n).trim()==='Show sources'));
+ for(const label of ['Restore Dashboard layout','Show sources']){const control=find(v,label);assert.equal(text(control),'');assert.equal(control.props.title,label);}
  assert.equal(v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.disabled,false);
 });
 
@@ -110,7 +110,7 @@ test('restoring or expanding the layout and peeking at sources preserve the acti
  const v=mount();find(v,'Ask Aegis about Policies').props.onClick();v.render();
  assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
  const scope=v.agents[0].sourceScope,id=v.agents[0].id;
- v.nodes.find(n=>n.type==='button'&&text(n).trim()==='Show sources').props.onClick();v.render();
+ find(v,'Show sources').props.onClick();v.render();assert.equal(find(v,'Hide sources').props.title,'Hide sources');
  assert.equal(find(v,'Dataset sources').props.hidden,false);assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
  assert.equal(v.agents[0].sourceScope,scope);assert.equal(v.agents[0].id,id);
  v.agents[0].onBusy(true);v.render();find(v,'Restore Dashboard layout').props.onClick();v.render();
