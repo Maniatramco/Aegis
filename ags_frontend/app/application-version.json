@@ -1,6 +1,17 @@
 {
-  "version": "26.1.2.2",
+  "version": "26.1.8.0",
   "releases": [
+    {
+      "version": "26.1.8.0",
+      "date": "2026-10-19",
+      "title": "Arrange metadata relationship nodes",
+      "changes": [
+        "Drag each category or record node independently with a mouse, touch or pen; connections and labels follow its position.",
+        "Pan the background, zoom, fit the arranged graph to the screen or restore its starting layout with the reset icon.",
+        "Use arrow keys to adjust a focused node, Shift for larger steps and Home to reset that node. Enter or Space opens its details.",
+        "Keep separate arrangements for scoped desktop and mobile views while the explorer is open, including across list switches and refresh. No metadata or model calls are changed."
+      ]
+    },
     {
       "version": "26.1.2.2",
       "date": "2026-10-19",

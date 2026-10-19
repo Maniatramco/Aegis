@@ -2,6 +2,16 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.8.0 - 19 October 2026
+
+- Move every Metadata Relationships category or record node independently with a mouse, touch or pen, with edges and labels following its position.
+- Preserve background panning and zoom. Fit the arranged nodes into view or restore the current view with an icon-only reset control; keep 44px camera controls on mobile.
+- Support arrow-key adjustments, larger Shift steps, individual Home reset and Enter/Space inspection, with accessible instructions and move announcements.
+- Keep layouts separate for dataset scope, record/filter view and desktop/mobile while the explorer is open. Preserve arrangements across refresh and graph/list switches.
+- Clean up released/cancelled pointers and reset gestures; dragging does not open record details. No API, metadata, model, governance or processing changes.
+
+Validation: all 220 frontend unit tests (including 10 new graph regressions), both app/test TypeScript checks and 20 targeted local browser checks passed. Browser coverage included all six category nodes, individual/connected records, following edges/labels, movement at 140% zoom, independent background panning, fit, keyboard movement and inspection, repeated reset, list/refresh retention, scoped layouts, 390px touch drag/cancellation/tap and 320px controls. The pinned Linux ARM64 production image also built and started successfully; root and all seven script assets returned HTTP 200, v26.1.8.0 was found in the served assets, and four production-build browser spot checks passed for modal loading, mouse drag, reset and touch drag. Preview tests used loopback synthetic metadata; the request log contains only GETs and no chat reply calls. Physical mobile/pen hardware, live OCI data/provider inference and the full application browser suite were not tested. Private evidence is retained under `ags_runtime/workflow-preview/metadata-nodes-v26.1.8.0/`. No OCI deployment was performed; the live frontend remains v26.1.2.2.
+
 ## v26.1.2.2 - 19 October 2026
 
 - Refine [#18](https://github.com/Maniatramco/Aegis/issues/18): replace the visible Show/Hide sources and Restore Dashboard/Expand chat labels with compact icons.
