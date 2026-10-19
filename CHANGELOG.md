@@ -2,6 +2,16 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.9.0 - 19 October 2026
+
+- Add connected-record exploration with scoped, cancellable expand/collapse requests and preserved existing node positions.
+- Add D3 network arrangement, a lineage layout and pinned positions, preserving mouse, touch and keyboard movement.
+- Highlight neighbours, filter entity types, toggle relationship labels, zoom at the pointer with the wheel and separate parallel relationships with curved links. Keep the mobile heading compact and interaction controls at 44px.
+- Keep exact catalog totals distinct from the bounded visible scene; preserve existing API access checks and read-only processing boundaries.
+- Include the ISC notices for the bundled D3 force-layout modules. No Neo4j service, new database or paid cloud feature is required.
+
+Validation: all 236 frontend unit tests, both app/test TypeScript checks and six isolated metadata API tests passed. Sixteen targeted local browser checks covered expansion and collapse, shared neighbours, preserved positions, pinning and manual dragging, network/lineage layouts, highlighting, search, dataset scope, labels/type filters, wheel zoom and 390px/320px controls. The Linux ARM64 production image built and started successfully; the page and all seven script assets returned HTTP 200, the served assets contain v26.1.9.0, and five production-browser checks passed for loading, expansion, pinning, mouse movement and 390px touch movement/controls. Preview tests used loopback synthetic metadata and made no model calls. The fixture log's parseable entries contain only GETs and no chat reply calls; two incomplete log fragments were excluded. Physical mobile/pen hardware, live OCI data/provider inference and the full application browser suite were not tested. Private evidence is retained under `ags_runtime/workflow-preview/metadata-explorer-v26.1.9.0/`. No OCI deployment was performed; the live frontend remains v26.1.2.2.
+
 ## v26.1.8.0 - 19 October 2026
 
 - Move every Metadata Relationships category or record node independently with a mouse, touch or pen, with edges and labels following its position.

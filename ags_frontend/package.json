@@ -12,6 +12,7 @@
     "test:screenshots": "node ../ags_testing/frontend/run.cjs screenshots"
   },
   "dependencies": {
+    "d3-force": "3.0.0",
     "lucide-react": "^0.468.0",
     "next": "^15.5.12",
     "react": "^19.1.0",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/d3-force": "3.0.10",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

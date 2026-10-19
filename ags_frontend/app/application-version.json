@@ -1,6 +1,17 @@
 {
-  "version": "26.1.8.0",
+  "version": "26.1.9.0",
   "releases": [
+    {
+      "version": "26.1.9.0",
+      "date": "2026-10-19",
+      "title": "Explore metadata as a connected graph",
+      "changes": [
+        "Explore records and expand or collapse their saved connections in place, using the existing access-scoped metadata API.",
+        "Arrange the graph as a network or lineage; pin nodes to preserve their positions during automatic layout.",
+        "Highlight neighbouring records, filter entity types, toggle relationship labels, zoom with the wheel and inspect parallel links separately.",
+        "Keep mouse, touch and keyboard node movement, scoped counts and read-only processing boundaries. No Neo4j service or paid cloud feature is required."
+      ]
+    },
     {
       "version": "26.1.8.0",
       "date": "2026-10-19",
