@@ -124,3 +124,19 @@ The schema fixture contains historical logical metadata with synthetic destinati
 capability and status values; it is not a new live inspection. These checks make
 no OCI, Docker or database connections and require only the Python standard library
 plus Git. The PowerShell launcher smoke check runs on Windows when available.
+
+## Offline Select AI pilot
+
+`backend/test_local_select_ai.py` covers the conservative Oracle SQL allow-list,
+explicit local-only opt-in, fixed connection/profile guards, complete selected
+metadata, denial before model access and revocation during generation. It runs
+without Oracle or model calls using the isolated runner and `sqlglot` from the
+test requirements. `frontend/local-select-ai.test.cjs` covers disabled/empty scope,
+explicit request scope, real server stages and cancellation on scope changes.
+
+`qa/local_select_ai_preview.py` creates a separate synthetic SQLite workspace
+under ignored `ags_runtime/select-ai-local/preview/`. It deliberately opts into
+the separately prepared offline Oracle/Qwen services. Only synthetic user `mani`
+starts with Data Governance access; the fixture administrator is disabled.
+See the maintained setup and start/stop commands in `ags_local_use/README.md`.
+This opt-in integration runs real local inference and never uses OCI.

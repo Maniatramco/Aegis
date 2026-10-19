@@ -2,3 +2,4 @@
 -r ../../ags_backend/requirements.txt
 -r ../../ags_backend/requirements-models.txt
 pytest==9.1.1
+sqlglot==30.23.0

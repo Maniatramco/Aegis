@@ -2,7 +2,17 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Data Governance branch: `data-governance`. Current working version: `v26.1.5.0` (base: `v26.1.0.0`).** Keep governance work on this separate branch. `ags_sprint1` retains the pre-governance application, including Metadata Relationships. The original source freeze remains tagged `aegis-freeze-2026-10-15`.
+**Current working version: `v26.1.6.0`, on the separate `select-ai-local` branch (based on `data-governance`).** Data Governance publication remains on `data-governance`; the offline Select AI pilot is isolated on `select-ai-local`. `ags_sprint1` retains the pre-governance application, including Metadata Relationships. The original source freeze remains tagged `aegis-freeze-2026-10-15`.
+
+## Local Oracle Select AI preview
+
+Open **Dashboard → Data Governance** in the explicitly enabled local preview to ask metadata questions, inspect the generated Oracle SQL and see read-only results. This uses native `DBMS_CLOUD_AI.GENERATE` with `showsql` in a dedicated Oracle AI Database Free container and the already downloaded local `qwen3:4b` model. Example: document counts per dataset, datasets without a steward, and extraction runs by review status. It is a separate SQL tool; Unified Chat retrieval/reranking, processing and onboarding remain unchanged.
+
+The pilot is **disabled by default**. It requires an isolated `AEGIS_LOCAL_ONLY=true` SQLite workspace, the optional Select AI dependencies and private loopback-only connection settings. Oracle, Ollama, the model bridge and local TLS endpoint share an internal network without outbound internet. The downloaded model cache is read-only, Ollama cloud features are disabled, and a fixed TCP relay exposes only local database/model-service access on `127.0.0.1`. No OCI resource, cloud credential, trial credit or paid inference endpoint is used by this pilot.
+
+Every request stages complete selected authorized dataset, document and extraction **metadata** into session-private Oracle temporary tables. Source text, extracted values and credentials are excluded. SQL is parsed with a conservative SELECT allow-list, limited to these tables, and executed in a read-only transaction with a timeout and 200-row display limit. Module/dataset access is checked before generation, before execution and before response release. Model SQL can still be semantically wrong; inspect its preview. The local pilot supports up to 50,000 metadata rows and rejects incomplete metadata instead of reporting partial counts.
+
+Use the [maintained local setup and preview commands](ags_local_use/README.md#offline-oracle-select-ai-preview). The synthetic workspace has two datasets assigned to the ordinary user `mani`; a third administrator-only dataset is excluded. Other users, including the fixture administrator, start with Data Governance disabled. This is a local preview; the OCI application remains at its separately recorded deployed version.
 
 ## Data Governance
 

@@ -21,6 +21,11 @@ AEGIS_AGENT_ENGINE = "langgraph"
 AEGIS_OLLAMA_BATCH_SIZE = "" # empty selects the provider default
 AEGIS_INFERENCE_DEVICE = "auto"
 
+[local_select_ai]
+# Explicitly opt in only in an isolated AEGIS_LOCAL_ONLY=true SQLite workspace.
+AEGIS_LOCAL_SQL_ENABLED = false
+AEGIS_LOCAL_SQL_CONNECTION_FILE = "" # absolute path to ignored, private local connection.json
+
 [context]
 AEGIS_CONTEXT_HEADROOM_TOKENS = 512
 

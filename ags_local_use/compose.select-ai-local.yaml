@@ -1,0 +1,81 @@
+name: aegis-select-ai-local
+
+# No outbound network, cloud credentials, image pulls or remote model fallback.
+services:
+  oracle:
+    image: container-registry.oracle.com/database/free:23.26.3.0
+    pull_policy: never
+    shm_size: 1gb
+    mem_limit: 3gb
+    environment:
+      ORACLE_PWD: ${LOCAL_SELECT_AI_DB_PASSWORD:?Generate the private local configuration first}
+      INIT_SGA_SIZE: '1024'
+      INIT_PGA_SIZE: '384'
+    volumes: [select_ai_database:/opt/oracle/oradata]
+    networks: [offline]
+  model:
+    image: ollama/ollama:0.35.1
+    pull_policy: never
+    environment:
+      OLLAMA_NO_CLOUD: '1'
+      OLLAMA_MODELS: /model-cache/models
+      OLLAMA_CONTEXT_LENGTH: '8192'
+      OLLAMA_NUM_PARALLEL: '1'
+      OLLAMA_MAX_LOADED_MODELS: '1'
+      OLLAMA_KEEP_ALIVE: '5m'
+    mem_limit: 4gb
+    volumes: [existing_local_models:/model-cache:ro]
+    networks: [offline]
+  adapter:
+    image: python:3.12.15-slim
+    pull_policy: never
+    command: ['python', '-B', '/app/adapter.py']
+    read_only: true
+    environment:
+      LOCAL_SELECT_AI_TOKEN: ${LOCAL_SELECT_AI_TOKEN:?Generate the private local configuration first}
+      PYTHONUNBUFFERED: '1'
+      PYTHONPATH: /opt/local-libs
+    volumes:
+      - ./ags_local_use/ags_docker/ags_select_ai/adapter.py:/app/adapter.py:ro
+      - ./ags_backend/ags_app/local_select_ai_sql.py:/app/sql_guard.py:ro
+      - ./ags_runtime/select-ai-local/dependencies:/opt/local-libs:ro
+      - ./ags_runtime/select-ai-local/audit:/audit
+    networks: [offline]
+    depends_on: [model]
+  tls:
+    image: caddy:2.10.2-alpine
+    platform: linux/arm64
+    pull_policy: never
+    volumes:
+      - ./ags_local_use/ags_docker/ags_select_ai/Caddyfile:/etc/caddy/Caddyfile:ro
+      - select_ai_tls:/data
+    networks:
+      offline:
+        aliases: [llm.aegis.local]
+    depends_on: [adapter]
+  # Docker internal networks do not publish ports. This fixed TCP relay exposes
+  # only database and model health/API to this computer's loopback interface.
+  # Oracle/model/adapter/TLS retain no default gateway or outbound internet.
+  gateway:
+    image: python:3.12.15-slim
+    pull_policy: never
+    command: ['python', '-B', '/app/gateway.py']
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - ./ags_local_use/ags_docker/ags_select_ai/gateway.py:/app/gateway.py:ro
+    ports: ['127.0.0.1:1523:1521', '127.0.0.1:11439:8080']
+    networks: [offline, local_access]
+    depends_on: [oracle, adapter]
+
+networks:
+  offline:
+    internal: true
+  local_access:
+
+volumes:
+  select_ai_database:
+  select_ai_tls:
+  existing_local_models:
+    external: true
+    name: ${LOCAL_SELECT_AI_MODELS_VOLUME:?Choose a pre-downloaded local model volume}

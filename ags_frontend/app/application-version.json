@@ -1,6 +1,18 @@
 {
-  "version": "26.1.5.0",
+  "version": "26.1.6.0",
   "releases": [
+    {
+      "version": "26.1.6.0",
+      "date": "2026-10-19",
+      "title": "Preview Oracle Select AI with an offline local model",
+      "changes": [
+        "Add an opt-in local Select AI metadata tool inside Data Governance, using native Oracle DBMS_CLOUD_AI SQL generation and the downloaded Qwen3 4B model.",
+        "Show generated Oracle SQL, read-only query results and actual completed stages. Copy complete selected metadata into per-request temporary tables; exclude original documents and extracted values.",
+        "Keep cloud inference disabled, model and database outbound internet blocked, and all local service ports bound to loopback. No OCI resources or paid provider calls are required.",
+        "Enforce existing per-user governance and dataset grants before inference, before execution and before releasing results. Reject unsupported SQL and profile changes; isolate temporary rows between connections.",
+        "Keep the pilot disabled by default and on the separate select-ai-local branch. The synthetic local preview is not an OCI deployment."
+      ]
+    },
     {
       "version": "26.1.5.0",
       "date": "2026-10-19",

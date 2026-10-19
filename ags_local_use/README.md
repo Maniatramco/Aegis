@@ -113,3 +113,67 @@ Historical `created_by` / `updated_by` were not recorded and remain NULL, with
 `created_via=legacy` and `updated_via=migration`. Legacy accounts/sessions had no
 creation timestamps; their new audit timestamps mark import time. Historical
 review actors/times are recovered from review JSON when available.
+
+## Offline Oracle Select AI preview
+
+This optional pilot is maintained on `select-ai-local`. It does not deploy to OCI.
+Use cached Docker images (Oracle Free 23.26.3.0, Ollama 0.35.1, Python 3.12.15-slim
+and Caddy 2.10.2-alpine) and an existing Docker volume containing the downloaded
+`qwen3:4b` model. The launcher refuses image pulls. This workstation's cached
+Caddy image uses ARM64 emulation; no production image is published.
+
+From the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r ags_backend\requirements-select-ai.txt
+.\.venv\Scripts\python.exe -B ags_local_use\ags_scripts\setup_select_ai_local.py --models-volume aegis-oracle_ollama
+```
+
+The setup creates only the dedicated `aegis-select-ai-local` Compose project and
+its volumes. It installs Oracle-supplied cloud-family packages in that local Free
+database, imports the local Caddy CA into a new local wallet, grants HTTPS access
+only to `llm.aegis.local:443`, and creates the restricted local schema/profile.
+A local bearer token authenticates the bridge; it is not a cloud API key.
+Secrets, the certificate, private connection file and content-free model-call audit
+remain under ignored `ags_runtime/select-ai-local/`.
+
+Oracle, model, adapter and TLS have only an internal Docker network and no default
+gateway. A fixed TCP relay exposes database port 1523 and model-service port 11439
+on `127.0.0.1` only. The model cache is read-only, cloud features are disabled,
+and the bridge uses a fixed model/destination without redirects, proxy settings or
+remote fallback. Inference uses this computer's CPU/RAM; it consumes no OCI trial
+credits or paid cloud model calls. Other independently running OCI resources are
+outside this preview.
+
+In a separate terminal, start the isolated synthetic API fixture:
+
+```powershell
+.\.venv\Scripts\python.exe -B ags_testing\qa\local_select_ai_preview.py
+```
+
+In another terminal, start the local web UI with the existing frontend dependencies:
+
+```powershell
+$env:API_INTERNAL_URL='http://127.0.0.1:60562'
+$env:AEGIS_BUILD_DIR='.next-select-ai-preview'
+node ags_frontend\node_modules\next\dist\bin\next dev ags_frontend -H 127.0.0.1 -p 60563
+```
+
+Open http://127.0.0.1:60563, sign in as **mani** with the synthetic-only password
+**LocalSelectAI-demo-2026**, then open **Data Governance**. This ordinary user has
+two assigned synthetic datasets. An administrator-only third dataset is excluded.
+The fixture administrator `local-preview-admin` uses the same synthetic password
+and starts with the module disabled. These are disposable local fixture accounts,
+never credentials for a live installation. The link is available on this computer.
+
+The maintained runtime TOML keeps `AEGIS_LOCAL_SQL_ENABLED=false` and the private
+connection path empty by default. Only an explicitly isolated local-only SQLite
+workspace can opt in. It still requires the existing per-user governance grant.
+The SQL tool preserves the original Unified Chat and processing paths.
+
+Stop the API/web terminals with Ctrl+C, then stop the dedicated services while
+retaining their local state:
+
+```powershell
+docker compose --project-directory . --env-file ags_runtime/select-ai-local/local.env -f ags_local_use/compose.select-ai-local.yaml stop
+```

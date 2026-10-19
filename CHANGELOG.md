@@ -2,6 +2,16 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.6.0 - 19 October 2026
+
+- Add an opt-in local Oracle Select AI screen in Data Governance with example metadata questions, generated SQL, read-only tabular results and actual stage timings using the shared WorkflowStepper.
+- Run native `DBMS_CLOUD_AI.GENERATE` / `showsql` in a dedicated Oracle Database Free container against the downloaded Qwen3 4B model. Adapt OpenAI-compatible requests to local structured SQL generation; no canned SQL or model download is used.
+- Block outbound internet for Oracle/model/adapter/TLS, disable Ollama cloud features, mount cached model files read-only and expose fixed local access through loopback ports. The setup uses cached images only and never contacts OCI.
+- Stage complete authorized metadata into per-request Oracle temporary tables, exclude document/result values, reject unsafe or unsupported SQL, constrain the native AI profile, cap results and recheck module/dataset access around inference and execution.
+- Default the pilot off and require a local-only SQLite workspace and private local connection file. Keep source on `select-ai-local`, based on `data-governance`; `ags_sprint1` and the OCI deployment remain unchanged.
+
+Validation: 112 selected backend tests passed (local SQL, governance, feature access, runtime settings, privacy/holds and metadata); all 228 frontend unit tests and app/test TypeScript checks passed. The optimized Next.js build compiled and generated routes; Windows denied a standalone dependency-symlink copy (EPERM), so standalone packaging is not verified. The synthetic browser preview ran native Oracle Select AI and returned document counts 3/0; two further real local requests identified the missing steward and review-status counts. Fresh Oracle connections see no prior temporary rows. Docker inspection verified internal-only inference networks without default gateways, read-only cached models, cloud-disabled Ollama and loopback-only published ports. Desktop and 390px/320px browser checks passed without page overflow or console errors. No OCI deployment or paid provider calls were made; the full backend suite was not run.
+
 ## v26.1.5.0 - 19 October 2026
 
 - Initially enable Data Governance only for the exact persisted username `mani`. Other accounts and administrators start disabled.

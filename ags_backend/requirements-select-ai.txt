@@ -1,0 +1,3 @@
+# Optional, offline-only Oracle Select AI pilot. No cloud model SDK is used.
+-r requirements-oracle.txt
+sqlglot==30.23.0

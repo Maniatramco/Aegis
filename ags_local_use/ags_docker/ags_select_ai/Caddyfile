@@ -1,0 +1,9 @@
+{
+    auto_https disable_redirects
+    admin off
+}
+
+https://llm.aegis.local {
+    tls internal
+    reverse_proxy adapter:8080
+}
