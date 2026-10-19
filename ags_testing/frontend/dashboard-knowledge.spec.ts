@@ -31,6 +31,8 @@ async function preview(page:Page){
 }
 
 async function overview(page:Page){await page.getByRole('button',{name:'Restore Dashboard layout',exact:true}).click();}
+// Dataset toggles hide their rail when chat expands. Use click and assert the resulting scope/layout;
+// check()/uncheck() can time out when they re-resolve the now-hidden checkbox after its change succeeds.
 
 test('including knowledge expands chat without sending, and layout changes preserve drafts and conversation',async({page})=>{
  await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);
@@ -72,7 +74,7 @@ test('sticky knowledge action survives source scrolling, source collapse and pag
 test('multi-select and drag/drop preserve exclusions and send the exact combined chat scope',async({page})=>{
  await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);
  await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
- await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).check();await overview(page);
+ await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).click();await overview(page);
  await expect(page.getByRole('checkbox',{name:'Include dataset Policies in knowledge',exact:true})).toBeChecked();
  await expect(page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true})).toBeChecked();
  await page.getByRole('checkbox',{name:'Include source finance-evidence-02.txt',exact:true}).uncheck();
@@ -99,7 +101,7 @@ test('picker supports multiple datasets and empty selection never broadens scope
  const dialog=page.getByRole('dialog');await dialog.getByRole('checkbox',{name:'Include dataset Finance',exact:true}).check();
  await dialog.getByRole('button',{name:'Include selected knowledge',exact:true}).click();await overview(page);
  await expect(page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true})).toBeChecked();
- await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).uncheck();await overview(page);await page.getByRole('checkbox',{name:'Include dataset Policies in knowledge',exact:true}).uncheck();
+ await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).click();await overview(page);await page.getByRole('checkbox',{name:'Include dataset Policies in knowledge',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Choose knowledge for this chat',exact:true})).toBeVisible();await expect(page.getByLabel('Message Dataset Knowledge Chat',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Add Dataset Knowledge',exact:true})).toBeEnabled();
 });
@@ -110,7 +112,7 @@ test('About and footer show the same version and prior feature history; mobile c
  await expect(page.getByRole('heading',{name:'v26.1.0.0',exact:true})).toBeVisible();await expect(page.getByText('Drag dataset cards into Sources to include their accessible indexed files, preserving other selected sources.',{exact:true})).toBeVisible();
  if(process.env.AEGIS_ABOUT_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_ABOUT_SCREENSHOT,fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.goto('/#Dashboard');await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
- await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).check();await overview(page);
+ await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).click();await overview(page);
  await expect(page.getByRole('button',{name:'Add Dataset Knowledge',exact:true})).toBeInViewport();
  await page.getByRole('button',{name:'Add Dataset Knowledge',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
