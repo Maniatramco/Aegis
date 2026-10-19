@@ -12,7 +12,7 @@ const text=node=>!node?'':typeof node==='string'?node:Array.isArray(node)?node.m
 function mount(values={}){const state=[],selected=[],agents=[],destinations=[],reviews=[];let root;const props={username:'tester',datasets,documents,loading:false,search:'',onClearSearch(){},onBrowse(){},canManage:false,selectedId:'',onSelect:id=>{selected.push(id);props.selectedId=id;},onNavigate:path=>destinations.push(path),onReview:id=>reviews.push(id),renderAgent:(id,onBusy,sourceScope,onSourceChange,knowledgeScope)=>{agents.push({id,onBusy,sourceScope,onSourceChange,knowledgeScope});return null;},guide:null,...values};
  const render=()=>{hooks=state;cursor=0;agents.length=0;root=DatasetDashboard(props);};render();return {render,get nodes(){return all(root);},selected,agents,destinations,reviews};}
 function find(v,label){return v.nodes.find(n=>n.props?.['aria-label']===label);}
-function mountChat(values={}){const v=mount(values);v.nodes.find(n=>n.type==='button'&&text(n)==='Open chat').props.onClick();v.render();return v;}
+function mountChat(values={}){const v=mount(values);v.nodes.find(n=>n.type==='button'&&text(n)==='Open chat').props.onClick();v.render();find(v,'Restore Dashboard layout').props.onClick();v.render();return v;}
 test('source summaries keep dataset boundaries and do not count stale indexes as ready',()=>{
  assert.deepEqual(datasetDocuments(documents,'a').map(d=>d.id),['one','stale']);
  assert.deepEqual(datasetReadiness(datasets[0],datasetDocuments(documents,'a')),{ready:1,label:'1 need reindex',state:'pending'});
@@ -83,7 +83,7 @@ test('dragging a dataset onto collapsed Sources adds only permitted ready knowle
  tile.props.onDragStart({preventDefault(){assert.fail('Valid dataset should drag');},dataTransfer:{setData:(mime,data)=>{assert.equal(mime,type);payload=data;}}});
  const drop=()=>find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:mime=>mime===type?payload:''}});
  drop();v.render();assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['one','two']});
- assert.equal(v.nodes.find(n=>n.props?.id==='notebook-source-content').props.hidden,false);
+ assert.equal(v.nodes.find(n=>n.props?.id==='notebook-source-content').props.hidden,true);
  drop();v.render();assert.deepEqual(v.agents[0].knowledgeScope.documentIds,['one','two']);
  const before=v.agents[0].knowledgeScope;find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:()=>JSON.stringify(['unauthorized'])}});v.render();assert.deepEqual(v.agents[0].knowledgeScope,before);
 });
@@ -93,4 +93,39 @@ test('active chat disables multi-selection and ignores dropped datasets',()=>{
  assert.equal(find(v,'Include dataset Policies in knowledge').props.disabled,true);
  assert.equal(v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.disabled,true);
  find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:()=>JSON.stringify(['b'])}});v.render();assert.equal(v.agents[0].id,'a');
+});
+
+test('including indexed knowledge expands chat, collapses surrounding panels and retains exact file scope',()=>{
+ const v=mount({selectedId:'a'});v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.onClick();v.render();
+ v.nodes.find(n=>n.type==='picker').props.onInclude({datasetIds:['a','b'],documentIds:['one','two','stale','foreign']});v.render();
+ assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
+ assert.equal(find(v,'Onboarded datasets').props.hidden,true);assert.equal(find(v,'Dataset sources').props.hidden,true);
+ assert.equal(v.nodes.find(n=>n.type==='details').props.hidden,true);
+ assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['one','two']});
+ assert.ok(find(v,'Restore Dashboard layout'));assert.ok(v.nodes.some(n=>n.type==='button'&&text(n).trim()==='Show sources'));
+ assert.equal(v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.disabled,false);
+});
+
+test('restoring or expanding the layout and peeking at sources preserve the active chat scope',()=>{
+ const v=mount();find(v,'Ask Aegis about Policies').props.onClick();v.render();
+ assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
+ const scope=v.agents[0].sourceScope,id=v.agents[0].id;
+ v.nodes.find(n=>n.type==='button'&&text(n).trim()==='Show sources').props.onClick();v.render();
+ assert.equal(find(v,'Dataset sources').props.hidden,false);assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
+ assert.equal(v.agents[0].sourceScope,scope);assert.equal(v.agents[0].id,id);
+ v.agents[0].onBusy(true);v.render();find(v,'Restore Dashboard layout').props.onClick();v.render();
+ assert.equal(find(v,'Onboarded datasets').props.hidden,false);assert.equal(find(v,'Dataset sources').props.hidden,false);
+ assert.equal(v.agents[0].id,id);assert.equal(v.agents[0].sourceScope,scope);
+ find(v,'Expand Dataset Knowledge Chat').props.onClick();v.render();assert.equal(find(v,'Dataset sources').props.hidden,true);
+ assert.equal(v.agents[0].id,id);assert.equal(v.agents[0].sourceScope,scope);
+});
+
+test('initial, inactive, unindexed and emptied selections do not automatically take over the Dashboard',()=>{
+ const initial=mount();assert.equal(find(initial,'Dataset dashboard').props['data-chat-focused'],false);assert.equal(initial.agents.length,0);
+ for(const values of [{documents:[]},{datasets:[{id:'a',name:'Invoices',active:false}],documents}]){
+  const v=mount(values);find(v,'Ask Aegis about Invoices').props.onClick();v.render();assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],false);
+ }
+ const v=mount();find(v,'Ask Aegis about Policies').props.onClick();v.render();
+ find(v,'Include dataset Policies in knowledge').props.onChange();v.render();
+ assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],false);assert.equal(v.agents.length,0);
 });

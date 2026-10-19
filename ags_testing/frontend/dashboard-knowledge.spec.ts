@@ -1,4 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
+import applicationVersion from '../../ags_frontend/app/application-version.json';
 
 const models=[{id:'preview-chat',name:'Preview chat model',enabled:true,capabilities:['chat'],provider:'mock'}];
 const datasets=[{id:'finance',name:'Finance',description:'Synthetic finance knowledge',active:true,models,default_chat_model_id:'preview-chat'},{id:'policy',name:'Policies',description:'Synthetic policy knowledge',active:true,models,default_chat_model_id:'preview-chat'},{id:'inactive',name:'Archived',active:false,models}];
@@ -29,10 +30,37 @@ async function preview(page:Page){
  return sent;
 }
 
+async function overview(page:Page){await page.getByRole('button',{name:'Restore Dashboard layout',exact:true}).click();}
+
+test('including knowledge expands chat without sending, and layout changes preserve drafts and conversation',async({page})=>{
+ await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);
+ const chat=page.getByRole('region',{name:'Dataset knowledge workspace chat',exact:true});
+ const before=await chat.boundingBox();
+ await page.getByRole('button',{name:'Add Dataset Knowledge',exact:true}).click();
+ await page.getByRole('button',{name:'Include selected knowledge',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Onboarded datasets',exact:true})).toBeHidden();
+ await expect(page.getByLabel('Dataset sources',{exact:true})).toBeHidden();
+ await expect(page.getByLabel('Message Dataset Knowledge Chat',{exact:true})).toBeFocused();
+ expect((await chat.boundingBox())!.height).toBeGreaterThan(before!.height+100);expect(sent).toEqual([]);
+ const composer=page.getByLabel('Message Dataset Knowledge Chat',{exact:true});await composer.fill('Preserve this draft');
+ await page.getByRole('button',{name:'Show sources',exact:true}).click();await expect(page.getByLabel('Dataset sources',{exact:true})).toBeVisible();
+ await expect(composer).toHaveValue('Preserve this draft');await page.getByRole('button',{name:'Hide sources',exact:true}).click();
+ await overview(page);await expect(page.getByRole('region',{name:'Onboarded datasets',exact:true})).toBeVisible();await expect(composer).toHaveValue('Preserve this draft');
+ await page.getByRole('button',{name:'Expand Dataset Knowledge Chat',exact:true}).click();await expect(composer).toHaveValue('Preserve this draft');
+ await page.getByLabel('Send dataset chat question',{exact:true}).click();await expect.poll(()=>sent.length).toBe(1);
+ expect(sent[0].dataset_ids).toEqual(['finance','policy']);expect(sent[0].document_ids).toHaveLength(25);
+ await expect(page.getByText('Synthetic UI scope verification only.',{exact:true})).toBeVisible();
+ await overview(page);await page.getByRole('button',{name:'Expand Dataset Knowledge Chat',exact:true}).click();
+ await expect(page.getByText('Synthetic UI scope verification only.',{exact:true})).toBeVisible();expect(sent).toHaveLength(1);
+ await page.setViewportSize({width:390,height:844});await expect(composer).toBeInViewport();
+ const bounds=await page.locator('.dataset-knowledge-chat .agent-v2-composer').boundingBox(),footer=await page.getByRole('contentinfo',{name:'Application status',exact:true}).boundingBox();
+ expect(bounds!.y+bounds!.height).toBeLessThanOrEqual(footer!.y);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test('sticky knowledge action survives source scrolling, source collapse and page scrolling',async({page})=>{
  await preview(page);await page.setViewportSize({width:1440,height:1000});
  const action=page.getByRole('button',{name:'Add Dataset Knowledge',exact:true});
- await page.getByRole('button',{name:'Ask Aegis about Finance',exact:true}).click();
+ await page.getByRole('button',{name:'Ask Aegis about Finance',exact:true}).click();await overview(page);
  const sourceContent=page.locator('#notebook-source-content');await sourceContent.evaluate(element=>element.scrollTop=element.scrollHeight);
  const composer=await page.locator('.dataset-knowledge-chat .agent-v2-composer').boundingBox(),footer=await page.getByRole('contentinfo',{name:'Application status',exact:true}).boundingBox();expect(composer!.y+composer!.height).toBeLessThanOrEqual(footer!.y);
  await expect(action).toBeInViewport();await action.click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();
@@ -43,15 +71,15 @@ test('sticky knowledge action survives source scrolling, source collapse and pag
 
 test('multi-select and drag/drop preserve exclusions and send the exact combined chat scope',async({page})=>{
  await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);
- await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();
- await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).check();
+ await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
+ await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).check();await overview(page);
  await expect(page.getByRole('checkbox',{name:'Include dataset Policies in knowledge',exact:true})).toBeChecked();
  await expect(page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true})).toBeChecked();
  await page.getByRole('checkbox',{name:'Include source finance-evidence-02.txt',exact:true}).uncheck();
- await page.getByRole('button',{name:'Ask Aegis about Finance',exact:true}).click();
+ await page.getByRole('button',{name:'Ask Aegis about Finance',exact:true}).click();await overview(page);
  await page.getByRole('checkbox',{name:'Include source finance-evidence-02.txt',exact:true}).uncheck();
  const tile=page.locator('.dashboard-dataset-tile').filter({has:page.getByRole('button',{name:'Ask Aegis about Policies',exact:true})});
- await tile.dragTo(page.getByLabel('Dataset sources',{exact:true}));
+ await tile.dragTo(page.getByLabel('Dataset sources',{exact:true}));await overview(page);
  await expect(page.getByRole('checkbox',{name:'Include dataset Policies in knowledge',exact:true})).toBeChecked();
  await expect(page.getByRole('checkbox',{name:'Include source finance-evidence-02.txt',exact:true})).toHaveCount(0);
  await expect(page.getByRole('checkbox',{name:'Include source retention-policy.txt',exact:true})).toBeChecked();
@@ -66,23 +94,23 @@ test('multi-select and drag/drop preserve exclusions and send the exact combined
 });
 
 test('picker supports multiple datasets and empty selection never broadens scope',async({page})=>{
- await preview(page);await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();
+ await preview(page);await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
  await page.getByRole('button',{name:'Add Dataset Knowledge',exact:true}).click();
  const dialog=page.getByRole('dialog');await dialog.getByRole('checkbox',{name:'Include dataset Finance',exact:true}).check();
- await dialog.getByRole('button',{name:'Include selected knowledge',exact:true}).click();
+ await dialog.getByRole('button',{name:'Include selected knowledge',exact:true}).click();await overview(page);
  await expect(page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true})).toBeChecked();
- await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).uncheck();await page.getByRole('checkbox',{name:'Include dataset Policies in knowledge',exact:true}).uncheck();
+ await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).uncheck();await overview(page);await page.getByRole('checkbox',{name:'Include dataset Policies in knowledge',exact:true}).uncheck();
  await expect(page.getByRole('heading',{name:'Choose knowledge for this chat',exact:true})).toBeVisible();await expect(page.getByLabel('Message Dataset Knowledge Chat',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Add Dataset Knowledge',exact:true})).toBeEnabled();
 });
 
 test('About and footer show the same version and prior feature history; mobile controls fit',async({page})=>{
- await page.setViewportSize({width:1440,height:1100});await preview(page);await page.getByRole('link',{name:'About Aegis, application version v26.1.1.0',exact:true}).click();
- await expect(page.getByRole('heading',{level:1,name:'About',exact:true})).toBeVisible();await expect(page.getByLabel('Current application version v26.1.1.0',{exact:true})).toBeVisible();
+ await page.setViewportSize({width:1440,height:1100});await preview(page);await page.getByRole('link',{name:`About Aegis, application version v${applicationVersion.version}`,exact:true}).click();
+ await expect(page.getByRole('heading',{level:1,name:'About',exact:true})).toBeVisible();await expect(page.getByLabel(`Current application version v${applicationVersion.version}`,{exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'v26.1.0.0',exact:true})).toBeVisible();await expect(page.getByText('Drag dataset cards into Sources to include their accessible indexed files, preserving other selected sources.',{exact:true})).toBeVisible();
  if(process.env.AEGIS_ABOUT_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_ABOUT_SCREENSHOT,fullPage:true});
- await page.setViewportSize({width:390,height:844});await page.goto('/#Dashboard');await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();
- await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).check();
+ await page.setViewportSize({width:390,height:844});await page.goto('/#Dashboard');await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
+ await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).check();await overview(page);
  await expect(page.getByRole('button',{name:'Add Dataset Knowledge',exact:true})).toBeInViewport();
  await page.getByRole('button',{name:'Add Dataset Knowledge',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

@@ -2,6 +2,15 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.2.1 - 19 October 2026
+
+- Fix [#18](https://github.com/Maniatramco/Aegis/issues/18): expand Dataset Knowledge Chat after indexed knowledge is included, collapsing the surrounding dataset cards, Sources and guidance.
+- Keep the included knowledge summary and Add Dataset Knowledge available, with Show sources and Restore Dashboard controls. Keep the existing chat mounted across layout changes so drafts and conversations survive.
+- Focus the composer when chat opens, without generating an overview or sending a question automatically. Preserve existing dataset/document scopes, exclusions, busy guards, authorization and retrieval workflows.
+- Fit the conversation into the available desktop/mobile workspace and retain the full Dashboard for empty, inactive or unindexed knowledge choices.
+
+Validation: all 210 frontend unit tests, 25 Dashboard Dataset Knowledge Chat backend regressions and both TypeScript configurations passed. Targeted browser checks with synthetic API responses verified automatic expansion, composer focus, source inspection, picker cancellation, preserved drafts/conversations, and a visible composer without horizontal overflow at 1440px, 390px and 320px widths. No Send occurred before explicit submission; the one synthetic submission retained exactly two datasets and 25 selected documents. The maintained browser regression suite was updated and typechecked, but not run as a complete suite. The optimized Next.js build compiled and generated routes; Windows EPERM while copying a standalone dependency symlink leaves standalone packaging unverified. Full backend testing, real model inference and OCI rollout were not performed.
+
 ## v26.1.2.0 - 18 October 2026
 
 - Added a Dashboard header action for the on-demand Metadata Relationships explorer.

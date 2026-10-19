@@ -1,6 +1,17 @@
 {
-  "version": "26.1.2.0",
+  "version": "26.1.2.1",
   "releases": [
+    {
+      "version": "26.1.2.1",
+      "date": "2026-10-19",
+      "title": "Give Dataset Knowledge Chat more room",
+      "changes": [
+        "Expand Dataset Knowledge Chat after indexed knowledge is included through the picker, dataset cards, checkboxes or drag and drop.",
+        "Collapse dataset cards, Sources and guidance around the conversation. Keep the knowledge summary and Add Dataset Knowledge available.",
+        "Inspect sources or restore the Dashboard without resetting the chat draft, selected knowledge or conversation. Focus the composer when chat opens; send no question automatically.",
+        "Fit the expanded conversation and composer within the desktop and mobile workspace."
+      ]
+    },
     {
       "version": "26.1.2.0",
       "date": "2026-10-18",
