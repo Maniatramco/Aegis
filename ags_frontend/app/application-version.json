@@ -1,6 +1,15 @@
 {
-  "version": "26.1.9.0",
+  "version": "26.1.9.1",
   "releases": [
+    {
+      "version": "26.1.9.1",
+      "date": "2026-10-21",
+      "title": "A cleaner Dataset Knowledge Chat input",
+      "changes": [
+        "Remove the inner rectangular border, focus outline and background from the Dashboard chat input.",
+        "Keep the rounded outer composer focus indicator and existing keyboard, draft and chat behavior."
+      ]
+    },
     {
       "version": "26.1.9.0",
       "date": "2026-10-19",

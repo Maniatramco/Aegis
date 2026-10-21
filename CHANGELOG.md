@@ -2,6 +2,13 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.9.1 - 21 October 2026
+
+- Remove the inner rectangular border, focus outline and tinted background from the Dashboard Dataset Knowledge Chat input, overriding the generic workspace form styling only for this composer.
+- Retain the rounded outer focus indicator and the existing native textarea, keyboard controls, draft, model selection and chat behavior.
+
+Validation: targeted local browser checks with synthetic data passed at 1440px, 390px and 320px widths. The focused input has no border, outline or shadow and a transparent background; the outer composer retains its focus border and ring. Multiline typing, draft retention across viewport changes, keyboard focus on the model selector, visible input and no horizontal overflow were verified. No question was submitted, model call made or OCI deployment run. The full application regression suite was not run for this scoped CSS fix. Private screenshots and results are under `ags_runtime/workflow-preview/chat-composer-v26.1.9.1/`.
+
 ## v26.1.9.0 - 19 October 2026
 
 - Add connected-record exploration with scoped, cancellable expand/collapse requests and preserved existing node positions.

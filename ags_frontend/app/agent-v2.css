@@ -85,6 +85,8 @@ body .sidebar.agent-navigation-drawer.open{transform:translateX(0);visibility:vi
 
 /* Keep native editing and mirror its text underneath for colored agent names. */
 .agent-v2-editor{position:relative;min-width:0}
+/* Dataset chat uses the rounded compose box as its focus indicator. */
+body .shell .workspace .agent-v2.dataset-knowledge-chat .agent-v2-composer .agent-v2-compose-box .agent-v2-input textarea{border:0;background:transparent;outline:none;outline-offset:0;box-shadow:none}
 body .shell .workspace .agent-v2-composer .agent-v2-compose-box .agent-v2-input .agent-v2-editor :is(textarea,.agent-v2-input-highlight){box-sizing:border-box;margin:0;border:0;border-radius:0;padding:0;font:inherit;font-size:var(--text-input,16px);font-weight:400;line-height:1.5;letter-spacing:normal;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;tab-size:8;background:transparent;box-shadow:none}
 body .shell .workspace .agent-v2-composer .agent-v2-compose-box .agent-v2-input .agent-v2-editor textarea{position:relative;z-index:1;color:transparent;caret-color:#202123;outline:none;outline-offset:0}
 body .shell .workspace .agent-v2-composer .agent-v2-compose-box .agent-v2-input .agent-v2-editor textarea:is(:focus,:focus-visible){border:0;background:transparent;outline:none;box-shadow:none}
