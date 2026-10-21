@@ -4,6 +4,8 @@ Aegis turns documents into searchable knowledge and structured, reviewable resul
 
 **Handover branch: `ags_sprint1`. Current working version: `v26.1.9.1` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
+**Verified live frontend: v26.1.9.1, published 21 October 2026.** Release `release-20261021-171340-dd1998` deployed source commit `07efd42e6f1975d898910a69d12db74544dcd04b` to the existing Mumbai application, removing the inner rectangle from Dashboard Dataset Knowledge Chat while preserving its rounded focus indicator. Web rollout, both deployment readiness checks, protected configuration and unchanged backend images passed. Live HTTPS and candidate-identical JavaScript/CSS assets confirm the version and fix. Backend/database/configuration/data are unchanged; no Oracle queries or live model/write tests were run. The signed-in live view was not reverified because browser automation was unavailable and the in-app tab required sign-in. See [CHANGELOG.md](CHANGELOG.md) for release validation and the private receipt reference.
+
 ## Dashboard chat view
 
 Including indexed dataset knowledge opens a larger Dataset Knowledge Chat and collapses the dataset cards, Sources and guidance. The selected knowledge summary and **Add Dataset Knowledge** stay available. Use the source-panel icon to inspect or edit sources, and the expand/collapse icon to switch between the larger chat and full Dashboard. These controls have descriptive tooltips and accessible labels. Layout changes keep your draft, selected knowledge and conversation; opening chat sends no question automatically.
