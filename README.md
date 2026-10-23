@@ -4,7 +4,7 @@ Aegis turns documents into searchable knowledge and structured, reviewable resul
 
 **Handover branch: `ags_sprint1`. Current working version: `v26.1.10.3` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
-**Verified live frontend: v26.1.10.2, published 23 October 2026.** Release `release-20261023-190927-4b4f8c` deployed source commit `f8e54553e055652d67b0272902985696be013f3e` to the existing Mumbai application. It includes the navy sign-in background, removal of repeated sign-in branding and the supplied shield as the shared in-app Aegis Agent identity. The frontend rollout, both deployment readiness checks, all 15 protected-resource fingerprints and unchanged backend images passed. Live HTTPS assets match the tested ARM64 image byte-for-byte; desktop/mobile sign-in and favicon checks passed. Backend, database, settings, models and data are unchanged. Live authenticated, model-inference and upload/extraction acceptance checks were not run. See [CHANGELOG.md](CHANGELOG.md) for validation limits and the private receipt reference.
+**Verified live frontend: v26.1.10.3, published 23 October 2026.** Release `release-20261023-193621-1fe433` deployed source commit `1beaf8accf71eb19d444342320ea455830639e77` to the existing Mumbai application. The sign-in background is white-toned with subtle blue/cyan accents; the supplied banner and shared Agent shield remain unchanged. The frontend rollout, both deployment readiness checks, all 15 protected-resource fingerprints and unchanged backend images passed. Live HTTPS assets match the tested ARM64 image byte-for-byte; desktop/mobile sign-in and favicon checks passed. Backend, database, settings, models and data are unchanged. Live authenticated, model-inference and upload/extraction acceptance checks were not run. See [CHANGELOG.md](CHANGELOG.md) for validation limits and the private receipt reference.
 
 ## Platform branding
 
@@ -14,7 +14,7 @@ Version v26.1.10.1 removes the repeated logo/tagline above sign-in and uses a na
 
 Version v26.1.10.2 uses the supplied shield for the shared Aegis Agent identity throughout the signed-in interface, including navigation, chat, welcome screens, guidance and the floating shortcut. Prior Agent artwork is archived under `delete/ags_frontend/public/`. It was deployed with the sign-in refinement to the existing Mumbai application on 23 October 2026.
 
-Working version v26.1.10.3 restores the white-toned sign-in background with subtle blue and cyan accents to coordinate with the unchanged banner. This correction is a local preview; the verified live frontend remains v26.1.10.2.
+Version v26.1.10.3 restores the white-toned sign-in background with subtle blue and cyan accents to coordinate with the unchanged banner. This correction was deployed to the existing Mumbai application on 23 October 2026.
 
 The original platform branding is kept in one commit. To restore the preceding code and artwork while retaining history, run `git revert <branding-commit>` on a clean working tree (the commit titled `feat: add supplied Aegis platform branding (v26.1.10.0)`); check the resulting frontend and restart/rebuild it. `git revert <revert-commit>` reapplies the branding. Later edits to the same lines may require resolving a revert conflict. This change has no database or configuration migration.
 
