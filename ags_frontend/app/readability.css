@@ -35,7 +35,7 @@ body .sidebar :is(.sidebar-foot,.sidebar-foot p,.sidebar-foot small,.nav-footer,
 .job-stage-list{list-style:none;padding:0;display:grid;gap:8px;margin:10px 0}.job-stage-list li{display:flex;gap:10px;font-size:var(--text-body);align-items:center;color:#53647d}.job-stage-list small{margin-left:auto;text-transform:capitalize}.job-stage-list [data-status=completed],.job-stage-list [data-status=running]{color:var(--blue)}
 .agent-header{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px}.agent-header h1{margin:0}.agent-header p{margin:8px 0 0;color:var(--muted)}
 .template-import-control{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0}.template-attachment{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #c9d6fb;border-radius:8px;background:#f5f8ff;color:var(--blue);margin:8px 0}.template-attachment span{flex:1;overflow-wrap:anywhere}.template-feedback{border-left:3px solid var(--blue);background:#f5f8ff;padding:10px 14px;color:#273f69}
-body .login-shell{background:radial-gradient(ellipse at 22% 82%,#06102c66,transparent 62%),#000019;padding:32px 24px}
+body .login-shell{background:radial-gradient(ellipse at 20% 70%,#17386b14,transparent 60%),radial-gradient(ellipse at 45% 25%,#27cbd90a,transparent 55%),#f7f9ff;padding:32px 24px}
 .login-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(340px,1fr);gap:clamp(32px,5vw,80px);align-items:center;width:min(1080px,100%)}
 .login-story{padding:0}
 .login-illustration{width:100%;max-width:540px;margin:0 auto}.login-illustration>.login-artwork{display:block;width:100%;height:auto;max-height:calc(100svh - 64px);object-fit:contain;border-radius:18px;background:#000019;box-shadow:0 20px 60px #0b235d26}

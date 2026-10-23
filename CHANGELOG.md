@@ -2,6 +2,15 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.10.3 - 23 October 2026
+
+- Restore the white-toned sign-in page background with subtle blue and cyan accents coordinated with the supplied banner.
+- Preserve the banner file and its image styling, the removed duplicate sign-in branding, form controls and shared Agent shield.
+
+Local validation: all 236 frontend unit tests, both app/test TypeScript checks and the native Next.js production build passed. Production-preview browser checks at 1280px, 390px and 320px confirmed the light background, loaded unchanged banner, absent duplicate branding, mobile form-first layout and no horizontal overflow. Empty-field validation and password visibility controls passed. Root and seven initial JavaScript assets returned HTTP 200 and served v26.1.10.3. Supplied banner and shield bytes match the prior Git source exactly.
+
+Local preview only; the verified live frontend remains v26.1.10.2. Checks used a loopback fixture with no real authentication, model inference or data writes; backend regressions and OCI image builds were not repeated for this CSS correction. Private screenshots and results are under `ags_runtime/workflow-preview/light-sign-in-v26.1.10.3/`.
+
 ## v26.1.10.2 - 23 October 2026
 
 - Point the shared `AgentLogo` component to the supplied Aegis shield logo, covering navigation, chat welcome/replies, Dashboard knowledge chat, workflow guidance and the floating Agent shortcut.

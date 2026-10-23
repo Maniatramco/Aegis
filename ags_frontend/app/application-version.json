@@ -1,6 +1,15 @@
 {
-  "version": "26.1.10.2",
+  "version": "26.1.10.3",
   "releases": [
+    {
+      "version": "26.1.10.3",
+      "date": "2026-10-23",
+      "title": "Restore the light sign-in background",
+      "changes": [
+        "Keep the sign-in page white-toned with subtle blue and cyan background accents matching the supplied banner.",
+        "Preserve the banner image, removed duplicate sign-in branding and supplied shield throughout the application."
+      ]
+    },
     {
       "version": "26.1.10.2",
       "date": "2026-10-23",
