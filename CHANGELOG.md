@@ -2,6 +2,16 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.10.2 - 23 October 2026
+
+- Point the shared `AgentLogo` component to the supplied Aegis shield logo, covering navigation, chat welcome/replies, Dashboard knowledge chat, workflow guidance and the floating Agent shortcut.
+- Preserve existing dimensions, accessible/decorative labels and workflow status icons. No chat, inference, authorization, onboarding or processing behavior changes.
+- Archive the previous Agent WebP under `delete/ags_frontend/public/`, outside application builds and active test discovery.
+
+Local validation: all 236 frontend unit tests, both app/test TypeScript checks and the native Next.js production build passed. Read-only synthetic-workspace browser checks verified the supplied shield in the Agent welcome screen, navigation, floating shortcut, Dashboard knowledge-chat heading/empty state and expanded workflow guidance. Checks covered 1280px desktop and 390px mobile rendering, unchanged dimensions/accessible labels, no horizontal overflow and shortcut navigation. A production-built Agent page spot check passed; root and seven scripts returned HTTP 200, served v26.1.10.2 and contained no reference to the retired image. The retired public URL returns 404. The old artwork archive matches its previous Git bytes, and the supplied shield/banner files are unchanged. The complete staged patch passed a reverse-apply check.
+
+Local preview only; this Agent identity update has not been deployed. Checks used a loopback synthetic account/catalog. No question, model call, upload, extraction or real authentication was performed. Chat reply avatars use the same shared component but were not exercised through generated replies. Private evidence is under `output/playwright/agent-logo-v26.1.10.2/`.
+
 ## v26.1.10.1 - 23 October 2026
 
 - Remove the repeated logo, Aegis name and tagline from the sign-in card above Welcome back / Create your workspace.

@@ -1,6 +1,15 @@
 {
-  "version": "26.1.10.1",
+  "version": "26.1.10.2",
   "releases": [
+    {
+      "version": "26.1.10.2",
+      "date": "2026-10-23",
+      "title": "Use the supplied shield for Aegis Agent",
+      "changes": [
+        "Use the supplied Aegis shield wherever the shared Agent identity appears: navigation, welcome screens, chat replies, workflow guidance and the floating shortcut.",
+        "Archive the previous Agent artwork; preserve existing icon sizes, accessible labels, chat behavior and workflow status icons."
+      ]
+    },
     {
       "version": "26.1.10.1",
       "date": "2026-10-23",
