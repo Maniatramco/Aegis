@@ -30,20 +30,21 @@ async function preview(page:Page){
  return sent;
 }
 
-async function overview(page:Page){await page.getByRole('button',{name:'Restore Dashboard layout',exact:true}).click();}
-// Dataset toggles hide their rail when chat expands. Use click and assert the resulting scope/layout;
-// check()/uncheck() can time out when they re-resolve the now-hidden checkbox after its change succeeds.
+async function overview(page:Page){const restore=page.getByRole('button',{name:'Restore Dashboard layout',exact:true});if(await restore.isVisible())await restore.click();}
+// Dataset selection keeps the three-panel layout; explicit expansion retains the mounted chat.
 
-test('including knowledge expands chat without sending, and layout changes preserve drafts and conversation',async({page})=>{
+test('including knowledge keeps three panels without sending, and explicit expansion preserves drafts and conversation',async({page})=>{
  await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);
  const chat=page.getByRole('region',{name:'Dataset knowledge workspace chat',exact:true});
  const before=await chat.boundingBox();
  await page.getByRole('button',{name:'Add Dataset Knowledge',exact:true}).click();
  await page.getByRole('button',{name:'Include selected knowledge',exact:true}).click();
- await expect(page.getByRole('region',{name:'Onboarded datasets',exact:true})).toBeHidden();
- await expect(page.getByLabel('Dataset sources',{exact:true})).toBeHidden();
+ await expect(page.getByRole('region',{name:'Onboarded datasets',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Dataset sources',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Message Dataset Knowledge Chat',{exact:true})).toBeFocused();
- expect((await chat.boundingBox())!.height).toBeGreaterThan(before!.height+100);expect(sent).toEqual([]);
+ expect((await chat.boundingBox())!.height).toBeGreaterThan(500);expect(sent).toEqual([]);
+ await page.getByRole('button',{name:'Expand Dataset Knowledge Chat',exact:true}).click();
+ expect((await chat.boundingBox())!.width).toBeGreaterThan(before!.width+100);
  const composer=page.getByLabel('Message Dataset Knowledge Chat',{exact:true});await composer.fill('Preserve this draft');
  await page.getByRole('button',{name:'Show sources',exact:true}).click();await expect(page.getByLabel('Dataset sources',{exact:true})).toBeVisible();
  await expect(composer).toHaveValue('Preserve this draft');await page.getByRole('button',{name:'Hide sources',exact:true}).click();
@@ -111,7 +112,8 @@ test('About and footer show the same version and prior feature history; mobile c
  await expect(page.getByRole('heading',{level:1,name:'About',exact:true})).toBeVisible();await expect(page.getByLabel(`Current application version v${applicationVersion.version}`,{exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'v26.1.0.0',exact:true})).toBeVisible();await expect(page.getByText('Drag dataset cards into Sources to include their accessible indexed files, preserving other selected sources.',{exact:true})).toBeVisible();
  if(process.env.AEGIS_ABOUT_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_ABOUT_SCREENSHOT,fullPage:true});
- await page.setViewportSize({width:390,height:844});await page.goto('/#Dashboard');await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
+ await page.setViewportSize({width:390,height:844});await page.goto('/#Dashboard');await page.getByRole('button',{name:'Datasets (3)',exact:true}).click();await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
+ await page.getByRole('button',{name:'Datasets (3)',exact:true}).click();
  await page.getByRole('checkbox',{name:'Include dataset Finance in knowledge',exact:true}).click();await overview(page);
  await expect(page.getByRole('button',{name:'Add Dataset Knowledge',exact:true})).toBeInViewport();
  await page.getByRole('button',{name:'Add Dataset Knowledge',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();

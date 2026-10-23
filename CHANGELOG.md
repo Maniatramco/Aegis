@@ -2,6 +2,17 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.11.0 - 23 October 2026
+
+- Arrange authorized datasets in a vertical left panel, Dataset Knowledge Chat in the larger centre panel and Sources in the right panel.
+- Move the included-knowledge summary and picker action into the chat panel; keep side panels visible during dataset selection and reserve chat expansion for its explicit control.
+- Give each list its own scroll area and use panel view buttons on smaller screens while preserving the mounted conversation and draft.
+- Preserve access/scoped source selection, busy guards, dataset drag/drop, metadata navigation and the existing chat/retrieval and processing contracts.
+
+Local validation: all 237 frontend unit tests, both app/test TypeScript checks and the native Next.js production build passed. Production-preview browser checks used four synthetic authorized datasets and 13 sample indexed files at 1440×900, 1132×840, 920×668, 390×844 and 320×740. Desktop checks confirmed left datasets / larger centre chat / right Sources, independent source scrolling, explicit chat expansion/restoration, composer above the footer and no page or horizontal overflow at the tested desktop sizes. Mobile panel switching retained the mounted chat draft; source search, source exclusion while adding another dataset and picker cancellation passed. Selecting knowledge kept the side panels visible.
+
+Local preview only; verified live frontend remains v26.1.10.3. No real authentication, model request, database or processing write was used. Backend suites, the terminal Playwright suites, production ARM64 image and live authenticated acceptance were not run for this preview. Existing browser specifications were updated for explicit expansion; unit and interactive browser checks exercised the changed behavior. Source-selection helpers, server authorization/retrieval contracts and processing agents are unchanged. Private screenshots and evidence are under `ags_runtime/workflow-preview/dashboard-three-panel-v26.1.11.0/`.
+
 ## v26.1.10.3 - 23 October 2026
 
 - Restore the white-toned sign-in page background with subtle blue and cyan accents coordinated with the supplied banner.

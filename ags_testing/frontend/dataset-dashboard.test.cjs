@@ -12,7 +12,7 @@ const text=node=>!node?'':typeof node==='string'?node:Array.isArray(node)?node.m
 function mount(values={}){const state=[],selected=[],agents=[],destinations=[],reviews=[];let root;const props={username:'tester',datasets,documents,loading:false,search:'',onClearSearch(){},onBrowse(){},canManage:false,selectedId:'',onSelect:id=>{selected.push(id);props.selectedId=id;},onNavigate:path=>destinations.push(path),onReview:id=>reviews.push(id),renderAgent:(id,onBusy,sourceScope,onSourceChange,knowledgeScope)=>{agents.push({id,onBusy,sourceScope,onSourceChange,knowledgeScope});return null;},guide:null,...values};
  const render=()=>{hooks=state;cursor=0;agents.length=0;root=DatasetDashboard(props);};render();return {render,get nodes(){return all(root);},selected,agents,destinations,reviews};}
 function find(v,label){return v.nodes.find(n=>n.props?.['aria-label']===label);}
-function mountChat(values={}){const v=mount(values);v.nodes.find(n=>n.type==='button'&&text(n)==='Open chat').props.onClick();v.render();find(v,'Restore Dashboard layout').props.onClick();v.render();return v;}
+function mountChat(values={}){const v=mount(values);v.nodes.find(n=>n.type==='button'&&text(n)==='Open chat').props.onClick();v.render();return v;}
 test('source summaries keep dataset boundaries and do not count stale indexes as ready',()=>{
  assert.deepEqual(datasetDocuments(documents,'a').map(d=>d.id),['one','stale']);
  assert.deepEqual(datasetReadiness(datasets[0],datasetDocuments(documents,'a')),{ready:1,label:'1 need reindex',state:'pending'});
@@ -95,32 +95,32 @@ test('active chat disables multi-selection and ignores dropped datasets',()=>{
  find(v,'Dataset sources').props.onDrop({preventDefault(){},dataTransfer:{getData:()=>JSON.stringify(['b'])}});v.render();assert.equal(v.agents[0].id,'a');
 });
 
-test('including indexed knowledge expands chat, collapses surrounding panels and retains exact file scope',()=>{
+test('including indexed knowledge keeps datasets and sources beside chat with exact file scope',()=>{
  const v=mount({selectedId:'a'});v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.onClick();v.render();
  v.nodes.find(n=>n.type==='picker').props.onInclude({datasetIds:['a','b'],documentIds:['one','two','stale','foreign']});v.render();
- assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
- assert.equal(find(v,'Onboarded datasets').props.hidden,true);assert.equal(find(v,'Dataset sources').props.hidden,true);
- assert.equal(v.nodes.find(n=>n.type==='details').props.hidden,true);
+ assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],false);
+ assert.equal(find(v,'Authorized datasets').props.hidden,false);assert.equal(find(v,'Dataset sources').props.hidden,false);
  assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['one','two']});
- for(const label of ['Restore Dashboard layout','Show sources']){const control=find(v,label);assert.equal(text(control),'');assert.equal(control.props.title,label);}
+ assert.equal(find(v,'Expand Dataset Knowledge Chat').props.title,'Expand Dataset Knowledge Chat');
  assert.equal(v.nodes.find(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge').props.disabled,false);
 });
 
-test('restoring or expanding the layout and peeking at sources preserve the active chat scope',()=>{
+test('only explicit expansion hides panels; restoring and peeking preserve active chat scope',()=>{
  const v=mount();find(v,'Ask Aegis about Policies').props.onClick();v.render();
- assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
+ assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],false);
  const scope=v.agents[0].sourceScope,id=v.agents[0].id;
+ find(v,'Expand Dataset Knowledge Chat').props.onClick();v.render();
+ assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
+ assert.equal(find(v,'Authorized datasets').props.hidden,true);assert.equal(find(v,'Dataset sources').props.hidden,true);
  find(v,'Show sources').props.onClick();v.render();assert.equal(find(v,'Hide sources').props.title,'Hide sources');
- assert.equal(find(v,'Dataset sources').props.hidden,false);assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],true);
+ assert.equal(find(v,'Dataset sources').props.hidden,false);
  assert.equal(v.agents[0].sourceScope,scope);assert.equal(v.agents[0].id,id);
  v.agents[0].onBusy(true);v.render();find(v,'Restore Dashboard layout').props.onClick();v.render();
- assert.equal(find(v,'Onboarded datasets').props.hidden,false);assert.equal(find(v,'Dataset sources').props.hidden,false);
- assert.equal(v.agents[0].id,id);assert.equal(v.agents[0].sourceScope,scope);
- find(v,'Expand Dataset Knowledge Chat').props.onClick();v.render();assert.equal(find(v,'Dataset sources').props.hidden,true);
+ assert.equal(find(v,'Authorized datasets').props.hidden,false);assert.equal(find(v,'Dataset sources').props.hidden,false);
  assert.equal(v.agents[0].id,id);assert.equal(v.agents[0].sourceScope,scope);
 });
 
-test('initial, inactive, unindexed and emptied selections do not automatically take over the Dashboard',()=>{
+test('initial, inactive, unindexed and emptied selections keep the three-panel layout',()=>{
  const initial=mount();assert.equal(find(initial,'Dataset dashboard').props['data-chat-focused'],false);assert.equal(initial.agents.length,0);
  for(const values of [{documents:[]},{datasets:[{id:'a',name:'Invoices',active:false}],documents}]){
   const v=mount(values);find(v,'Ask Aegis about Invoices').props.onClick();v.render();assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],false);
@@ -128,4 +128,13 @@ test('initial, inactive, unindexed and emptied selections do not automatically t
  const v=mount();find(v,'Ask Aegis about Policies').props.onClick();v.render();
  find(v,'Include dataset Policies in knowledge').props.onChange();v.render();
  assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],false);assert.equal(v.agents.length,0);
+});
+
+test('mobile panel switching keeps the existing chat and bounded sources mounted',()=>{
+ const v=mountChat({selectedId:'a'});const before=v.agents[0];
+ for(const name of ['Sources (2)','Datasets (2)','Knowledge Chat']){
+  v.nodes.find(n=>n.type==='button'&&text(n)===name).props.onClick();v.render();
+  assert.equal(v.agents[0].id,before.id);assert.deepEqual(v.agents[0].sourceScope,before.sourceScope);
+ }
+ assert.equal(find(v,'Dataset dashboard').props['data-mobile-panel'],'chat');
 });
