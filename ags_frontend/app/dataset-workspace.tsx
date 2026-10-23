@@ -107,7 +107,7 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
           const options=candidates(f.cap);const selected=options.find(m=>m.id===f.value);
           const purpose=f.cap==='embedding'?'Indexing and search':f.cap==='chat'?'Dataset questions':'Structured extraction';
           const provider=selected?.connection?.protocol||selected?.provider;
-          const providerLabel:Record<string,string>={'ollama':'Ollama','openai-compatible':'OpenAI-compatible','azure-openai':'Azure OpenAI','bedrock':'Amazon Bedrock','vertex':'Google Vertex AI','oci':'OCI','openai':'OpenAI','sentence_transformers':'Sentence Transformers'};
+          const providerLabel:Record<string,string>={'ollama':'Ollama','openai-compatible':'OpenAI-compatible','azure-openai':'Azure OpenAI','anthropic':'Anthropic Claude','bedrock':'Amazon Bedrock','vertex':'Google Vertex AI','oci':'OCI','openai':'OpenAI','sentence_transformers':'Sentence Transformers'};
           return <tr key={f.cap}>
             <th scope="row"><label htmlFor={`mapping-${f.cap}`}>{f.cap==='embedding'?'Embedding':f.cap==='chat'?'Chat':'Extraction'}</label><small>{purpose}</small></th>
             <td><select id={`mapping-${f.cap}`} aria-label={f.label} value={f.value} onChange={e=>changeDefault(f.key,e.target.value)} disabled={busy} required title={selected?`${modelLabel(selected)} · ${selected.provider_model}`:`Choose ${f.label.toLowerCase()}`}><option value="">Select {f.cap==='extraction'?'an extraction':f.cap==='embedding'?'an embedding':'a chat'} model</option>{options.map(m=><option key={m.id} value={m.id}>{modelLabel(m)} · {m.provider_model}</option>)}</select>{!options.length&&<small className="field-error">Register an enabled {f.cap} model first.</small>}</td>

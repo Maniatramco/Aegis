@@ -1,7 +1,7 @@
-type Location='local'|'oci'|'gcp'|'aws'|'azure'|'openai'|'unknown';
+type Location='local'|'oci'|'gcp'|'aws'|'azure'|'openai'|'anthropic'|'unknown';
 type Environment=Record<string,string|undefined>;
-const location=(value:string|undefined):Location=>['local','oci','gcp','aws','azure','openai'].includes(value||'')?value as Location:'unknown';
-const LOCATION_LABELS:Record<Location,string>={local:'Local',oci:'OCI',gcp:'GCP',aws:'AWS',azure:'Azure',openai:'OpenAI',unknown:'Unknown'};
+const location=(value:string|undefined):Location=>['local','oci','gcp','aws','azure','openai','anthropic'].includes(value||'')?value as Location:'unknown';
+const LOCATION_LABELS:Record<Location,string>={local:'Local',oci:'OCI',gcp:'GCP',aws:'AWS',azure:'Azure',openai:'OpenAI',anthropic:'Anthropic',unknown:'Unknown'};
 export const connectionLocation=(provider:string)=>Object.hasOwn(LOCATION_LABELS,provider)?LOCATION_LABELS[provider as Location]:'Unknown';
 
 // Deployment metadata describes configured hosting, without probing providers.
@@ -40,6 +40,7 @@ export function modelConnectionSummary(datasets:ModelDataset[],datasetId?:string
   if(protocol==='vertex'||protocol==='gemini'||host==='generativelanguage.googleapis.com'||host==='aiplatform.googleapis.com'||host.endsWith('-aiplatform.googleapis.com')){provider='gcp';label=protocol==='vertex'||host.includes('aiplatform')?'Google Vertex AI':'Google Gemini';}
   else if(protocol==='ollama'){provider='local';label='Ollama';}
   else if(protocol==='oci'){provider='oci';label='OCI Generative AI';}
+  else if(protocol==='anthropic'){provider='anthropic';label='Anthropic Claude';}
   else if(protocol==='bedrock'){provider='aws';label='AWS Bedrock';}
   else if(protocol==='azure-openai'){provider='azure';label='Azure OpenAI';}
   else if(protocol==='openai'||host==='api.openai.com'){provider='openai';label='OpenAI';}
@@ -48,7 +49,7 @@ export function modelConnectionSummary(datasets:ModelDataset[],datasetId?:string
   if(endpoint)endpoints.add(endpoint);
   if(model.connection?.region)regions.add(model.connection.region);
  }
- const locations=(['local','gcp','oci','aws','azure','openai','unknown'] as Location[]).filter(host=>hosts.has(host));
+ const locations=(['local','gcp','oci','aws','azure','openai','anthropic','unknown'] as Location[]).filter(host=>hosts.has(host));
  return {
   provider:locations.length===1?locations[0]:locations.length?'mixed':'unknown',locations,
   name:labels.size?[...labels].join(' / '):'No enabled mapped models reported',

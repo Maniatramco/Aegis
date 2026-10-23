@@ -4,6 +4,7 @@ from .provider_registry import AUTH_MODES
 PROVIDERS = (
     ('ollama', 'Local · Ollama', 'ollama', 'http://127.0.0.1:11435'),
     ('openai', 'OpenAI', 'openai-compatible', 'https://api.openai.com/v1'),
+    ('anthropic', 'Anthropic · Claude (direct)', 'anthropic', 'https://api.anthropic.com/v1'),
     ('gemini', 'Google · Gemini API', 'openai-compatible', 'https://generativelanguage.googleapis.com/v1beta/openai'),
     ('azure-openai', 'Azure · OpenAI v1', 'azure-openai', ''),
     ('bedrock', 'AWS · Bedrock', 'bedrock', 'https://bedrock-runtime.us-east-1.amazonaws.com'),
@@ -16,5 +17,5 @@ PROVIDERS = (
 def choices():
     return [{'id': id, 'name': name, 'protocol': protocol, 'endpoint': endpoint,
              'region': {'bedrock': 'us-east-1', 'vertex': 'us-central1', 'oci': 'us-chicago-1'}.get(protocol, ''),
-             'auth_modes': list(AUTH_MODES[protocol]), 'categories': ['chat', 'extraction', 'embedding']}
+             'auth_modes': list(AUTH_MODES[protocol]), 'categories': ['chat'] if protocol == 'anthropic' else ['chat', 'extraction', 'embedding']}
             for id, name, protocol, endpoint in PROVIDERS]

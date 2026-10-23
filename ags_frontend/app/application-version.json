@@ -1,6 +1,16 @@
 {
-  "version": "26.1.11.0",
+  "version": "26.1.12.0",
   "releases": [
+    {
+      "version": "26.1.12.0",
+      "date": "2026-10-23",
+      "title": "Direct Claude for Agent chat",
+      "changes": [
+        "Register a direct Anthropic Claude Chat model using its API key, exact model ID and optional workspace ID.",
+        "Test native function calling before saving, map the model to datasets and select it for Agent or Dataset Knowledge Chat.",
+        "Preserve scoped knowledge retrieval, reranking, citation checks and existing Embedding, Extraction and processing models."
+      ]
+    },
     {
       "version": "26.1.11.0",
       "date": "2026-10-23",
@@ -35,7 +45,7 @@
       "title": "A blended sign-in background",
       "changes": [
         "Remove the repeated Aegis logo and tagline above the sign-in heading.",
-        "Match the sign-in page background to the supplied banner’s navy tones without changing, cropping, fading or blending the banner image."
+        "Match the sign-in page background to the supplied bannerâ€™s navy tones without changing, cropping, fading or blending the banner image."
       ]
     },
     {

@@ -11,11 +11,11 @@ from test_dataset_models import system, dataset, mapping, upload, conversation, 
 
 def body(category='chat', protocol='azure-openai', **values):
     endpoint = {
-        'ollama': 'http://127.0.0.1:11435', 'azure-openai': 'https://example.openai.azure.com/openai/v1',
+        'anthropic': 'https://api.anthropic.com/v1', 'ollama': 'http://127.0.0.1:11435', 'azure-openai': 'https://example.openai.azure.com/openai/v1',
         'openai-compatible': 'https://api.openai.com/v1', 'bedrock': 'https://bedrock-runtime.us-east-1.amazonaws.com',
         'vertex': 'https://us-central1-aiplatform.googleapis.com', 'oci': 'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com',
     }[protocol]
-    auth = {'ollama': 'none', 'azure-openai': 'api_key', 'openai-compatible': 'api_key', 'bedrock': 'aws_keys', 'vertex': 'bearer_token', 'oci': 'config_profile'}[protocol]
+    auth = {'anthropic': 'api_key', 'ollama': 'none', 'azure-openai': 'api_key', 'openai-compatible': 'api_key', 'bedrock': 'aws_keys', 'vertex': 'bearer_token', 'oci': 'config_profile'}[protocol]
     secrets = {'api_key': {'api_key': 'synthetic-secret'}, 'aws_keys': {'access_key_id': 'synthetic-id', 'secret_access_key': 'synthetic-secret'}, 'bearer_token': {'token': 'synthetic-secret'}}.get(auth, {})
     return {'name': category+' registered', 'category': category, 'provider_model': 'deployed-model', 'timeout': 45, 'enabled': True,
         'connection': {'protocol': protocol, 'endpoint': endpoint, 'auth_mode': auth, 'region': 'us-chicago-1' if protocol == 'oci' else 'us-central1' if protocol == 'vertex' else 'us-east-1', 'project_id': 'test-project', 'compartment_id': 'ocid1.compartment.oc1..synthetic', 'embedding_format': 'titan', 'chat_format': 'generic'},

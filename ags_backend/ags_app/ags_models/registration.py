@@ -27,11 +27,12 @@ def probe_agent(cfg):
 
 class ConnectionInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    protocol: Literal['ollama', 'openai-compatible', 'azure-openai', 'bedrock', 'vertex', 'oci']
+    protocol: Literal['ollama', 'openai-compatible', 'azure-openai', 'anthropic', 'bedrock', 'vertex', 'oci']
     endpoint: str = Field(min_length=1, max_length=500)
     auth_mode: str = Field(max_length=40)
     region: str = Field(default='', max_length=64)
     project_id: str = Field(default='', max_length=128)
+    workspace_id: str = Field(default='', max_length=128)
     compartment_id: str = Field(default='', max_length=200)
     profile: str = Field(default='DEFAULT', max_length=80)
     embedding_format: str = Field(default='titan', max_length=30)

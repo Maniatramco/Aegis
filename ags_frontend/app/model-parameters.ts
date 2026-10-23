@@ -9,6 +9,7 @@ export function supportedModelParameters(protocol: string, category: string, con
     ollama: ["temperature", "top_p", "top_k", "min_p", "repeat_penalty", "repeat_last_n", "seed", "stop", "keep_alive"],
     "openai-compatible": ["temperature", "top_p", "frequency_penalty", "presence_penalty", "seed", "stop", "reasoning_effort"],
     "azure-openai": ["temperature", "top_p", "frequency_penalty", "presence_penalty", "seed", "stop", "reasoning_effort"],
+    anthropic: [],
     bedrock: ["temperature", "topP", "stopSequences"],
     vertex: ["temperature", "topP", "topK", "stopSequences", "seed", "presencePenalty", "frequencyPenalty"],
     oci: ["temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "seed", connection.chat_format === "cohere" ? "stop_sequences" : "stop"],

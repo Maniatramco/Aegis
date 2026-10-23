@@ -24,6 +24,7 @@ def test_legacy_imports_resolve_to_the_same_module(old,new):
 @pytest.mark.parametrize('protocol,endpoint,suffix',[
     ('openai-compatible','https://api.openai.com/v1','ags_openai.adapter'),
     ('openai-compatible','https://generativelanguage.googleapis.com/v1beta/openai','ags_gcp.gemini'),
+    ('anthropic','https://api.anthropic.com/v1','ags_anthropic.native'),
     ('azure-openai','https://example.openai.azure.com/openai/v1','ags_azure.adapter'),
     ('vertex','https://aiplatform.googleapis.com','ags_gcp.vertex'),
     ('bedrock','https://bedrock-runtime.us-east-1.amazonaws.com','ags_aws.bedrock'),

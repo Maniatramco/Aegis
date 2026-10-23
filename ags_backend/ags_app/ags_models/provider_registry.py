@@ -6,6 +6,7 @@ REGISTRY = {
     'ollama': ('ags_local.native', ('none',)),
     'openai-compatible': ('ags_openai.adapter', ('api_key', 'bearer_token')),
     'azure-openai': ('ags_azure.adapter', ('api_key', 'bearer_token')),
+    'anthropic': ('ags_anthropic.native', ('api_key',)),
     'bedrock': ('ags_aws.bedrock', ('aws_keys', 'server_identity')),
     'vertex': ('ags_gcp.vertex', ('service_account', 'server_identity', 'bearer_token')),
     'oci': ('ags_oci.native', ('oci_credentials', 'server_identity', 'config_profile')),

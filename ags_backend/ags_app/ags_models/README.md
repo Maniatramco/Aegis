@@ -1,15 +1,16 @@
 # Aegis model integrations
 
 `catalog.py` supplies the authenticated frontend Provider choices: Ollama,
-OpenAI, Gemini API, Azure OpenAI v1, Bedrock, Vertex AI, OCI and another
+OpenAI, direct Anthropic Claude, Gemini API, Azure OpenAI v1, Bedrock, Vertex AI, OCI and another
 OpenAI-compatible API. The form initializes endpoint/authentication defaults
 and requires a successful synthetic test before saving. Chat tests validate
 function calling; extraction tests validate JSON Schema; embedding tests
 validate vectors. Save the model, then enable it for the dataset in Model Mapping.
 
 Agent tool calling supports all these protocol families. Native serializers
-live in the provider `agent.py` files and execute through `agent_connection.py`.
-Vertex signatures and Bedrock assistant state survive private graph checkpoints
+live in the provider `agent.py` files (Claude uses `ags_anthropic/native.py`)
+and execute through `agent_connection.py`.
+Claude/Vertex signatures and Bedrock assistant state survive private graph checkpoints
 without appearing in the final answer. Native completed responses use the
 existing event channel; incremental token streaming remains specific to the
 Ollama and OpenAI-compatible transports.
@@ -21,12 +22,13 @@ API needs no source changes. A different API still requires an adapter.
 
 All provider contracts have HTTP/SDK mock coverage. Gemini has live free-tier
 verification. Other accounts need their own successful registration tests;
-no Azure, AWS, Vertex or OCI model credentials are bundled with Aegis.
+no Anthropic, Azure, AWS, Vertex or OCI model credentials are bundled with Aegis.
 
 Protocol references: [Bedrock Converse](https://docs.aws.amazon.com/bedrock/latest/userguide/tool-use-client-side.html),
 [Vertex function calling](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/function-calling),
 [Vertex signatures](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures),
-[OCI SDK](https://docs.oracle.com/en-us/iaas/tools/python/latest/api/generative_ai_inference.html).
+[OCI SDK](https://docs.oracle.com/en-us/iaas/tools/python/latest/api/generative_ai_inference.html),
+[Claude Messages](https://platform.claude.com/docs/en/api/messages/create).
 
 `registration.py` manages model registration and encrypted, versioned
 credentials. `registry.py` manages registration identity and consolidation.
@@ -44,6 +46,7 @@ different provider after a failure. Providers are:
 | `providers/ags_gcp` | Gemini Developer API compatibility and native Vertex |
 | `providers/ags_azure` | Azure OpenAI v1, sharing the compatible wire contract |
 | `providers/ags_openai` | Shared OpenAI-compatible generation and embeddings |
+| `providers/ags_anthropic` | Direct Claude Messages and native Chat tool calls; no embeddings or extraction |
 | `providers/ags_aws` | Native Bedrock client, generation and embeddings |
 | `providers/ags_oci` | Native OCI and existing Enterprise AI adapters |
 
@@ -51,6 +54,32 @@ Optional cloud SDKs load only when the corresponding client is used. Local
 Ollama execution continues through `ags_local/ollama.py`; it is not silently
 routed through the cloud facade. Legacy root imports alias the canonical
 modules, preserving older callers and saved protocol/configuration formats.
+
+## Direct Claude Chat
+
+Choose `anthropic` for direct Claude API keys, not Bedrock, Vertex or the
+OpenAI compatibility protocol. Only Chat is exposed. The official endpoint
+`https://api.anthropic.com/v1` is recognized without an environment allowlist;
+custom hosts are rejected for this protocol, including otherwise approved gateways.
+The key comes exclusively from the pinned encrypted registration profile.
+Optional `workspace_id` supplies `anthropic-workspace-id`; workspace-scoped
+keys can leave it blank. No global Anthropic environment credentials are read.
+
+Requests use `x-api-key`, explicit API version `2026-10-21`, native tool schemas,
+assistant content blocks and user-role tool results. The adapter uses `auto`
+tool choice because forced modes are model-specific; Aegis still rejects missing
+required calls, unknown tools and invalid tool schemas. No sampling overrides
+are exposed in this API version. Refused, truncated, malformed and inconsistent
+responses fail closed without exposing the provider body. Reported input usage
+includes cache creation/read tokens when present. Thinking signatures are
+retained privately for subsequent tool turns and never become answer text.
+
+Registration, Agent routing/grounded generation and Dashboard routing/general
+and grounded generation have isolated mock HTTP coverage. A real key/model
+must pass Test Connection and an authorized live chat check before its account
+readiness is established. Existing Embedding/Extraction mappings and processing
+agents keep their contracts. Publish backend and frontend together when a live
+release is requested; no database schema change is needed.
 
 ## Gemini OCR and cloud-only datasets
 

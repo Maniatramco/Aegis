@@ -6,6 +6,10 @@ function load(name,overrides={}){
  compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{esModuleInterop:true,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);return compiled.exports;
 }
 const {runtimeConnections,modelConnectionSummary,connectionLocation}=load('runtime-connections.ts');
+test('direct Claude hosting is reported from its authorized mapped connection',()=>{
+ const result=modelConnectionSummary([{models:[{id:'claude',provider_model:'provided-model-id',connection:{protocol:'anthropic',endpoint:'https://api.anthropic.com/v1'}}]}]);
+ assert.equal(result.provider,'anthropic');assert.equal(result.name,'Anthropic Claude');assert.equal(connectionLocation(result.provider),'Anthropic');
+});
 const services=runtimeConnections('http://private-user:private-password@api:8000/?token=private-token',{AEGIS_DEPLOYMENT_TARGET:'oci',AEGIS_API_LOCATION:'oci',AEGIS_WORKER_LOCATION:'oci',AEGIS_MODEL_LOCATION:'local',SECRET_KEY:'never-expose'});
 const connections={files:{provider:'oci',name:'mk-aegis',region:'ap-mumbai-1'},database:{provider:'oci',name:'agsora'},knowledge:{provider:'oci',name:'Oracle vectors'},services};
 function renderFooter({open=false,data=connections,unavailable=false,datasets,datasetId}={}){

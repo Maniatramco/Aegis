@@ -2,6 +2,16 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.12.0 - 23 October 2026
+
+Local candidate: direct Anthropic Claude Chat registration, using the official Messages API, an encrypted versioned API key, the supplied model ID and optional workspace ID. Test Connection validates an actual schema-valid Agent tool call before the UI enables saving. Map the saved Chat model and select it in Agent or Dashboard Dataset Knowledge Chat; new runs use the selected registration without global activation or reindexing. Existing Embedding and Extraction mappings stay separate.
+
+Native tool definitions/results, private thinking signatures, completed text events, provider token usage, context budgets and sanitized failure handling are supported. Endpoint validation restricts this protocol to `https://api.anthropic.com/v1`. API version `2026-10-21` is explicit; no removed sampling overrides or model-specific forced tool choice is sent. Required tool calls remain enforced by Aegis. Knowledge scope, hybrid retrieval, reranking, citations and processing-agent contracts are preserved.
+
+Validation: 186 focused backend tests passed (181 integration/regression checks plus five final Claude failure guards), including native tool/result round trips, encrypted profile routing and rotation, Agent and Dashboard grounded answers, Dashboard general-chat disclosure, endpoint/workspace validation, required tool probes, budget/timeout guards and sanitized provider errors. HTTP model responses are mocked; grounded integration tests invoke hybrid retrieval with a deterministic reranker test double, not a real model-quality evaluation. All 239 frontend unit tests, application/test TypeScript checks and the production Next.js build passed. Interactive browser checks at desktop and 390px mobile confirmed the Claude option, Chat-only category, optional workspace, masked empty key field, disabled save before testing and no horizontal field overflow. The local visual preview uses a synthetic GET-only catalog and cannot save credentials or invoke a provider; actual backend registration and chat routes are covered by the isolated integration tests. Private preview evidence is under `ags_runtime/workflow-preview/claude-direct-v26.1.12.0/`.
+
+A broader repository run against an earlier working snapshot was stopped; no full-suite pass is claimed. Real-key acceptance, provider permissions/quota, real reranker/model quality and deployment are pending. The verified live frontend remains v26.1.11.0. No live registrations, credentials, workloads or database objects have been changed for this candidate.
+
 ## v26.1.11.0 - 23 October 2026
 
 - Arrange authorized datasets in a vertical left panel, Dataset Knowledge Chat in the larger centre panel and Sources in the right panel.

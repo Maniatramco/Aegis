@@ -41,6 +41,13 @@ def record(response, protocol, call=None):
         usage = usage if isinstance(usage, dict) else {}
         input_tokens = count(usage.get('inputTokens'))
         output_tokens = count(usage.get('outputTokens'))
+    elif protocol == 'anthropic':
+        usage = data.get('usage') or {}
+        usage = usage if isinstance(usage, dict) else {}
+        inputs = [count(usage.get(key, 0)) for key in ('cache_creation_input_tokens', 'cache_read_input_tokens')]
+        inputs.append(count(usage.get('input_tokens')))
+        input_tokens = sum(inputs) if all(value is not None for value in inputs) else None
+        output_tokens = count(usage.get('output_tokens'))
     elif protocol == 'vertex':
         usage = data.get('usageMetadata') or {}
         usage = usage if isinstance(usage, dict) else {}

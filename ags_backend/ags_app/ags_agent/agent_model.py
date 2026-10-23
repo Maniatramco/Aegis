@@ -350,7 +350,7 @@ def complete(messages, tools, on_token=None):
     cfg = core.settings(); provider = cfg['model_provider']
     connection = cfg.get('model_connection') or {}
     protocol = connection.get('protocol') if provider == 'registered' else provider
-    if provider == 'registered' and protocol in ('bedrock', 'vertex', 'oci'):
+    if provider == 'registered' and protocol in ('bedrock', 'vertex', 'oci', 'anthropic'):
         from ..ags_models.agent_connection import complete as native_complete
         from ..ags_models.validation import ConnectionError
         try:

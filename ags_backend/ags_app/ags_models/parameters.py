@@ -19,6 +19,7 @@ def supported_parameters(protocol, category, connection=None):
         'ollama': ('temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty', 'repeat_last_n', 'seed', 'stop', 'keep_alive'),
         'openai-compatible': ('temperature', 'top_p', 'frequency_penalty', 'presence_penalty', 'seed', 'stop', 'reasoning_effort'),
         'azure-openai': ('temperature', 'top_p', 'frequency_penalty', 'presence_penalty', 'seed', 'stop', 'reasoning_effort'),
+        'anthropic': (),  # Messages API 2026-10-21 removes sampling overrides.
         'bedrock': ('temperature', 'topP', 'stopSequences'),
         'vertex': ('temperature', 'topP', 'topK', 'stopSequences', 'seed', 'presencePenalty', 'frequencyPenalty'),
         'oci': ('temperature', 'top_p', 'top_k', 'frequency_penalty', 'presence_penalty', 'seed', 'stop') if (connection or {}).get('chat_format') != 'cohere' else ('temperature', 'top_p', 'top_k', 'frequency_penalty', 'presence_penalty', 'seed', 'stop_sequences'),

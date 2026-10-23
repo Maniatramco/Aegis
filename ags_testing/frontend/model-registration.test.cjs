@@ -1,16 +1,16 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const Module=require('node:module');const ts=require('typescript');
-const catalog=[['ollama','Local · Ollama','ollama','http://127.0.0.1:11435','none'],['openai','OpenAI','openai-compatible','https://api.openai.com/v1','api_key'],['gemini','Google · Gemini API','openai-compatible','https://generativelanguage.googleapis.com/v1beta/openai','api_key'],['azure-openai','Azure · OpenAI v1','azure-openai','','api_key'],['bedrock','AWS · Bedrock','bedrock','https://bedrock-runtime.us-east-1.amazonaws.com','aws_keys'],['vertex','Google Cloud · Vertex AI','vertex','https://us-central1-aiplatform.googleapis.com','service_account'],['oci','Oracle Cloud · Generative AI','oci','https://inference.generativeai.us-chicago-1.oci.oraclecloud.com','oci_credentials'],['openai-compatible','Other · OpenAI-compatible API','openai-compatible','','api_key']].map(([id,name,protocol,endpoint,auth])=>({id,name,protocol,endpoint,region:({bedrock:'us-east-1',vertex:'us-central1',oci:'us-chicago-1'})[id]||'',auth_modes:[auth],categories:['chat','extraction','embedding']}));
+const catalog=[['ollama','Local · Ollama','ollama','http://127.0.0.1:11435','none'],['anthropic','Anthropic · Claude (direct)','anthropic','https://api.anthropic.com/v1','api_key'],['openai','OpenAI','openai-compatible','https://api.openai.com/v1','api_key'],['gemini','Google · Gemini API','openai-compatible','https://generativelanguage.googleapis.com/v1beta/openai','api_key'],['azure-openai','Azure · OpenAI v1','azure-openai','','api_key'],['bedrock','AWS · Bedrock','bedrock','https://bedrock-runtime.us-east-1.amazonaws.com','aws_keys'],['vertex','Google Cloud · Vertex AI','vertex','https://us-central1-aiplatform.googleapis.com','service_account'],['oci','Oracle Cloud · Generative AI','oci','https://inference.generativeai.us-chicago-1.oci.oraclecloud.com','oci_credentials'],['openai-compatible','Other · OpenAI-compatible API','openai-compatible','','api_key']].map(([id,name,protocol,endpoint,auth])=>({id,name,protocol,endpoint,region:({bedrock:'us-east-1',vertex:'us-central1',oci:'us-chicago-1'})[id]||'',auth_modes:[auth],categories:id==='anthropic'?['chat']:['chat','extraction','embedding']}));
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 async function screen({reject=false,badProbe=false,defaults={}}={}){
  let cursor=0,root;const hooks=[],effects=[],calls=[];
  const react={useState(initial){const i=cursor++;if(!(i in hooks))hooks[i]=typeof initial==='function'?initial():initial;return[hooks[i],v=>hooks[i]=typeof v==='function'?v(hooks[i]):v];},useEffect(fn){effects.push(fn);}};
- const compile=file=>{const m=new Module(file,module);m.filename=file;m.paths=module.paths;const base=m.require.bind(m);m.require=id=>id==='react'?react:id==='lucide-react'?new Proxy({},{get:()=>()=>null}):id==='./action-button'?{ActionButton:()=>null}:id.endsWith('.css')?{}:id==='./model-parameters'?compile(path.resolve(path.dirname(file),'model-parameters.ts')).exports:base(id);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,file);return m;};
+ const compile=file=>{const m=new Module(file,module);m.filename=file;m.paths=module.paths;const base=m.require.bind(m);m.require=id=>id==='react'?react:id==='lucide-react'?new Proxy({},{get:()=>()=>null}):id==='./action-button'?compile(path.resolve(path.dirname(file),'action-button.tsx')).exports:id.endsWith('.css')?{}:id==='./model-parameters'?compile(path.resolve(path.dirname(file),'model-parameters.ts')).exports:base(id);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,file);return m;};
  const mod=compile(path.resolve(__dirname,'../../ags_frontend/app/model-registration.tsx'));
- const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)];
+ const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(typeof n.type==='function'?n.type(n.props):n.props?.children)];
  const props={models:[],settings:{model_defaults:{timeout:60,context_limit:32768,embedding_context_limit:8192,max_output_tokens:4096,headroom_tokens:512,context_max:2097152,output_max:131072,timeout_min:5,timeout_max:1800,...defaults}},busy:false,onSaved:()=>{},onMapping:()=>{},run:async fn=>{try{await fn();}catch{}},api:async(...args)=>{calls.push(args);if(args[0]==='/model-providers'){if(reject)throw Error('offline');return catalog;}if(args[0]==='/model-registrations/test'){if(badProbe)throw Error('not tool capable');return {ok:true,elapsed_ms:10,agent_tool_call_validated:true};}return {id:'saved'};}};
  const render=()=>{cursor=0;root=mod.exports.ModelRegistration(props);};render();effects[0]();await flush();render();
  const field=id=>nodes(root).find(n=>n.props?.id===id);
- const button=text=>nodes(root).find(n=>n.props?.label===text||(n.type==='button'&&JSON.stringify(n.props.children).includes(text)));
+ const button=text=>nodes(root).find(n=>n.props?.['aria-label']===text||(n.type==='button'&&JSON.stringify(n.props.children).includes(text)));
  button('Register model').props.onClick();render();
  return {render,calls,field,button,all:()=>nodes(root),choose:id=>{field('registration-protocol').props.onChange({target:{value:id}});render();},submit:()=>nodes(root).find(n=>n.type==='form').props.onSubmit({preventDefault(){}})};
 }
@@ -38,4 +38,24 @@ test('model form defaults follow backend configuration while category switches u
  assert.equal(s.field('registration-output-limit').props.value,8192);
  s.field('registration-category').props.onChange({target:{value:'embedding'}});s.render();
  assert.equal(s.field('registration-context-limit').props.value,16384);
+});
+
+test('direct Claude resets an embedding category to Chat, masks its key and sends the optional workspace with a fresh probe',async()=>{
+ const s=await screen();
+ s.field('registration-category').props.onChange({target:{value:'embedding'}});s.render();s.choose('anthropic');
+ assert.equal(s.field('registration-category').props.value,'chat');
+ assert.deepEqual(s.field('registration-category').props.children.map(n=>n.props.value),['chat']);
+ assert.equal(s.field('registration-context-limit').props.value,32768);
+ assert.equal(s.field('registration-endpoint').props.value,'https://api.anthropic.com/v1');
+ assert.equal(s.field('credential-api_key').props.type,'password');
+ assert.equal(s.field('registration-region'),undefined);
+ s.field('registration-workspace').props.onChange({target:{value:'wrkspc_synthetic'}});s.render();
+ s.field('credential-api_key').props.onChange({target:{value:'synthetic-key'}});s.render();
+ s.button('Test Connection').props.onClick({currentTarget:{form:{reportValidity:()=>true}}});await flush();s.render();
+ const sent=s.calls.find(c=>c[0]==='/model-registrations/test')[2];
+ assert.equal(sent.connection.protocol,'anthropic');assert.equal(sent.connection.workspace_id,'wrkspc_synthetic');
+ assert.deepEqual(sent.credentials,{api_key:'synthetic-key'});assert.equal(sent.category,'chat');assert.deepEqual(sent.extra_parameters,{});
+ assert.equal(s.button('Save Model').props.disabled,false);
+ s.field('registration-workspace').props.onChange({target:{value:'wrkspc_changed'}});s.render();
+ assert.equal(s.button('Save Model').props.disabled,true);
 });

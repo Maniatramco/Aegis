@@ -92,7 +92,7 @@ def test_native_agent_tool_roundtrip_usage_and_registered_credentials(system, mo
 def test_provider_catalog_and_gemini_need_no_custom_hostname_allowlist(system, monkeypatch):
     monkeypatch.delenv('AEGIS_MODEL_ENDPOINT_HOSTS', raising=False)
     choices = system.api.get('/api/model-providers').json()
-    assert {p['id'] for p in choices} == {'ollama','openai','gemini','azure-openai','bedrock','vertex','oci','openai-compatible'}
+    assert {p['id'] for p in choices} == {'anthropic','ollama','openai','gemini','azure-openai','bedrock','vertex','oci','openai-compatible'}
     assert all(p['protocol'] in provider_registry.REGISTRY for p in choices)
     gemini = next(p for p in choices if p['id'] == 'gemini')
     assert model_connections.validate_endpoint(gemini['endpoint'], gemini['protocol']) == gemini['endpoint']
@@ -123,7 +123,7 @@ def test_temporary_probe_credentials_are_reset_even_after_failure():
     assert credentials() == {}
 
 
-@pytest.mark.parametrize('protocol', ['bedrock','vertex','oci'])
+@pytest.mark.parametrize('protocol', ['bedrock','vertex','oci','anthropic'])
 @pytest.mark.parametrize('failure', ['refused','malformed','not_tool_capable','budget','timeout'])
 def test_native_agent_failures_are_bounded_and_never_expose_provider_secrets(system, monkeypatch, protocol, failure):
     value = body('chat',protocol,context_limit=32768,max_output_tokens=256)

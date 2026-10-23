@@ -58,6 +58,10 @@ def validate_endpoint(endpoint, protocol):
         pass
     else:
         raise ConnectionError('Use the service DNS hostname, not an IP address.')
+    if protocol == 'anthropic':
+        if host != 'api.anthropic.com' or parsed.path.rstrip('/') != '/v1':
+            raise ConnectionError('Direct Claude requires https://api.anthropic.com/v1 as its base endpoint.')
+        return 'https://api.anthropic.com/v1'
     allowed = {h.strip().lower() for h in os.getenv('AEGIS_MODEL_ENDPOINT_HOSTS', '').split(',') if h.strip()}
     known = {
         'openai-compatible': host in ('api.openai.com', 'generativelanguage.googleapis.com') or host.endswith('.openai.azure.com') or host.endswith('.generativeai.oci.oraclecloud.com'),
@@ -80,11 +84,18 @@ def validate_connection(connection, category, model):
     protocol = c.get('protocol')
     if protocol not in PROTOCOLS:
         raise ConnectionError('Choose a supported connection protocol.')
+    if protocol != 'anthropic':
+        c.pop('workspace_id', None)
     if c.get('auth_mode') not in AUTH_MODES[protocol]:
         raise ConnectionError('This authentication method is not supported by the selected protocol.')
     c['endpoint'] = validate_endpoint(c.get('endpoint', ''), protocol)
     if not model.strip() or len(model) > 200 or any(ord(char) < 32 for char in model):
         raise ConnectionError('Enter a valid model or deployment ID.')
+    if protocol == 'anthropic':
+        if category != 'chat':
+            raise ConnectionError('Direct Claude supports Chat registrations only. Keep a separate Embedding and Extraction model.')
+        if c.get('workspace_id') and not re.fullmatch(r'wrkspc_[A-Za-z0-9_-]{1,120}', c['workspace_id']):
+            raise ConnectionError('Enter a valid Anthropic workspace ID beginning with wrkspc_, or leave it empty for a workspace-scoped key.')
     if protocol == 'ollama':
         from .providers.ags_local.ollama import local_model_name, OllamaError
         try:

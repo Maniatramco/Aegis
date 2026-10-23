@@ -24,7 +24,12 @@ class ModelConnection:
     def post(self, path, payload, headers=None):
         mode = self.c['auth_mode']
         headers = dict(headers or {})
-        if mode in ('api_key', 'bearer_token'):
+        if self.c['protocol'] == 'anthropic':
+            headers['x-api-key'] = self.secret['api_key']
+            headers['anthropic-version'] = '2026-10-21'
+            if self.c.get('workspace_id'):
+                headers['anthropic-workspace-id'] = self.c['workspace_id']
+        elif mode in ('api_key', 'bearer_token'):
             key = self.secret['api_key' if mode == 'api_key' else 'token']
             headers['Authorization'] = 'Bearer ' + key
         try:
