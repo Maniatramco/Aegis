@@ -4,9 +4,9 @@ Aegis turns documents into searchable knowledge and structured, reviewable resul
 
 **Handover branch: `ags_sprint1`. Current working version: `v26.1.12.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
-**Verified live frontend: v26.1.11.0, published 23 October 2026.** Release `release-20261023-201117-abe540` deployed source commit `70e68ec47904d8e5496a8c7d4e67d111be9432d9` to the existing Mumbai application. The Dashboard now has authorized datasets on the left, a larger Dataset Knowledge Chat in the centre and Sources on the right. The frontend rollout, both deployment readiness checks, all 15 protected-resource fingerprints and unchanged backend images passed. Live HTTPS assets match the tested ARM64 image byte-for-byte. The existing signed-in session passed desktop and mobile layout checks, including loaded authorized catalog, model selector, panel switching and composer placement. Backend, database, settings, models and data are unchanged. No model inference or upload/extraction write acceptance checks were run. See [CHANGELOG.md](CHANGELOG.md) for validation limits and the private receipt reference.
+**Verified live application: v26.1.12.0, published 23 October 2026.** Release `release-20261023-205517-79e486` deployed source commit `776e9496fd5fddc325969bce03fb002af4bdca31` to the existing Mumbai application. Both ARM64 images were published and web/API/worker rollouts passed. Direct Anthropic Claude is available in Model Registration for Chat, with the official endpoint, API key and optional workspace ID. Protected configuration, sidecars and database compatibility checks passed; no database scripts were run. The API reports database/vector/reranker readiness. All 12 checked live web assets match the exact candidate image byte-for-byte. Authenticated desktop/mobile form checks passed without entering credentials, testing a model or saving a registration. An unauthenticated Anthropic Models GET from the API received HTTP 401 over TLS; no credentials or inference request were sent. Real Claude-key/model/quota acceptance remains pending. See [CHANGELOG.md](CHANGELOG.md) for validation limits and the private receipt reference.
 
-Version v26.1.12.0 adds direct Anthropic Claude Chat registration and native Messages API function calling. This change is a local candidate; the verified live application remains v26.1.11.0. Real-key acceptance is pending.
+Version v26.1.12.0 adds direct Anthropic Claude Chat registration and native Messages API function calling. This change was deployed to the existing Mumbai application on 23 October 2026. Real-key acceptance is pending.
 
 Version v26.1.11.0 rearranges the Dashboard into authorized datasets on the left, a larger Dataset Knowledge Chat in the centre and Sources on the right. Selecting knowledge keeps the panels visible; chat expansion is explicit. Smaller screens use panel view buttons while keeping chat mounted. This layout was deployed to the existing Mumbai application on 23 October 2026.
 
@@ -244,7 +244,7 @@ npm --prefix ags_frontend run build
 
 These local checks do not deploy or establish live OCI/provider acceptance. Use the testing guide for deployment guard tests and opt-in integration checks; report actual results for the source being released.
 
-### Direct Claude Chat setup (v26.1.12.0 local candidate)
+### Direct Claude Chat setup (v26.1.12.0)
 
 In **Model Registration**, choose **Anthropic · Claude (direct)**, category **Chat**. Enter the exact model ID provided by your API administrator and the API key. The base endpoint is `https://api.anthropic.com/v1`; this native protocol accepts only the official service host and needs no custom hostname allowlist. Supply the optional Anthropic workspace ID only if your key is not workspace-scoped. API keys are stored in encrypted, versioned connection profiles and are not returned to the browser.
 
