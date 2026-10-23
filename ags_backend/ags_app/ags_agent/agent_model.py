@@ -445,7 +445,12 @@ def complete(messages, tools, on_token=None):
                 from ..ags_models.validation import ConnectionError
                 try:result['calls']=restore(calls,tools)
                 except ConnectionError as exc:raise providers.ProviderError(str(exc)) from exc
-        if any('extra_content' in call for call in message.get('tool_calls') or []):
+        # The canonical route name is restored locally, but the next provider
+        # request must replay the exact declared branch name from its response.
+        wire_calls = message.get('tool_calls') or []
+        renamed = any(wire['function']['name'] != restored['name']
+                      for wire, restored in zip(wire_calls, result['calls']))
+        if renamed or any('extra_content' in call for call in wire_calls):
             result['_provider_state']={'protocol':protocol,'tool_calls':copy.deepcopy(message['tool_calls'])}
         return result
     if protocol == 'mock':

@@ -2,9 +2,11 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.1` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
 **Verified live application: v26.1.12.0, published 23 October 2026.** Release `release-20261023-205517-79e486` deployed source commit `776e9496fd5fddc325969bce03fb002af4bdca31` to the existing Mumbai application. Both ARM64 images were published and web/API/worker rollouts passed. Direct Anthropic Claude is available in Model Registration for Chat, with the official endpoint, API key and optional workspace ID. Protected configuration, sidecars and database compatibility checks passed; no database scripts were run. The API reports database/vector/reranker readiness. All 12 checked live web assets match the exact candidate image byte-for-byte. Authenticated desktop/mobile form checks passed without entering credentials, testing a model or saving a registration. An unauthenticated Anthropic Models GET from the API received HTTP 401 over TLS; no credentials or inference request were sent. Real Claude-key/model/quota acceptance remains pending. See [CHANGELOG.md](CHANGELOG.md) for validation limits and the private receipt reference.
+
+Local candidate v26.1.12.1 fixes OpenAI/Azure OpenAI Agent routing schemas and preserves branch validation and provider tool-call history. Deployment and live Agent acceptance are pending.
 
 Version v26.1.12.0 adds direct Anthropic Claude Chat registration and native Messages API function calling. This change was deployed to the existing Mumbai application on 23 October 2026. Real-key acceptance is pending.
 
