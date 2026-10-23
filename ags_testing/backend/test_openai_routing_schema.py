@@ -16,7 +16,8 @@ from test_model_registration import body, register, select, cloud_transport
     ('openai-compatible', 'https://api.openai.com/v1'),
     ('azure-openai', 'https://example.openai.azure.com/openai/v1'),
 ])
-def test_actual_agent_router_uses_object_parameters_and_restores_route(monkeypatch, protocol, endpoint):
+@pytest.mark.parametrize('query', ['original', 'semantic'])
+def test_actual_agent_router_uses_object_parameters_and_restores_route(monkeypatch, protocol, endpoint, query):
     pinned = snapshot()
     pinned['settings'].update(model='gpt-4o-mini', extra_parameters={})
     pinned['settings']['model_connection'].update(protocol=protocol, endpoint=endpoint)
@@ -25,20 +26,28 @@ def test_actual_agent_router_uses_object_parameters_and_restores_route(monkeypat
     def post(self, path, payload, headers=None):
         seen.append(copy.deepcopy(payload))
         assert core._execution.get()['secret_refs'] == pinned['secret_refs']
-        assert payload['tool_choice'] == 'required' and len(payload['tools']) == 5
+        assert payload['tool_choice'] == 'required' and len(payload['tools']) == 7
+        assert payload['parallel_tool_calls'] is False
+        assert all(t['function']['strict'] and set(t['function']['parameters']['required']) ==
+                   set(t['function']['parameters']['properties']) for t in payload['tools'])
         assert all(t['function']['parameters']['type'] == 'object' and
                    'oneOf' not in t['function']['parameters'] for t in payload['tools'])
         tool = next(t['function'] for t in payload['tools'] if
-                    'original' in t['function']['parameters']['properties'].get('query', {}).get('enum', []))
+                    query in t['function']['parameters']['properties'].get('query', {}).get('enum', []))
+        args = dict.fromkeys(tool['parameters']['properties'])
+        assert not {'fields','filters'} & set(tool['parameters']['properties'])
+        args.update(agent='chat', query=query, document_names=['invoice.txt', 'total', 'other.txt'], request_evidence=request)
+        if query=='semantic':args.update(source_types=['document'], scope='selected_dataset')
+        else:assert 'source_types' not in tool['parameters']['properties']
         return {'choices': [{'finish_reason': 'tool_calls', 'message': {'tool_calls': [{
             'id': 'route-1', 'type': 'function', 'function': {'name': tool['name'],
-            'arguments': json.dumps({'agent': 'chat', 'query': 'original',
-                                    'document_names': ['invoice.txt'], 'request_evidence': request})}}]}}]}
+            'arguments': json.dumps(args)}}]}}]}
     monkeypatch.setattr(ModelConnection, 'post', post)
     with core.execution_context(pinned), temporary_credentials({'api_key': 'synthetic'}):
         frame = agent_model.classify_vector([{'role': 'user', 'content': request}])
-    assert frame['source'] == 'documents' and frame['document_names'] == ['invoice.txt']
-    assert seen[0]['tools'][4]['function']['parameters']['required'] == ['agent', 'query', 'request_evidence']
+    assert frame['source'] == ('documents' if query=='original' else 'knowledge') and frame['document_names'] == ['invoice.txt']
+    assert frame['knowledge_types'] == ([] if query=='original' else ['document_chunk'])
+    assert frame['knowledge_scope'] == 'selected_dataset'
 
 
 def routes():
@@ -52,7 +61,7 @@ def test_provider_wire_does_not_widen_or_mutate_canonical_routes():
     tools = routes(); original = copy.deepcopy(tools)
     wire = adapter.agent_tools(tools)
     assert tools == original and len(wire) == 2
-    assert wire[0]['function']['parameters']['properties']['agent'] == {'enum': ['chat']}
+    assert wire[0]['function']['parameters']['properties']['agent']['enum'] == ['chat']
     assert wire[0]['function']['parameters']['additionalProperties'] is False
     with pytest.raises(ConnectionError, match='invalid function arguments'):
         adapter.agent_calls([{'name': 'route__branch_0', 'arguments': {'agent': 'chat', 'operation': 'extract'}}], tools)
@@ -60,6 +69,28 @@ def test_provider_wire_does_not_widen_or_mutate_canonical_routes():
         adapter.agent_calls([{'name': 'route', 'arguments': {'agent': 'chat'}}], tools)
     with pytest.raises(ConnectionError, match='unique'):
         adapter.agent_tools(tools + [wire[0]])
+
+
+def test_strict_nullable_optional_fields_do_not_weaken_canonical_validation():
+    tools = routes()
+    schema = tools[0]['function']['parameters']['oneOf'][0]
+    schema['properties']['fields'] = {'type': 'array', 'items': {'type': 'string'}, 'uniqueItems': True}
+    result = adapter.agent_calls([{'name': 'route__branch_0', 'arguments': {'agent': 'chat', 'fields': None}}], tools)
+    assert result[0]['arguments'] == {'agent': 'chat'}
+    for args in ({'agent': None}, {'agent': 'chat', 'operation': None}, {'agent': 'chat', 'fields': ['owner', 'owner']}):
+        with pytest.raises(ConnectionError, match='invalid function arguments'):
+            adapter.agent_calls([{'name': 'route__branch_0', 'arguments': args}], tools)
+    wire = adapter.agent_tools(tools)[0]['function']
+    assert wire['strict'] is True and wire['parameters']['required'] == ['agent', 'fields']
+    assert wire['parameters']['properties']['fields']['anyOf'][1] == {'type': 'null'}
+    assert schema['properties']['fields']['uniqueItems'] is True
+
+
+def test_custom_gateway_keeps_non_strict_branch_contract():
+    connection = {'protocol': 'openai-compatible', 'endpoint': 'https://custom.example/v1'}
+    wire = adapter.agent_tools(routes(), connection=connection)
+    assert all('strict' not in tool['function'] for tool in wire)
+    assert wire[0]['function']['parameters']['required'] == ['agent']
 
 
 def test_branch_tool_roundtrip_preserves_provider_name_and_call_id(monkeypatch):
@@ -89,7 +120,8 @@ def test_branch_tool_roundtrip_preserves_provider_name_and_call_id(monkeypatch):
         assert agent_model.complete(follow, routes())['text'] == 'Ready.'
 
 
-def test_agent_openai_answer_follows_scoped_hybrid_retrieval_and_rerank(system, monkeypatch):
+@pytest.mark.parametrize('query', ['original', 'semantic'])
+def test_agent_openai_answer_follows_scoped_hybrid_retrieval_and_rerank(system, monkeypatch, query):
     from ags_app import knowledge, reranker, main
     from test_agent_workspace import plan
     s = system; d = dataset(s); doc = upload(s, d)['documents'][0]
@@ -107,9 +139,11 @@ def test_agent_openai_answer_follows_scoped_hybrid_retrieval_and_rerank(system, 
         assert req.headers['authorization'] == 'Bearer synthetic-secret'
         assert payload['model'] == 'gpt-4o-mini'
         if payload.get('tools'):
-            tool = next(t['function'] for t in payload['tools'] if 'original' in t['function']['parameters']['properties'].get('query', {}).get('enum', []))
+            tool = next(t['function'] for t in payload['tools'] if query in t['function']['parameters']['properties'].get('query', {}).get('enum', []))
+            args = {'agent':'chat','query':query,'request_evidence':'Who is the owner in the document?'}
+            if query=='semantic':args['source_types']=['document']
             message = {'tool_calls': [{'id': 'route-1', 'type': 'function', 'function': {
-                'name': tool['name'], 'arguments': json.dumps({'agent': 'chat', 'query': 'original', 'request_evidence': 'Who is the owner in the document?'})}}]}
+                'name': tool['name'], 'arguments': json.dumps(args)}}]}
             return httpx.Response(200, json={'choices': [{'finish_reason': 'tool_calls', 'message': message}]})
         assert ranked
         evidence = next(m['content'] for m in payload['messages'] if 'Published vector evidence:\n' in (m.get('content') or ''))
@@ -124,3 +158,19 @@ def test_agent_openai_answer_follows_scoped_hybrid_retrieval_and_rerank(system, 
     assert {c['document_id'] for c in answer['citations']} == {doc['id']}
     retrieval = answer['tool_trace'][0]['result']['retrieval']
     assert retrieval['mode'] == 'hybrid' and retrieval['reranker_enabled']
+
+
+def test_all_router_examples_obey_the_canonical_schema(monkeypatch):
+    from jsonschema import validate
+    request = 'What is written in the original invoice.txt?'
+    def complete(messages, tools, **kwargs):
+        schema = tools[0]['function']['parameters']
+        examples = [json.loads(m['content']) for m in messages if m['role']=='assistant']
+        assert examples
+        for example in examples:
+            for call in example['tool_calls']:
+                validate(call['arguments'], schema)
+        return {'calls':[{'name':'route_aegis','arguments':{'agent':'chat','query':'original','request_evidence':request}}]}
+    monkeypatch.setattr(agent_model, 'complete', complete)
+    with core.execution_context(snapshot()):
+        assert agent_model.classify_vector([{'role':'user','content':request}])['source']=='documents'

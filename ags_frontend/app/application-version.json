@@ -1,6 +1,16 @@
 {
-  "version": "26.1.12.1",
+  "version": "26.1.12.2",
   "releases": [
+    {
+      "version": "26.1.12.2",
+      "date": "2026-10-23",
+      "title": "Reliable Agent source routing",
+      "changes": [
+        "Use strict OpenAI and Azure routing arguments, with nullable optional values normalized before canonical validation.",
+        "Separate original document questions, semantic search and saved extraction filters so content questions retrieve indexed passages.",
+        "Keep dataset/topic names out of filename filters, preserve selected access scope, and retain hybrid search, reranking and citation validation."
+      ]
+    },
     {
       "version": "26.1.12.1",
       "date": "2026-10-23",
@@ -55,7 +65,7 @@
       "title": "A blended sign-in background",
       "changes": [
         "Remove the repeated Aegis logo and tagline above the sign-in heading.",
-        "Match the sign-in page background to the supplied bannerÃ¢â‚¬â„¢s navy tones without changing, cropping, fading or blending the banner image."
+        "Match the sign-in page background to the supplied bannerÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢s navy tones without changing, cropping, fading or blending the banner image."
       ]
     },
     {

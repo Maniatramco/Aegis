@@ -1,9 +1,52 @@
 import copy
+from urllib.parse import urlsplit
 from jsonschema import validate, ValidationError
 from ...validation import ConnectionError
 
 
-def agent_tools(tools):
+def strict_routes(connection):
+    return connection is None or connection.get('protocol') == 'azure-openai' or urlsplit(connection.get('endpoint', '')).hostname == 'api.openai.com'
+
+
+def strict_schema(schema):
+    """Represent optional fields as nullable wire values, never local defaults."""
+    result = copy.deepcopy(schema)
+    if 'const' in result:
+        result['enum'] = [result.pop('const')]
+    if 'enum' in result and 'type' not in result:
+        kinds = {type(v) for v in result['enum']}
+        types = {str: 'string', bool: 'boolean', int: 'integer', float: 'number', type(None): 'null', list: 'array', dict: 'object'}
+        if len(kinds) == 1:
+            result['type'] = types[next(iter(kinds))]
+    # Retain unsupported generation constraints in canonical local validation.
+    result.pop('uniqueItems', None)
+    if result.get('type') == 'object':
+        required = set(schema.get('required', []))
+        properties = {}
+        for name, value in schema.get('properties', {}).items():
+            normalized = strict_schema(value)
+            properties[name] = normalized if name in required else {'anyOf': [normalized, {'type': 'null'}]}
+        result.update(properties=properties, required=list(properties), additionalProperties=False)
+    elif result.get('type') == 'array' and 'items' in result:
+        result['items'] = strict_schema(result['items'])
+    for keyword in ('anyOf', 'oneOf'):
+        if keyword in result:
+            result['anyOf'] = [strict_schema(value) for value in result.pop(keyword)]
+    return result
+
+
+def canonical_arguments(value, schema):
+    if isinstance(value, dict) and schema.get('type') == 'object':
+        required = set(schema.get('required', []))
+        properties = schema.get('properties', {})
+        return {key: canonical_arguments(item, properties.get(key, {}))
+                for key, item in value.items() if key not in properties or item is not None or key in required}
+    if isinstance(value, list) and 'items' in schema:
+        return [canonical_arguments(item, schema['items']) for item in value]
+    return value
+
+
+def agent_tools(tools, connection=None):
     """Expose each route alternative as an object-shaped OpenAI function.
 
     Keep the canonical oneOf schema intact for local route validation. OpenAI
@@ -28,6 +71,13 @@ def agent_tools(tools):
             for prop in value['function']['parameters'].get('properties', {}).values():
                 if 'const' in prop:
                     prop['enum'] = [prop.pop('const')]
+            if strict_routes(connection):
+                f = value['function']
+                f['parameters'] = strict_schema(branch)
+                f['strict'] = True
+                discriminators = {key: prop.get('enum', [prop.get('const')]) for key, prop in branch.get('properties', {}).items()
+                                  if key in ('agent', 'query', 'source', 'operation') and ('enum' in prop or 'const' in prop)}
+                f['description'] = f.get('description', '') + ' ' + branch.get('description', '') + ' Route alternative: ' + str(discriminators)
             result.append(value)
     names = [tool['function']['name'] for tool in result]
     if len(names) != len(set(names)):
@@ -35,7 +85,7 @@ def agent_tools(tools):
     return result
 
 
-def agent_calls(calls, tools):
+def agent_calls(calls, tools, connection=None):
     """Restore canonical tool names only after validating the chosen branch."""
     declarations = {}
     for tool in tools:
@@ -52,12 +102,13 @@ def agent_calls(calls, tools):
         if call['name'] not in declarations:
             raise ConnectionError('OpenAI returned an undeclared function.')
         name, branch, schema = declarations[call['name']]
+        arguments = canonical_arguments(call['arguments'], branch) if schema.get('oneOf') and strict_routes(connection) else call['arguments']
         try:
-            validate(call['arguments'], branch)
-            validate(call['arguments'], schema)
+            validate(arguments, branch)
+            validate(arguments, schema)
         except ValidationError:
             raise ConnectionError('OpenAI returned invalid function arguments. Retry the request.') from None
-        result.append(dict(call, name=name))
+        result.append(dict(call, name=name, arguments=arguments))
     return result
 def generate(connection, instruction, text, schema, output_tokens, extra):
     payload = {'model': connection.model, 'messages': [{'role': 'system', 'content': instruction}, {'role': 'user', 'content': text}], 'max_completion_tokens': output_tokens, **extra}

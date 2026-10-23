@@ -23,10 +23,11 @@ def test_gemini_routing_wire_declares_all_branches_and_forces_tool_call(monkeypa
     with core.execution_context(pinned),temporary_credentials({'api_key':'unit-test-only'}):
         frame=agent_model.classify_vector([{'role':'user','content':request}])
     assert frame['source']=='documents' and frame['document_names']==['invoice.txt']
-    payload=seen[0];params=payload['tools'][4]['function']['parameters']
+    payload=seen[0];params=next(t['function']['parameters'] for t in payload['tools'] if 'original' in t['function']['parameters']['properties'].get('query',{}).get('enum',[]))
     assert payload['tool_choice']=='required' and 'oneOf' not in params
-    assert len(payload['tools'])==5 and params['properties']['agent']['enum']==['chat']
-    assert {'original','results','application'}<=set(params['properties']['query']['enum'])
+    assert len(payload['tools'])==7 and params['properties']['agent']['enum']==['chat']
+    assert {'original','application'}<=set(params['properties']['query']['enum'])
+    assert not {'filters','fields','source_types'} & set(params['properties'])
     assert params['required']==['agent','query','request_evidence']
     assert 'include_original' not in params['properties']
 

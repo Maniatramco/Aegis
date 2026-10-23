@@ -6,7 +6,7 @@ from ..ags_openai.adapter import generate
 from ..ags_openai import adapter
 
 
-def agent_tools(tools):
+def agent_tools(tools, connection=None):
     """Declare union branches as separate functions without widening contracts."""
     result=[]
     for tool in tools:
@@ -25,7 +25,7 @@ def agent_tools(tools):
     return result
 
 
-def agent_calls(calls, tools):
+def agent_calls(calls, tools, connection=None):
     declarations={}
     for tool in tools:
         function=tool['function'];name=function['name'];schema=function['parameters']
