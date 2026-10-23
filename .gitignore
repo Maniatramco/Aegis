@@ -27,6 +27,7 @@ ags_frontend/screenshots/
 /ags_runtime/
 
 # Local verification artifacts can contain workspace data and large binaries.
+/.codex-remote-attachments/
 /output/
 /work/
 /docs/testing/results/

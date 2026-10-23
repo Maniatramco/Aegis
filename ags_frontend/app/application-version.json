@@ -1,6 +1,16 @@
 {
-  "version": "26.1.9.1",
+  "version": "26.1.10.0",
   "releases": [
+    {
+      "version": "26.1.10.0",
+      "date": "2026-10-23",
+      "title": "Aegis platform branding",
+      "changes": [
+        "Use the supplied Aegis shield logo in the sign-in page, workspace header, navigation, password recovery and browser icon.",
+        "Display the supplied platform banner in full beside sign-in on desktop and below the form on mobile.",
+        "Archive the previous artwork and keep this frontend branding change independently reversible in Git."
+      ]
+    },
     {
       "version": "26.1.9.1",
       "date": "2026-10-21",

@@ -11,6 +11,7 @@ import "./review-layout.css";
 export const metadata: Metadata = {
   title: "Aegis · AI Data Platform",
   description: "AI data workspace for datasets, agents, chat, extraction, and review.",
+  icons: { icon: "/aegis-platform-logo.png", apple: "/aegis-platform-logo.png" },
 };
 export default function RootLayout({
   children,

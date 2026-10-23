@@ -88,7 +88,7 @@ export default function PasswordRecoveryPage() {
   }
 
   return <main className="recovery-shell"><section className="recovery-card" aria-labelledby="recovery-heading">
-    <header className="recovery-header"><span className="brand"><img src="/aegis-logo.png" alt="" width={32} height={32} /> Aegis</span><Link href="/" className="btn icon" aria-label="Close password recovery"><X size={18} /></Link></header>
+    <header className="recovery-header"><span className="brand"><img src="/aegis-platform-logo.png" alt="" width={32} height={32} /> Aegis</span><Link href="/" className="btn icon" aria-label="Close password recovery"><X size={18} /></Link></header>
     <h1 id="recovery-heading" className="screen-heading" ref={heading} tabIndex={-1}>{state === "success" ? "Password changed" : "Recover your access"}</h1>
     <p className="muted">Your account, documents, and model settings stay in place.</p>
     {state === "loading" && <p role="status">Preparing password reset.</p>}

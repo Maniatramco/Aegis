@@ -12,6 +12,8 @@ data
 **/__pycache__
 **/.pytest_cache
 ags_runtime
+delete
+.codex-remote-attachments
 output
 work
 local-models

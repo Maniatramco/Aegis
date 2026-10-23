@@ -2,6 +2,17 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.10.0 - 23 October 2026
+
+- Add the supplied Aegis shield logo to sign-in, the workspace header, navigation, password recovery and browser icons. Preserve the separate Aegis Agent identity.
+- Display the supplied portrait banner without cropping or blending. Keep sign-in alongside it on desktop and first on mobile.
+- Archive the prior logo, sign-in illustration and file-based browser icon under `delete/ags_frontend/`, outside application builds and active test discovery. Keep attachment originals and generated preview evidence ignored.
+- Keep the branding and version history update together in a single reversible commit. No backend, model, dataset, access, chat or processing contracts change.
+
+Local validation: all 236 frontend unit tests, both application/test TypeScript checks and the native Next.js production build passed. Browser checks covered the full desktop banner, loaded transparent logo, empty-field validation, password visibility/keyboard focus, 390px and 320px mobile layout with the form first and no horizontal overflow, synthetic-session workspace header/navigation, shared About/footer version and the password recovery header logo. Production preview checks confirmed the single new favicon, sign-out and sign-in rendering. Root, both branding assets, password recovery and all seven initial script assets returned HTTP 200. Supplied images are byte-identical to the attachments; archived public artwork matches the preceding commit. The complete staged patch passed a reverse-apply check and its reversed temporary index exactly matched the preceding Git tree.
+
+Local preview only; no OCI deployment or Git push has been performed for this version. Browser sessions used an isolated loopback synthetic API with no real accounts, database, provider inference, chat replies, uploads or extraction writes. An initially incomplete storage-status fixture was corrected before signed-in checks passed. Password recovery was checked for branding only; recovery operations, physical mobile hardware, Docker image builds and full application end-to-end workflows were not tested. Private screenshots, HTTP checks and fixture request evidence are under `output/playwright/branding-v26.1.10.0/`.
+
 ## v26.1.9.1 - 21 October 2026
 
 - Remove the inner rectangular border, focus outline and tinted background from the Dashboard Dataset Knowledge Chat input, overriding the generic workspace form styling only for this composer.
