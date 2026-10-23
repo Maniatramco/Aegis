@@ -637,7 +637,6 @@ export default function App() {
     return (
       <main className="login-shell"><div className="login-layout"><section className="login-story" aria-label="About the Aegis platform"><figure className="login-illustration"><Image className="login-artwork" src="/aegis-banner.jpg" alt="Aegis — Secure Data Lakehouse and AI Platform. Multi-model AI for trusted enterprise knowledge, with retrieval, vector search and grounded answers." width={906} height={1280} sizes="(max-width: 760px) calc(100vw - 36px), (max-height: 820px) 465px, 540px" priority /></figure></section>
         <section className="login-card" aria-labelledby="login-heading">
-          <div className="login-brand"><img src="/aegis-platform-logo.png" alt="Aegis · MAK Tech" width={72} height={72} /><span>Aegis<small>Secure Data Lakehouse and AI Platform</small></span></div>
           <h1 id="login-heading" className="screen-heading">{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
           <p className="login-description">{bootstrap ? "Set up your first account to get started." : roleChangedNotice ? "Your role changed. Sign in again to use your updated access." : passwordChangedNotice ? "Password changed. Sign in with your new password." : "Sign in to your workspace."}</p>
           {error && <div className="login-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}

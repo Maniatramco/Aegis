@@ -2,13 +2,15 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.10.0` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.10.1` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
 **Verified live frontend: v26.1.10.0, published 23 October 2026.** Release `release-20261023-182726-42c5c5` deployed source commit `e94de294cdd591554abbc593122b3f2a2e4479b2` to the existing Mumbai application with the supplied Aegis platform logo and sign-in banner. The frontend rollout, both deployment readiness checks, protected configuration and unchanged backend images passed. Live HTTPS, seven scripts, three stylesheets and both supplied images match the tested ARM64 image byte-for-byte; desktop and mobile sign-in branding and the new favicon were verified. Backend, database, settings, models and data are unchanged. No live signed-in, model-inference or upload/extraction acceptance checks were run. See [CHANGELOG.md](CHANGELOG.md) for validation limits and the private receipt reference.
 
 ## Platform branding
 
 Version v26.1.10.0 adds the supplied Aegis shield logo and platform banner. The sign-in page shows the full banner beside the form on desktop and below it on mobile. Header, navigation, password recovery and browser icons use the same platform logo; the separate Aegis Agent identity is preserved. This frontend was deployed to the existing Mumbai OCI application on 23 October 2026. Previous artwork is archived under `delete/ags_frontend/`.
+
+Working version v26.1.10.1 removes the repeated logo/tagline above sign-in and uses a navy page background matching the unchanged banner. The platform logo remains in the signed-in header/navigation, password recovery and browser icon. This adjustment is a local preview; the verified live frontend remains v26.1.10.0.
 
 The branding is kept in one commit. To restore the preceding code and artwork while retaining history, run `git revert <branding-commit>` on a clean working tree (the commit titled `feat: add supplied Aegis platform branding (v26.1.10.0)`); check the resulting frontend and restart/rebuild it. `git revert <revert-commit>` reapplies the branding. Later edits to the same lines may require resolving a revert conflict. This change has no database or configuration migration.
 

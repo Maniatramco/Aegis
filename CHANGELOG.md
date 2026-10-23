@@ -2,6 +2,16 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.10.1 - 23 October 2026
+
+- Remove the repeated logo, Aegis name and tagline from the sign-in card above Welcome back / Create your workspace.
+- Match the page background to the existing banner’s dark navy edges, with a subtle navy glow. Preserve the original banner file and its full-color rendering without opacity, masks, filters, blend modes or cropping.
+- Preserve the white sign-in card, form controls, mobile form-first placement and signed-in platform identity.
+
+Local validation: all 236 frontend unit tests, both app/test TypeScript checks and the native Next.js production build passed. Browser checks at 920×668 (the commented viewport), 1280×720, 390×844 and 320×740 confirmed removal of the repeated branding, navy page background, no horizontal overflow and mobile form-first placement. Empty-field validation and password visibility controls passed. The production-built preview also passed a focused browser check; root and seven scripts returned HTTP 200 and served v26.1.10.1. Banner bytes match the deployed source exactly (SHA-256 `f29e999f2ceb4a295f56052aabc7b38a409093712a1b936f5c344eddf7d34685`); its image styling and original asset are unchanged. The complete staged patch passed a reverse-apply check.
+
+Local preview only; this adjustment has not been deployed. Checks used a signed-out loopback fixture with no real accounts, model calls or data writes. Real authentication, bootstrap account creation and processing workflows were not exercised. Private screenshots and evidence are under `output/playwright/sign-in-blend-v26.1.10.1/`.
+
 ## v26.1.10.0 - 23 October 2026
 
 - Add the supplied Aegis shield logo to sign-in, the workspace header, navigation, password recovery and browser icons. Preserve the separate Aegis Agent identity.
