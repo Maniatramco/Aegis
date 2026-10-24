@@ -49,7 +49,7 @@ export function ReExtractionDialog({source,documents,datasets,templates,extracti
    if(needsReindex){
     const workflow=await api(`/extractions/${source.id}/rerun`,'POST',{source_version:source.version||1,template_id:template,display_name:name.trim(),allow_external:true,idempotency_key:key.current});
     setRun({workflow});
-   }else setRun(await api('/extractions','POST',{dataset_id:dataset?.id,document_ids:source.document_ids,template_id:template,model_id:chosen.id,allow_external:true,merge_records:!!source.merge_records,wait_for_index:!!source.merge?.logical,display_name:name.trim(),idempotency_key:key.current}));
+   }else setRun(await api('/extractions','POST',{dataset_id:dataset?.id,document_ids:source.document_ids,template_id:template,allow_external:true,merge_records:!!source.merge_records,wait_for_index:!!source.merge?.logical,display_name:name.trim(),idempotency_key:key.current}));
    onRefresh();
   }catch(err){setError((err as Error).message);}finally{submitting.current=false;setBusy(false);}
  };
@@ -60,7 +60,7 @@ export function ReExtractionDialog({source,documents,datasets,templates,extracti
   <label className="field">Extraction name<input aria-label="Re-extraction name" maxLength={200} value={name} disabled={busy} onChange={e=>setName(e.target.value)}/><span className="small muted">Edit this name if needed. The suffix uses your local date and time.</span></label>
   <p className="small muted">Uses {chosen?.name||'the dataset default extraction model'}{source.merge_records?' · keeps separate records for each original':''}.</p>
   {!chosen&&<p role="alert" className="upload-notice">Set a default extraction model for this dataset. <ActionButton className="text-button" onClick={()=>{dialog.current?.close();onConfigure(dataset?.id||'');}} label="Open Model Mapping" action="mapping"/></p>}
-  {ready&&needsReindex&&<p role="status" className="upload-notice">The embedding model changed. Confirm once to rebuild the source indexes with this dataset’s current embedding model, then re-extract. Earlier results and originals are preserved.</p>}
+  {ready&&needsReindex&&<p role="status" className="upload-notice">The indexing configuration changed. Confirm once to rebuild the source indexes with this dataset’s current embedding and OCR models, then re-extract. Earlier results and originals are preserved.</p>}
   {!ready&&<p role="alert" className="upload-notice">Wait for source document processing to finish and make sure the dataset is active. <ActionButton className="text-button" onClick={()=>{dialog.current?.close();onConfigure(dataset?.id||'');}} label="Open Model Mapping" action="mapping"/></p>}
   {!prompts.length&&<p role="alert">Create a prompt in Onboard → Prompt first.</p>}
   </>}

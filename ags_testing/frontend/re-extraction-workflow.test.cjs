@@ -35,6 +35,15 @@ test('unchanged embeddings use normal extraction, while processing files and emp
  const blocked=view();blocked.props.documents[0].status='processing';blocked.render();assert.equal(blocked.button().props.disabled,true);
  const empty=view();empty.find('aria-label','Re-extraction name').props.onChange({target:{value:''}});empty.render();assert.equal(empty.button().props.disabled,true);
 });
+test('re-extraction uses the current mapped default even while the previous model remains available',async()=>{
+ const v=view({stale:false});v.props.source.model_id='previous-model';v.props.source.model_selection={model_id:'previous-model'};
+ v.props.datasets[0].models.push({id:'previous-model',name:'Previous extraction model'});v.render();
+ await v.button().props.onClick();assert.equal(v.calls[0][2].model_id,undefined,'Resolve the current default on the server when submitting.');
+ const changed=view();changed.props.source.model_id='previous-model';changed.render();
+ assert.match(JSON.stringify(changed.elements()),/current embedding and OCR models/);
+ await changed.button().props.onClick();assert.equal(changed.calls[0][0],'/extractions/previous/rerun');
+ assert.equal(changed.calls[0][2].model_id,undefined);
+});
 test('failed rebuild keeps the failure visible; a completed rerun offers its new result',async()=>{
  const failed=view({workflow:{id:'workflow',calls:[{tool:'upload',status:'failed',error:'Embedding quota exceeded'}]}});await failed.button().props.onClick();failed.render();assert.match(JSON.stringify(failed.find('role','alert').props.children),/Embedding quota exceeded/);assert.equal(failed.button(),undefined);
  const done=view({workflow:{id:'workflow',calls:[{tool:'upload',status:'completed',jobs:[{id:'index',status:'completed'}]},{tool:'reextract',status:'completed',result:{extractions:[{extraction_id:'new-result',status:'completed'}]}}]}});await done.button().props.onClick();done.render();assert.equal(done.button().props['aria-label'],'Review results');

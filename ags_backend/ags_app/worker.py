@@ -253,7 +253,7 @@ def _process(jid,token,snapshot):
             providers.delete_vectors(did)
             raise
         store.put_json('documents/'+did+'/index-execution.json',snapshot)
-        store.put_json('documents/'+did+'/index.json',{'dataset_id':snapshot['dataset_id'],'index_generation':snapshot['index_generation'],'model_selection':routing.public_selection(snapshot),'search_provider':cfg['search_provider'],'fingerprint':providers.fingerprint(),'dimensions':dimensions,'chunk_count':len(chunks),'indexed_at':time.time(),'embedding_provider':cfg['embedding_provider'],'embedding_model':cfg['embedding_model'],'embedding_digest':cfg.get('_embedding_digest')})
+        store.put_json('documents/'+did+'/index.json',{'dataset_id':snapshot['dataset_id'],'index_generation':snapshot['index_generation'],'model_selection':routing.public_selection(snapshot),'uses_ocr':bool(ocr.summary(pages)),'ocr_selection':routing.ocr_selection(snapshot),'search_provider':cfg['search_provider'],'fingerprint':providers.fingerprint(),'dimensions':dimensions,'chunk_count':len(chunks),'indexed_at':time.time(),'embedding_provider':cfg['embedding_provider'],'embedding_model':cfg['embedding_model'],'embedding_digest':cfg.get('_embedding_digest')})
         workflow.transition(jid,'index','completed')
         workflow.transition(jid,'ready','completed')
     elif kind=='extract':

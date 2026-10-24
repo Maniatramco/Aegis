@@ -121,9 +121,16 @@ def test_busy_oci_traffic_cannot_starve_lost_notification_job(harness, monkeypat
     h.client.ack.assert_called_once_with('receipt-new-notified')
 
 
-def test_retry_commits_queued_state_before_notification(harness):
+def test_retry_commits_queued_state_before_notification(harness,monkeypatch):
     h = harness
     h.add('retry-me', status='failed', attempts=3)
+    # Dataset API tests validate model freshness. This transport-only harness
+    # supplies the valid unchanged snapshot required before retry can publish.
+    from ags_app import dataset_models as routing
+    snapshot={'settings':{'_ocr_cloud_only':True,'search_provider':'local','embedding_provider':'mock','embedding_model':'mock'}}
+    h.main.store.json.return_value={'execution':snapshot}
+    monkeypatch.setattr(routing,'owned',lambda *a:SimpleNamespace(id='dataset'))
+    monkeypatch.setattr(routing,'execution_snapshot',lambda *a:snapshot)
 
     def publish(job_id):
         assert state(h, job_id) == 'queued'

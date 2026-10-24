@@ -225,13 +225,36 @@ def documents_scope(owner,dataset_id,ids=None):
     if not ids:docs=[d for d in rows(owner,'document') if d.parent_id==r.id]
     return r,docs
 
+def ocr_selection(snapshot):
+    cloud=snapshot.get('ocr_execution')
+    return public_selection(cloud) if cloud else None
+
+def same_run_models(saved,current):
+    """Historical retries are safe only while their pinned model routes are current."""
+    if not saved.get('settings'):return False
+    if public_selection(saved)!=public_selection(current):return False
+    old=saved.get('embedding_execution',saved);new=current.get('embedding_execution',current)
+    return (public_selection(old)==public_selection(new) and
+            providers.fingerprint(old.get('settings',{}))==providers.fingerprint(new.get('settings',{})) and
+            ocr_selection(old)==ocr_selection(new))
+
 def index_matches(d,snapshot):
     try:index=core.store.json('documents/'+d.id+'/index.json')
     except FileNotFoundError:return False
-    return index.get('dataset_id')==snapshot['dataset_id'] and index.get('index_generation')==snapshot['index_generation'] and index.get('fingerprint')==providers.fingerprint(snapshot.get('embedding_execution',snapshot)['settings'])
+    embedding=snapshot.get('embedding_execution',snapshot)
+    if not (index.get('dataset_id')==snapshot['dataset_id'] and index.get('index_generation')==snapshot['index_generation'] and index.get('fingerprint')==providers.fingerprint(embedding['settings'])):return False
+    used_ocr=index.get('uses_ocr')
+    if used_ocr is None:
+        try:used_ocr=bool(core.store.json('documents/'+d.id+'/parsed.json').get('ocr'))
+        except FileNotFoundError:used_ocr=False
+    if not used_ocr:return True
+    if 'ocr_selection' in index:return index['ocr_selection']==ocr_selection(embedding)
+    try:previous=core.store.json('documents/'+d.id+'/index-execution.json')
+    except FileNotFoundError:return False
+    return ocr_selection(previous)==ocr_selection(embedding)
 
 def require_indexes(docs,snapshot):
-    if any(d.status=='ready' and not index_matches(d,snapshot) for d in docs):raise HTTPException(409,'Selected documents have outdated indexes after an embedding configuration or indexing update. Reindex them before retrieval or extraction.')
+    if any(d.status=='ready' and not index_matches(d,snapshot) for d in docs):raise HTTPException(409,'Selected documents have outdated indexes after an embedding, OCR or indexing configuration update. Reindex them before retrieval or extraction.')
 
 def document_public(d,snapshots=None):
     result=core.representation(d)|{'dataset_id':d.parent_id or None,'requires_reindex':True}
@@ -256,7 +279,7 @@ def document_public(d,snapshots=None):
             if isinstance(snapshot,HTTPException):raise snapshot
         result['requires_reindex']=not index_matches(d,snapshot)
     except HTTPException:pass
-    if result['requires_reindex'] and d.status=='ready':result['index_notice']='Reindex required: embedding configuration or installed model digest differs, or this older index has no verified model digest. Original retained.'
+    if result['requires_reindex'] and d.status=='ready':result['index_notice']='Reindex required: embedding or OCR configuration changed, the installed model digest differs, or this older index has no verified model selection. Original retained.'
     return result
 
 class ModelInput(BaseModel):

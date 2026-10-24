@@ -2,6 +2,7 @@
 import json
 import copy
 import pytest
+from sqlalchemy import select as sql_select
 from ags_app import core, dataset_models as routing, worker, ocr, agent_consent, main
 from ags_app.ags_models import cloud_ocr
 from ags_app.ags_models.connection import ModelConnection
@@ -116,3 +117,30 @@ def test_cloud_ocr_eligibility_excludes_chat_and_embedding_registrations(system)
     s=system
     for category,model in [('chat','gpt-4o'),('embedding','text-embedding-3-small')]:
         assert not register(s,body(category,'openai-compatible',provider_model=model))['ocr_eligible']
+
+
+@pytest.mark.parametrize('repaired',[True,False])
+@pytest.mark.parametrize('missing_snapshot',[True,False])
+def test_old_local_index_retry_cannot_replay_ollama_or_damage_a_repaired_document(system,repaired,missing_snapshot):
+    s=system;d=dataset(s)
+    response=s.api.post('/api/documents/upload',files={'files':('native.txt',b'Synthetic source text remains authoritative','text/plain')},data={'dataset_id':d['id']})
+    assert response.status_code==200,response.text
+    doc=response.json()['documents'][0]
+    with core.Session.begin() as session:
+        job=session.scalar(sql_select(core.Job).where(core.Job.target_id==doc['id']))
+        job.status='failed';job.error='Old local OCR service is unavailable'
+        session.get(core.Record,doc['id']).status='ready' if repaired else 'failed'
+        jid=job.id
+    payload=core.store.json('jobs/'+jid+'.json')
+    payload['execution']['settings'].pop('_ocr_cloud_only',None)
+    payload['execution'].pop('ocr_execution',None)
+    core.store.put_json('jobs/'+jid+'.json',payload)
+    if missing_snapshot:core.store.delete('jobs/'+jid+'.json')
+    refused=s.api.post('/api/jobs/'+jid+'/retry')
+    assert refused.status_code==409 and 'Reindex' in refused.json()['detail']
+    with core.Session() as session:
+        assert session.get(core.Job,jid).status=='failed'
+        assert session.get(core.Record,doc['id']).status==('ready' if repaired else 'failed')
+    if missing_snapshot:
+        with pytest.raises(FileNotFoundError):core.store.json('jobs/'+jid+'.json')
+    else:assert core.store.json('jobs/'+jid+'.json')==payload

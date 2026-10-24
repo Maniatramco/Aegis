@@ -1,6 +1,17 @@
 {
-  "version": "26.1.12.8",
+  "version": "26.1.12.9",
   "releases": [
+    {
+      "version": "26.1.12.9",
+      "date": "2026-10-24",
+      "title": "Rerun with current mapped models",
+      "changes": [
+        "Resolve current dataset models for each new Re-extract, prompt Resume and Reindex submission.",
+        "Rebuild scanned source indexes when the mapped OCR model changes before Review re-extraction.",
+        "Prevent historical retries from replaying outdated model mappings or damaging successful indexes/results.",
+        "Keep accepted jobs pinned and preserve earlier results and original files."
+      ]
+    },
     {
       "version": "26.1.12.8",
       "date": "2026-10-24",

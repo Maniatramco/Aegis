@@ -626,8 +626,11 @@ def create_extraction(body:ExtractInput,owner=Depends(auth)):
             for existing in records(owner,'extraction'):
                 previous=store.json(existing.ref)
                 if previous.get('idempotency_key')==body.idempotency_key:
-                    if previous.get('document_ids')!=body.document_ids or previous.get('template_id')!=body.template_id or previous.get('dataset_id')!=(body.dataset_id or existing.parent_id):raise HTTPException(409,'Idempotency key was already used for different extraction inputs')
-                    if any(previous.get(key)!=body.model_dump().get(key) for key in ('model_id','display_name','merge_records','allow_external')):raise HTTPException(409,'Idempotency key was already used for different extraction inputs')
+                    # Resume/re-extract may update the selected model or prompt.
+                    # A replay still compares the original submitted request.
+                    submitted=store.json(f'extraction/{existing.id}/v1.json') if existing.version>1 else previous
+                    if submitted.get('document_ids')!=body.document_ids or submitted.get('template_id')!=body.template_id or submitted.get('dataset_id')!=(body.dataset_id or existing.parent_id):raise HTTPException(409,'Idempotency key was already used for different extraction inputs')
+                    if any(submitted.get(key)!=body.model_dump().get(key) for key in ('model_id','display_name','merge_records','allow_external')):raise HTTPException(409,'Idempotency key was already used for different extraction inputs')
                     with Session() as session:job=session.scalar(select(Job).where(Job.target_id==existing.id).order_by(Job.created_at.desc()))
                     return representation(existing)|previous|{'job':job_repr(job) if job else None}
         return _create_extraction(body,owner)
@@ -735,7 +738,7 @@ def resume_extraction(id:str,body:ResumeExtraction,owner=Depends(auth)):
         if template.parent_id and template.parent_id!=r.parent_id:raise HTTPException(400,'Choose a prompt in this extraction dataset')
         prompt=store.json(template.ref);check_schema(prompt['schema'])
         dataset,docs=routing.documents_scope(owner,r.parent_id,data['document_ids'])
-        snapshot=routing.execution_snapshot(dataset,'extraction',data.get('model_id'))
+        snapshot=routing.execution_snapshot(dataset,'extraction')
         if all(d.status=='ready' for d in docs):routing.require_indexes(docs,snapshot)
         if any(d.status not in ('ready','queued','processing') for d in docs):raise HTTPException(409,'Correct/retry failed document indexing before resuming extraction')
         external_check(body.allow_external,cfg=snapshot['settings'])
@@ -747,7 +750,7 @@ def resume_extraction(id:str,body:ResumeExtraction,owner=Depends(auth)):
         data.update(template_id=template.id,template_version=template.version,prompt_instructions=instructions,
             schema=dict(schema,description='\n'.join(filter(None,[schema.get('description',''),instructions]))),
             record_schema=dict(prompt['schema'],description='\n'.join(filter(None,[prompt['schema'].get('description',''),instructions]))),
-            result=None,evidence=[],sources=[],previous_version=r.version,model_selection=routing.public_selection(snapshot),allow_external=body.allow_external)
+            result=None,evidence=[],sources=[],previous_version=r.version,model_id=snapshot['model_id'],model_selection=routing.public_selection(snapshot),allow_external=body.allow_external)
         r=routing.write_version(r,data)
         with Session.begin() as session:session.get(Record,id).status='queued';session.get(Record,id).error=''
         waiting=any(d.status!='ready' for d in docs)
@@ -761,14 +764,14 @@ def reextract_result(id:str,body:ReextractInput,owner=Depends(auth)):
         r=get_record(id,owner,'extraction');data=store.json(r.ref)
         if r.status!='ready' or r.version!=body.version:raise HTTPException(409,'Reload the completed extraction before re-extracting.')
         if data.get('review_status')=='reviewed':raise HTTPException(409,'This extraction is Reviewed and locked. Use Re-extract from the Review list or Aegis Agent to create a separate result.')
-        dataset,docs=routing.documents_scope(owner,r.parent_id,data['document_ids']);snapshot=routing.execution_snapshot(dataset,'extraction',data.get('model_id'));routing.require_indexes(docs,snapshot)
+        dataset,docs=routing.documents_scope(owner,r.parent_id,data['document_ids']);snapshot=routing.execution_snapshot(dataset,'extraction');routing.require_indexes(docs,snapshot)
         if any(d.status!='ready' for d in docs):raise HTTPException(409,'Wait for document indexing to finish.')
         external_check(body.allow_external,cfg=snapshot['settings'])
         with Session() as s:
             if s.scalar(select(Job).where(Job.target_id==id,Job.status.in_(['queued','running']))):raise HTTPException(409,'An extraction job is already active')
         for key in ('reviewed_at','reviewed_by','evidence_notice','record_results','record_progress','output_reference','output_sha256','output_format','review_revision','retrieval','index_versions'):
             data.pop(key,None)
-        data.update(result=None,evidence=[],original_evidence=[],edited_fields=[],sources=[],review_status='unreviewed',previous_version=r.version,allow_external=body.allow_external,model_selection=routing.public_selection(snapshot))
+        data.update(result=None,evidence=[],original_evidence=[],edited_fields=[],sources=[],review_status='unreviewed',previous_version=r.version,allow_external=body.allow_external,model_id=snapshot['model_id'],model_selection=routing.public_selection(snapshot))
         r=routing.write_version(r,data)
         with Session.begin() as s:s.get(Record,id).status='queued'
         j=enqueue(owner,'extract',id,body.allow_external,snapshot)
@@ -818,9 +821,23 @@ def retry_job(id:str,owner=Depends(auth)):
         if not target or not access.allowed(target,owner,s):raise HTTPException(404,'Target deleted')
         if target.parent_id:routing.require_active(routing.owned(target.parent_id,owner,'knowledge_base'))
         if s.scalar(select(Job).where(Job.target_id==j.target_id,Job.id!=id,Job.status.in_(['queued','running']))):raise HTTPException(409,'Another job is already active for this target')
+        if j.kind=='index':
+            if target.status=='ready':raise HTTPException(409,'This document already has a successful index. Use Reindex on the document to process it again with its current cloud models.')
+            try:saved=store.json('jobs/'+id+'.json').get('execution') or {}
+            except FileNotFoundError:saved={}
+            from .ags_models import cloud_ocr
+            cloud=saved.get('ocr_execution')
+            if not saved.get('settings',{}).get('_ocr_cloud_only') and not (cloud and cloud_ocr.eligible(cloud)):
+                raise HTTPException(409,'This old indexing job saved the local OCR route. Use Reindex on the document to apply its current cloud OCR model; the old job was not restarted.')
+            current=routing.execution_snapshot(routing.owned(target.parent_id,owner,'knowledge_base'),'embedding')
+            if not routing.same_run_models(saved,current):raise HTTPException(409,'Dataset model mappings changed. Use Reindex on the document to apply its current embedding and OCR models.')
         if j.kind=='extract':
+            if target.status=='ready':raise HTTPException(409,'This extraction already has a successful result. Use Re-extract to create a new result with current dataset models.')
             data=store.json(target.ref)
             if data.get('review_status')=='reviewed':raise HTTPException(409,'This extraction is Reviewed and locked. Create a separate re-extraction.')
+            saved=store.json('jobs/'+id+'.json').get('execution') or {}
+            current=routing.execution_snapshot(routing.owned(target.parent_id,owner,'knowledge_base'),'extraction')
+            if not routing.same_run_models(saved,current):raise HTTPException(409,'Dataset model mappings changed. Use Re-extract with current dataset models; this historical job was not restarted.')
             docs=[s.get(Record,did) for did in data['document_ids']]
             waiting=any(d and d.status in ('queued','processing') for d in docs)
             if any(not d or d.status in ('failed','deleting') for d in docs):raise HTTPException(409,'Retry the failed source indexing jobs first')
