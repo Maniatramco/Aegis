@@ -96,6 +96,13 @@ class FileStorage:
     def json(self,key): return json.loads(self.get(key))
     def put_json(self,key,data): self.put(key,json.dumps(data,ensure_ascii=False).encode())
     def delete(self,key): self.path(key).unlink(missing_ok=True)
+    def stat(self,key):
+        try:return {'size':self.path(key).stat().st_size}
+        except FileNotFoundError:return None
+    def list_prefix(self,prefix):
+        if not prefix.endswith('/'):raise ValueError('A directory prefix is required')
+        root=self.path(prefix)
+        return [{'key':prefix+str(p.relative_to(root)).replace('\\','/'),'size':p.stat().st_size} for p in root.rglob('*') if p.is_file()]
 local_store=FileStorage()
 class RoutingStorage:
     def backend(self,key):
@@ -201,15 +208,15 @@ def oci_storage(cfg=None):
     return OCIStorageAdapter(namespace=cfg.get('oci_storage_namespace') or None,bucket=cfg.get('oci_storage_bucket') or None,prefix=cfg.get('oci_storage_prefix'),region=cfg.get('oci_storage_region') or None,auth_mode=cfg.get('oci_storage_auth_mode') or None,profile=cfg.get('oci_storage_profile') or None,config_file=cfg.get('oci_storage_config_file') or None,key_file=cfg.get('oci_storage_key_file') or None)
 
 @contextmanager
-def document_lock(document_id):
+def document_lock(document_id,*,blocking=True):
     """Filesystem lock fences deletion against in-flight worker writes on shared data volume."""
     if os.name=='nt':
         import portalocker
-        lock=lambda handle:portalocker.lock(handle,portalocker.LOCK_EX)
+        lock=lambda handle:portalocker.lock(handle,portalocker.LOCK_EX|(0 if blocking else portalocker.LOCK_NB))
         unlock=portalocker.unlock
     else:
         import fcntl
-        lock=lambda handle:fcntl.flock(handle,fcntl.LOCK_EX)
+        lock=lambda handle:fcntl.flock(handle,fcntl.LOCK_EX|(0 if blocking else fcntl.LOCK_NB))
         unlock=lambda handle:fcntl.flock(handle,fcntl.LOCK_UN)
     if not all(c.isalnum() or c in '-_' for c in document_id):raise ValueError('Invalid document identifier')
     path=local_store.path('locks/'+document_id+'.lock');path.parent.mkdir(parents=True,exist_ok=True)

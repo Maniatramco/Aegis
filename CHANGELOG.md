@@ -2,6 +2,10 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.12.11 - 24 October 2026
+
+Add an administrator-only Files & processing screen under Manage workspace. Search or filter application source files and inspect pinned OCI/local storage presence, indexing/OCR progress and extraction runs. Reindex uses current dataset model mappings; New extraction reuses the saved prompt through the current-model rerun chain. Permanent deletion previews affected results/chats/workflows, requires the exact filename and unchanged impact/version, and blocks active dataset work. Remove source/merged originals, OCR, arbitrary derived files and revisions, vectors/unified knowledge entries, extraction JSON/Parquet, affected conversations/workflows, execution snapshots and processing payloads. Quarantine partial cleanup and resume from a durable plan. Preserve other originals, shared prompts/models and content-free terminal queue audit rows. Include the prepared v26.1.12.10 visible Save/New extraction changes. No schema, dependency, infrastructure or configuration changes; release evidence is recorded separately.
+
 ## v26.1.12.10 - 24 October 2026
 
 Add a labeled New extraction button to the Extract screen header so users can start the existing creation flow directly while retaining their selected dataset. Show the same label on Review. Replace shared tick-only Save controls with a Save icon and visible action text, including Save & Apply in Model Mapping, Save Model in registration, and connection/storage saves. Keep labeled actions visible on mobile and preserve disabled/submission behavior, permission checks, model routing and saved data. Frontend-only change; no backend, dependency, database or configuration changes. Local validation and publication evidence are recorded separately.

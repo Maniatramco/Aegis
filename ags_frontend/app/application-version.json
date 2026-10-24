@@ -1,6 +1,17 @@
 {
-  "version": "26.1.12.10",
+  "version": "26.1.12.11",
   "releases": [
+    {
+      "version": "26.1.12.11",
+      "date": "2026-10-24",
+      "title": "Admin files and processing",
+      "changes": [
+        "List application source files and their OCI/local storage, indexing, OCR and extraction status under Manage workspace.",
+        "Retry indexing and start new extractions with current dataset model mappings.",
+        "Preview permanent document deletion and remove related originals, revisions, OCR, indexes, result files and affected chats/workflows with resumable cleanup.",
+        "Include visible Save and New extraction buttons from the preceding prepared release."
+      ]
+    },
     {
       "version": "26.1.12.10",
       "date": "2026-10-24",

@@ -132,6 +132,30 @@ class OCIStorageAdapter:
         _safe_call(self.client.head_bucket, self.namespace, self.bucket)
         return {'ok': True, 'scope': 'bucket_read', 'write_verified': False}
 
+    def stat(self,key):
+        try:response=_safe_call(self.client.head_object,self.namespace,self.bucket,self.object_key(key))
+        except FileNotFoundError:return None
+        return {'size':int(response.headers.get('content-length',0))}
+
+    def require_permanent_delete(self):
+        bucket=_safe_call(self.client.get_bucket,self.namespace,self.bucket).data
+        if bucket.versioning!='Disabled':raise OCIServiceFailure('Permanent cleanup requires an unversioned bucket. Historical object versions must be handled before this document can be removed.')
+
+    def list_prefix(self,prefix):
+        if not prefix.endswith('/'):raise ValueError('A directory prefix is required')
+        physical=self.object_key(prefix.rstrip('/'))+'/'
+        start=None;result=[]
+        while True:
+            response=_safe_call(self.client.list_objects,self.namespace,self.bucket,prefix=physical,fields='name,size',**({'start':start} if start else {}))
+            for obj in response.data.objects:
+                if not obj.name.startswith(physical):raise OCIServiceFailure('OCI returned an object outside the requested document prefix')
+                result.append({'key':prefix+obj.name[len(physical):],'size':obj.size})
+            next_start=response.data.next_start_with
+            if not next_start:break
+            if next_start==start:raise OCIServiceFailure('OCI inventory pagination did not advance')
+            start=next_start
+        return result
+
 
 class OCIQueueAdapter:
     """Queue transport seam; jobs and idempotency remain in the database."""

@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from .. import core, dataset_models as routing
 from . import agent_workspace as workspace
+from ..admin_documents import lifecycle_guard
 
 
 class RerunInput(BaseModel):
@@ -19,6 +20,7 @@ class RerunInput(BaseModel):
 
 def install(app, auth, main):
     @app.post('/api/extractions/{id}/rerun')
+    @lifecycle_guard()
     def rerun(id: str, body: RerunInput, owner=Depends(auth)):
         source=routing.owned(id,owner,'extraction')
         key=hashlib.sha256(json.dumps([owner,body.idempotency_key]).encode()).hexdigest()

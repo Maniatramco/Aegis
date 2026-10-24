@@ -21,6 +21,7 @@ import "./workspace-flow.css";
 import { DatasetWorkspace, DatasetMappings, ModelPicker, eligibleModels, modelLabel } from "./dataset-workspace";
 import { ModelRegistration } from "./model-registration";
 import { UserManagement } from "./user-management";
+import { AdminDocuments } from "./admin-documents";
 import { AgentV2 } from "./agent-v2";
 import { AgentLogo } from "./agent-logo";
 import "./agent-shortcut.css";
@@ -67,6 +68,7 @@ type View =
   | "Prompt templates"
   | "Jobs & activity"
   | "Storage"
+  | "Files & processing"
   | "Model Registration"
   | "Model Mapping"
   | "Users & passwords";
@@ -84,6 +86,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Prompt templates", icon: FileText },
   { name: "Jobs & activity", icon: Activity },
   { name: "Storage", icon: HardDrive },
+  { name: "Files & processing", icon: FileText },
   { name: "Model Registration", icon: Layers },
   { name: "Model Mapping", icon: BookOpen },
 ];
@@ -803,6 +806,7 @@ export default function App() {
           )}
           {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard metadataApi={api} onMetadataReview={openReview} username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
           {view === "About" && <AboutAegis/>}
+          {view === "Files & processing" && (user.is_admin?<AdminDocuments api={api} onChanged={reload} onReview={openReview}/>:<div className="panel" role="alert">Administrator access is required to manage files and processing.</div>)}
           {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
           {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}
           {view === "Datasets" && <DatasetWorkspace directorySearch={directorySearch} onClearDirectorySearch={()=>setDirectorySearch('')} onDirectoryVisibilityChange={setDatasetDirectoryVisible} canManage={Boolean(user.is_admin)} datasets={kbs} models={models} documents={docs}

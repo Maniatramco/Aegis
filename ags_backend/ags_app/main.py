@@ -13,6 +13,7 @@ from .core import *
 from . import providers, reranker, workflow, temporary_files, dataset_models as routing
 from .json_documents import json_document_text
 from . import dataset_access as access
+from .admin_documents import lifecycle_guard
 
 @asynccontextmanager
 async def lifespan(app):
@@ -222,6 +223,7 @@ async def _upload_with_receipt(files,kb_id,dataset_id,allow_external,temporary_s
         except FileNotFoundError:previous=None
         if previous:
             if previous['signature']!=digest:raise HTTPException(409,'Upload idempotency key was already used for different inputs')
+            if previous.get('deleted'):raise HTTPException(409,'This upload included a permanently deleted document. Start a new upload instead of replaying the previous request.')
             if previous.get('response'):return previous['response']
             if not previous.get('uploaded'):raise HTTPException(409,'Upload submission was interrupted. Inspect dataset originals before resubmitting; automatic replay could duplicate files.')
     else:previous=None
@@ -345,6 +347,7 @@ def merged_source(id:str,key:str,action:str,page:int=1,owner=Depends(auth)):
     return Response(store.get(f'documents/{id}/merged-sources/{key}/original'),media_type={'pdf':'application/pdf','json':'application/json','txt':'text/plain; charset=utf-8'}.get(ext,'application/octet-stream'),headers={'Content-Disposition':('inline' if action=='source' else 'attachment')+"; filename*=UTF-8''"+quote(source['name']),'Content-Security-Policy':'sandbox'})
 class Consent(BaseModel):allow_external:bool=False
 @app.post('/api/documents/{id}/reindex')
+@lifecycle_guard()
 def reindex(id:str,body:Consent,owner=Depends(auth)):
     doc=get_record(id,owner,'document');dataset,_=routing.documents_scope(owner,doc.parent_id,[id]);snapshot=routing.execution_snapshot(dataset,'embedding');external_check(body.allow_external,True,snapshot['settings'])
     with document_lock('submit-'+id):
@@ -355,6 +358,7 @@ def reindex(id:str,body:Consent,owner=Depends(auth)):
 
 class ReextractDocument(Consent):confirm_reviewed:bool=False
 @app.post('/api/documents/{id}/reextract')
+@lifecycle_guard()
 def reextract_document(id:str,body:ReextractDocument,owner=Depends(auth)):
     doc=get_record(id,owner,'document')
     reviewed=[r for r in records(owner,'extraction') if id in store.json(r.ref).get('document_ids',[]) and store.json(r.ref).get('review_status')=='reviewed']
@@ -619,6 +623,7 @@ def export_extract_data(dataset_id:str='',template_id:str=Query(...,min_length=1
     return Response(payload,media_type=media,headers={'Content-Disposition':f'attachment; filename="aegis-extract-data.{format}"'})
 
 @app.post('/api/extractions')
+@lifecycle_guard()
 def create_extraction(body:ExtractInput,owner=Depends(auth)):
     key=hashlib.sha256(json.dumps([owner,body.idempotency_key or uid()]).encode()).hexdigest()
     with document_lock('extraction-submit-'+key):
@@ -808,6 +813,7 @@ def jobs(owner=Depends(auth),ids:str=''):
         raise HTTPException(422,'Choose up to 120 job references.')
     return [job_repr(j) for j in access.jobs(owner) if selected is None or j.id in selected]
 @app.post('/api/jobs/{id}/retry')
+@lifecycle_guard()
 def retry_job(id:str,owner=Depends(auth)):
     initial=None
     with Session() as s:initial=s.get(Job,id)
@@ -1161,4 +1167,6 @@ from . import metadata_relationships
 metadata_relationships.install(app, auth)
 
 from . import api_documentation
+from . import admin_documents
+admin_documents.install(app,auth)
 api_documentation.install(app,auth)

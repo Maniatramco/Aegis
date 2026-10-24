@@ -33,11 +33,12 @@ def active_submission(call):
     return not expired_upload
 
 
-def ensure_idle(dataset, session):
+def ensure_idle(dataset, session, ignore_workflows=()):
     targets = select(core.Record.id).where((core.Record.parent_id == dataset.id) | (core.Record.id == dataset.id))
     if session.scalar(select(core.Job.id).where(core.Job.target_id.in_(targets), core.Job.status.in_(['queued', 'running'])).limit(1)):
         raise HTTPException(409, 'Finish or cancel this dataset’s processing jobs before deleting it.')
     for row in session.scalars(select(core.Record).where(core.Record.kind.in_(['agent_plan', 'agent_onboarding']), core.Record.parent_id.in_([dataset.id, '']))):
+        if row.id in ignore_workflows:continue
         try:
             data = core.store.json(row.ref)
         except FileNotFoundError:

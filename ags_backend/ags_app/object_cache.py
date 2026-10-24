@@ -22,6 +22,22 @@ PREFIXES = ('jobs/', 'agent_plan/', 'agent_onboarding/', 'agent-state/',
             'documents/', 'temporary_session/', 'temporary_document/')
 
 
+def purge_payloads():
+    """Forget rebuildable payloads, including untraceable old credential scopes.
+
+    Older cache entries contain no logical key. A permanent document cleanup
+    therefore clears the bounded shared payload cache. Keep content-free
+    uncertain-write markers: losing them could trust a timed-out canonical PUT.
+    """
+    with core.document_lock('oci-cache-prune'):
+        root=core.local_store.path(ROOT+'marker').parent
+        for path in root.glob('*.json'):
+            with core.document_lock('oci-cache-'+path.stem):
+                try:entry=core.local_store.json(ROOT+path.name)
+                except FileNotFoundError:continue
+                if entry.get('state')!='pending':core.local_store.delete(ROOT+path.name)
+
+
 def eligible(key):
     return key.startswith(PREFIXES) and key.endswith('.json')
 

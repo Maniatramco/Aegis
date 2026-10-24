@@ -26,7 +26,7 @@ def dataset_ids(actor, session):
 
 
 def allowed(record, actor, session, datasets=None, models=None):
-    if not record:
+    if not record or record.status=='deleting':
         return False
     datasets = dataset_ids(actor, session) if datasets is None else datasets
     if record.kind == 'knowledge_base':
