@@ -2,6 +2,12 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.12.3 - 24 October 2026
+
+Local candidate: the Model Mapping screen previously rebuilt the enabled mapping list from only the three role defaults whenever any default changed. This removed alternative Chat/Extraction models from dataset pickers even though the backend supports multiple enabled mappings. Add explicit available-model checkboxes for Chat and Extraction, preserve all unrelated mappings and metadata when selecting a default, and prevent disabling a model used by any selected default. Saving remains dataset-scoped and uses the existing expected-version concurrency guard. Embedding mapping, pinned index generation, access checks, registrations and saved source/results are preserved. No backend, dependency or database changes.
+
+Validation and exact frontend-image review are pending. Production remains v26.1.12.2; no multi-model publication or all-dataset mapping completion is claimed.
+
 ## v26.1.12.2 - 23 October 2026
 
 Follow-up fix: real Agent acceptance after v26.1.12.1 found that non-strict tool arguments could still fail validation, document questions could select file metadata instead of text, dataset names could become filename filters, and content questions could invent saved-result predicates. Use strict function parameters only for official OpenAI and Azure endpoints, disable parallel tool selection, and represent optional wire arguments as nullable values. Remove only supported optional null values before validating canonical routes; required/unknown arguments and canonical uniqueness constraints remain enforced. Keep custom gateways and Gemini on their existing non-strict provider contracts. GPT-4o routing uses temperature 0 unless explicitly configured; answer generation settings are unchanged.

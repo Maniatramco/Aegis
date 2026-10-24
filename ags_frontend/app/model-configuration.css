@@ -54,9 +54,13 @@
 .mapping-table select{width:100%;min-width:0;min-height:36px;font-size:12px;padding:7px 28px 7px 9px;background-color:#fff;border-radius:7px}.mapping-table .mapping-tokens{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.mapping-table .pill{font-size:11px;white-space:nowrap}
 .mapping-table:focus-visible,.mapping-table select:focus-visible{outline:2px solid #2371ee;outline-offset:2px}
 .dataset-mappings>.mapping-actions{padding:12px 16px;margin:0;gap:10px}.mapping-actions>.small{font-size:11px}.mapping-actions>.btn{min-height:36px;font-size:12px;padding:8px 12px}
+.mapping-availability{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;padding:18px 16px;border-bottom:1px solid var(--line)}
+.mapping-availability fieldset{min-width:0;border:0;padding:0;margin:0}.mapping-availability legend{font-size:14px;font-weight:600;padding:0}.mapping-availability p{margin:6px 0 12px}
+.mapping-model-options{display:grid;gap:10px}.mapping-model-option{align-items:flex-start;min-width:0}.mapping-model-option input{flex-shrink:0;margin-top:3px}.mapping-model-option span{min-width:0;overflow-wrap:anywhere}.mapping-model-option small{display:block;color:var(--muted);font-size:12px;margin-top:3px}
 .model-mapping-screen .dataset-mappings>.notice{margin:12px 16px}.model-mapping-screen>p,.model-mapping-screen>button{margin:16px}
 body:has(.agent-shortcut) .dataset-mappings>.mapping-actions{padding-right:90px}
 @media (max-width: 760px) {
+  .mapping-availability{grid-template-columns:minmax(0,1fr);padding:16px 12px}
   .registration-fields { grid-template-columns: minmax(0, 1fr); }
   .registration-directory>.panel-head{padding:12px}.registration-search{margin:0 12px 12px;max-width:none}.registration-footer{padding:10px 12px}.registration-table{max-height:55dvh}.registration-table tr>:first-child{width:170px;min-width:170px}.registration-table :is(th,td){padding:10px}.registration-table tr>:last-child{width:58px;min-width:58px}
   .model-mapping-screen .mapping-dataset-select{padding:12px}.dataset-mappings>.panel-head{padding:12px}.mapping-table{max-height:55dvh}.mapping-table table{min-width:850px}.mapping-category-column{width:120px}.mapping-table :is(th,td){padding:9px 10px}.dataset-mappings>.mapping-actions{padding:10px 12px}.mapping-actions>.small{flex-basis:100%}body:has(.agent-shortcut) .dataset-mappings>.mapping-actions{padding-right:80px}

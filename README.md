@@ -2,11 +2,13 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.2` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.3` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
 **Verified live application: v26.1.12.2, published 24 October 2026 (Asia/Calcutta).** Release `release-20261023-235621-a1b9c0` deployed commit `207d10b6739a7ec272baca5a1c8e5962988984cd` (source tag `v26.1.12.2-review2`). Both ARM64 rollouts, independent receipt/configuration verification, schema comparison and all 12 public-asset byte comparisons passed. Configuration, registrations/mappings and stored data were preserved; DB_Object=N and no database scripts ran.
 
 v26.1.12.2 fixes OpenAI/Azure routing arguments and original/semantic evidence selection. Three live GPT-4o Mini questions in the deployed Agent screen passed against the existing synthetic SWIFT Alliance Demo dataset: broad, named-file and explicit semantic search. Each answer correctly stated that the network ACK does not confirm settlement or beneficiary credit, with a working citation to the original indexed ACK passage. Hybrid retrieval, reranking, model generation and answer validation completed. Earlier local validation passed 216 focused backend tests, 239 frontend tests, both TypeScript checks and three real-model isolated Agent tests. This is targeted acceptance, not a full-suite or every-provider quality guarantee. See CHANGELOG.md for image digests and the exact receipt.
+
+Local candidate v26.1.12.3 lets administrators enable multiple Chat and Extraction models for each dataset, with one default per role. Changing a default preserves mapped alternatives; the selected defaults cannot be disabled. Embedding selection and its existing reindex safeguards remain unchanged. Validation and publication are pending; the live application remains v26.1.12.2.
 
 Version v26.1.12.0 adds direct Anthropic Claude Chat registration and native Messages API function calling. This change was deployed to the existing Mumbai application on 23 October 2026. Real-key acceptance is pending.
 

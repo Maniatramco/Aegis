@@ -7,6 +7,7 @@ import "./model-configuration.css";
 import {useDatasetLifecycle} from "./dataset-lifecycle";
 import {DirectoryRows} from "./dataset-directory";
 import {AgentOnboarding} from "./agent-onboarding";
+import {selectMappingDefault,setMappingEnabled,type MappingDraft} from './dataset-mapping-draft';
 
 type Entity = Record<string, any>;
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
@@ -56,7 +57,6 @@ export function DatasetWorkspace({datasets,models,documents,onSelect,onCreated,a
 }
 
 export function DatasetMappings({ dataset, models, api, run, busy, reload, notify, onConnections }: { dataset: Entity; models: Entity[]; api: Api; run: (fn: () => Promise<void>) => Promise<void>; busy: boolean; reload: () => void; notify: (text: string) => void; onConnections: () => void }) {
-  type MappingDraft = { mappings: Entity[]; chatDefault: string; extractDefault: string; embedding: string };
   const savedDraft = (source: Entity): MappingDraft => ({
     mappings: (source.mappings || (source.models || []).map((m: Entity) => ({ model_id: m.id, enabled: m.mapping_enabled !== false }))).map((m: Entity) => ({ ...m })),
     chatDefault: source.default_chat_model_id || "",
@@ -90,7 +90,7 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
   const candidates = (capability: string) => models.filter(m => m.enabled !== false && m.capabilities?.includes(capability));
   const changeDefault = (key: "chatDefault" | "extractDefault" | "embedding", value: string) => {
     dirty.current = true;
-    setDraft(current => ({ ...current, [key]: value, mappings: [...new Set([key === "chatDefault" ? value : current.chatDefault, key === "extractDefault" ? value : current.extractDefault, key === "embedding" ? value : current.embedding].filter(Boolean))].map(model_id => ({model_id, enabled:true})) }));
+    setDraft(current => selectMappingDefault(current,key,value));
     if (key === "embedding") setAckReindex(false);
   };
   const selectedEmbedding = models.find(m => m.id === embedding);
@@ -102,7 +102,7 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
     <div className="panel-head"><span className="pill">3 required categories</span><ActionButton className="btn" onClick={onConnections} label="Register model" action="add"/></div>
     <div className="mapping-table" role="region" aria-label="Dataset model mappings table" tabIndex={0}>
       <table aria-label="Dataset model mappings"><colgroup><col className="mapping-category-column"/><col className="mapping-model-column"/><col/><col/><col/><col/></colgroup>
-        <thead><tr><th scope="col">Category</th><th scope="col">Selected model</th><th scope="col">Provider</th><th scope="col" className="mapping-tokens" title="Configured input limit for embeddings; total context limit for chat and extraction">Input / context</th><th scope="col" className="mapping-tokens" title="Configured maximum output tokens">Output</th><th scope="col">Status</th></tr></thead>
+        <thead><tr><th scope="col">Category</th><th scope="col">Default model</th><th scope="col">Provider</th><th scope="col" className="mapping-tokens" title="Configured input limit for embeddings; total context limit for chat and extraction">Input / context</th><th scope="col" className="mapping-tokens" title="Configured maximum output tokens">Output</th><th scope="col">Status</th></tr></thead>
         <tbody>{[{label:"Embedding model", cap:"embedding", value:embedding, key:"embedding" as const}, {label:"Chat model", cap:"chat", value:chatDefault, key:"chatDefault" as const}, {label:"Extraction model", cap:"extraction", value:extractDefault, key:"extractDefault" as const}].map(f=>{
           const options=candidates(f.cap);const selected=options.find(m=>m.id===f.value);
           const purpose=f.cap==='embedding'?'Indexing and search':f.cap==='chat'?'Dataset questions':'Structured extraction';
@@ -118,6 +118,21 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
           </tr>;
         })}</tbody>
       </table>
+    </div>
+    <div className="mapping-availability">
+      {(['chat','extraction'] as const).map(capability=><fieldset key={capability} disabled={busy||remoteChanged}>
+        <legend>Available {capability} models</legend>
+        <p className="muted small">Enable models to offer them in this dataset's {capability==='chat'?'chat':'extraction'} selector. Keep one default above.</p>
+        <div className="mapping-model-options">{candidates(capability).map(model=>{
+          const isDefault=[chatDefault,extractDefault,embedding].includes(model.id);
+          const enabled=mappings.some(item=>item.model_id===model.id&&item.enabled!==false);
+          return <label className="check mapping-model-option" key={model.id}>
+            <input type="checkbox" aria-label={`Enable ${modelLabel(model)} for ${capability}`} checked={enabled} disabled={isDefault}
+              onChange={event=>{dirty.current=true;setDraft(current=>setMappingEnabled(current,model.id,event.target.checked));}}/>
+            <span>{modelLabel(model)}<small>{model.provider_model}{isDefault?' · Dataset default':''}</small></span>
+          </label>;
+        })}</div>
+      </fieldset>)}
     </div>
     {embeddingChanged && <div className="notice warn"><Settings2 size={17} /><div><strong>Changing the embedding model requires reindexing.</strong><p>Existing documents must be reindexed before they can be used again. Changing chat or extraction models does not change this embedding space.</p><label className="check"><input type="checkbox" checked={ackReindex} onChange={e => setAckReindex(e.target.checked)} />I understand existing documents will need reindexing.</label></div></div>}
     <div className="row between wrap mapping-actions"><span className="muted small">Index generation {dataset.index_generation || 1} · Connection credentials remain encrypted</span><ActionButton className="btn primary" disabled={busy || remoteChanged || !complete || embeddingChanged && !ackReindex} onClick={() => run(async () => { const saved = await api(`/datasets/${dataset.id}/models`, "PUT", { mappings, default_chat_model_id: chatDefault || null, default_extraction_model_id: extractDefault || null, embedding_model_id: embedding || null, expected_version: dataset.version, acknowledge_reindex: ackReindex }); setDraft(savedDraft(saved)); dirty.current = false; notify(embeddingChanged ? "Mappings saved. Reindex existing documents with the new embedding model." : "Mappings applied. The next operation will use these selections."); reload(); })} label="Save & Apply" action="save"/></div>
