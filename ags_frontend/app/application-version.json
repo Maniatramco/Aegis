@@ -1,6 +1,16 @@
 {
-  "version": "26.1.12.5",
+  "version": "26.1.12.6",
   "releases": [
+    {
+      "version": "26.1.12.6",
+      "date": "2026-10-24",
+      "title": "Choose OCR per dataset",
+      "changes": [
+        "Choose a compatible OpenAI or Gemini OCR model independently in Model Mapping, alongside Embedding, Chat and Extraction.",
+        "Keep Automatic provider routing or explicitly use the configured local OCR service.",
+        "Apply the choice to new indexing jobs, retain queued work and embedding settings, and reindex existing documents to read their images again."
+      ]
+    },
     {
       "version": "26.1.12.5",
       "date": "2026-10-24",

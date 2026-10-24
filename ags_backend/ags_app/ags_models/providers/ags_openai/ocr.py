@@ -2,9 +2,8 @@
 import base64
 import hashlib
 import json
-import re
 from .... import core, runtime_config
-from ...cloud_ocr import provider
+from ...cloud_ocr import provider, eligible
 from ...connection import ModelConnection
 from ...parameters import validate_parameters
 
@@ -12,7 +11,7 @@ from ...parameters import validate_parameters
 def configure(snapshot, limits):
     cfg = snapshot['settings']
     connection = cfg.get('model_connection') or {}
-    if provider(snapshot) != 'openai' or not re.fullmatch(r'gpt-4o(?:-mini)?(?:-\d{4}-\d{2}-\d{2})?', snapshot['provider_model']):
+    if provider(snapshot) != 'openai' or not eligible(snapshot):
         raise ValueError('OpenAI OCR requires a mapped GPT-4o or GPT-4o Mini extraction model; embedding models cannot read images.')
     identity = {key: snapshot.get(key) for key in ('model_id', 'model_version', 'connection_profile_id', 'connection_profile_version', 'provider_model')}
     identity.update(connection=connection, parameters=cfg.get('extra_parameters', {}))

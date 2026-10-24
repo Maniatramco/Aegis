@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.5` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.6` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+v26.1.12.6 adds an independent OCR selector to each dataset's Model Mapping screen. Choose an eligible OpenAI/Gemini extraction registration, Automatic or the configured local OCR service. The selected model is enabled and pinned for subsequent indexing jobs without changing embedding selection or index generation; reindex a document to read its images again. Existing datasets keep Automatic and older mapping clients preserve a saved explicit OCR choice. Prepared locally; publication and live acceptance are pending.
 
 v26.1.12.5 uses a dataset's saved GPT-4o or GPT-4o Mini extraction connection for OCR of scanned PDFs and embedded Word images. OpenAI OCR is explicitly disclosed before processing, jobs pin the model and credential-profile version, and cloud failures do not fall back to laptop Ollama. Embeddings remain a separate text-only step; no dataset embedding mappings are changed by this release. Prepared locally; publication and live acceptance are pending.
 

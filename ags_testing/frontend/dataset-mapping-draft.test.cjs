@@ -44,3 +44,23 @@ test('reenabling an alternative does not duplicate its mapping',()=>{
  const next=setMappingEnabled(setMappingEnabled(initial(),'full-chat',false),'full-chat',true);
  assert.equal(next.mappings.filter(m=>m.model_id==='full-chat').length,1);assert.equal(next.mappings.find(m=>m.model_id==='full-chat').enabled,true);
 });
+
+test('choosing OCR preserves the extraction and embedding defaults and enables its mapping',()=>{
+ const before=initial(),next=selectMappingDefault(before,'ocr','dedicated-vision');
+ assert.equal(next.ocr,'dedicated-vision');assert.equal(next.extractDefault,before.extractDefault);assert.equal(next.embedding,before.embedding);
+ assert.deepEqual(next.mappings.at(-1),{model_id:'dedicated-vision',enabled:true});
+ assert.equal(setMappingEnabled(next,'dedicated-vision',false),next);
+});
+
+test('Automatic and configured local OCR never create fake model mappings',()=>{
+ for(const value of ['', 'local']){
+  const before=initial(),next=selectMappingDefault(before,'ocr',value);
+  assert.deepEqual(next.mappings,before.mappings);assert.equal(next.ocr,value);
+ }
+});
+
+test('changing extraction does not overwrite the explicit OCR selection',()=>{
+ const selected=selectMappingDefault(initial(),'ocr','full-extract');
+ const next=selectMappingDefault(selected,'extractDefault','mini-extract');
+ assert.equal(next.ocr,'full-extract');assert.equal(setMappingEnabled(next,'full-extract',false),next);
+});

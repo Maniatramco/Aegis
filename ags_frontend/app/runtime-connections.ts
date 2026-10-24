@@ -20,14 +20,14 @@ export function runtimeConnections(base:string,env:Environment){
 }
 
 export type ModelConnection={id?:string;provider?:string;provider_model?:string;enabled?:boolean;mapping_enabled?:boolean;connection?:{protocol?:string;endpoint?:string;region?:string}};
-export type ModelDataset={id?:string;active?:boolean;models?:ModelConnection[];default_chat_model_id?:string;default_extraction_model_id?:string;embedding_model_id?:string};
+export type ModelDataset={id?:string;active?:boolean;models?:ModelConnection[];default_chat_model_id?:string;default_extraction_model_id?:string;embedding_model_id?:string;ocr_model_id?:string|null};
 
 // Use already-authorized dataset metadata, not model names or a stale deployment
 // hint. Reading this summary never calls a model provider or exposes credentials.
 export function modelConnectionSummary(datasets:ModelDataset[],datasetId?:string){
  const scope=datasetId?datasets.filter(dataset=>dataset.id===datasetId):datasets.filter(dataset=>dataset.active!==false);
  const models:ModelConnection[]=scope.flatMap(dataset=>{
-  const defaults=new Set([dataset.default_chat_model_id,dataset.default_extraction_model_id,dataset.embedding_model_id].filter(Boolean));
+  const defaults=new Set([dataset.default_chat_model_id,dataset.default_extraction_model_id,dataset.embedding_model_id,dataset.ocr_model_id].filter(Boolean));
   return (dataset.models||[]).filter(model=>model.enabled!==false&&model.mapping_enabled!==false&&(!defaults.size||defaults.has(model.id)));
  });
  const hosts=new Set<Location>(),names=new Set<string>(),endpoints=new Set<string>(),regions=new Set<string>();

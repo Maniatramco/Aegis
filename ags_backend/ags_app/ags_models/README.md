@@ -83,6 +83,14 @@ release is requested; no database schema change is needed.
 
 ## Cloud OCR and cloud-only datasets
 
+Model Mapping exposes a separate `ocr_model_id` choice. A registered compatible
+OpenAI/Gemini extraction model can be selected independently of the extraction
+default. `null` keeps automatic routing and `local` explicitly uses the existing
+configured local OCR service. The selected model must be enabled, mapped and
+accessible to the dataset owner; embeddings and chat-only registrations are
+ineligible. Legacy clients omitting the field preserve its saved value. Changing
+OCR does not change embeddings or index generation; reindex documents to rerun OCR.
+
 A dataset mapped to a `gemini-*` extraction model on the Gemini Developer API
 also uses that registration for scanned PDF pages and embedded DOCX images.
 Index jobs pin its model, profile version and encrypted credential reference;

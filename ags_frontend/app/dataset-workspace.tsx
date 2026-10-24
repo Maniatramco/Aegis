@@ -62,9 +62,10 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
     chatDefault: source.default_chat_model_id || "",
     extractDefault: source.default_extraction_model_id || "",
     embedding: source.embedding_model_id || "",
+    ocr: source.ocr_model_id || "",
   });
   const [draft, setDraft] = useState<MappingDraft>(() => savedDraft(dataset));
-  const { mappings, chatDefault, extractDefault, embedding } = draft;
+  const { mappings, chatDefault, extractDefault, embedding, ocr = "" } = draft;
   const [ackReindex, setAckReindex] = useState(false);
 
   const [remoteChanged, setRemoteChanged] = useState(false);
@@ -88,18 +89,21 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
     loadSavedDraft();
   }, [dataset.id, dataset.version]);
   const candidates = (capability: string) => models.filter(m => m.enabled !== false && m.capabilities?.includes(capability));
-  const changeDefault = (key: "chatDefault" | "extractDefault" | "embedding", value: string) => {
+  const changeDefault = (key: "chatDefault" | "extractDefault" | "embedding" | "ocr", value: string) => {
     dirty.current = true;
     setDraft(current => selectMappingDefault(current,key,value));
     if (key === "embedding") setAckReindex(false);
   };
   const selectedEmbedding = models.find(m => m.id === embedding);
-  const complete=candidates('chat').some(m=>m.id===chatDefault)&&candidates('extraction').some(m=>m.id===extractDefault)&&candidates('embedding').some(m=>m.id===embedding);
+  const ocrCandidates = models.filter(m=>m.enabled!==false&&m.ocr_eligible===true);
+  const selectedOcr = ocrCandidates.find(m=>m.id===ocr);
+  const complete=candidates('chat').some(m=>m.id===chatDefault)&&candidates('extraction').some(m=>m.id===extractDefault)&&candidates('embedding').some(m=>m.id===embedding)&&(!ocr||ocr==='local'||!!selectedOcr);
+  const ocrChanged = ocr !== (dataset.ocr_model_id || '');
   const pinnedEmbedding = dataset.embedding_selection;
   const embeddingChanged = !!dataset.embedding_model_id && (embedding !== dataset.embedding_model_id || !!pinnedEmbedding && !!selectedEmbedding && (pinnedEmbedding.model_version !== selectedEmbedding.version || pinnedEmbedding.connection_profile_version !== selectedEmbedding.connection_profile_version));
   return <div className="dataset-mappings">
     {remoteChanged && <div className="notice warn"><Settings2 size={16} /><div><strong>Saved mappings changed while you were editing.</strong><p>Your unsaved selections are preserved. Load the latest saved mappings before making further changes.</p><button className="btn" onClick={loadSavedDraft}>Discard draft and load saved mappings</button></div></div>}
-    <div className="panel-head"><span className="pill">3 required categories</span><ActionButton className="btn" onClick={onConnections} label="Register model" action="add"/></div>
+    <div className="panel-head"><span className="pill">3 required categories · OCR configurable</span><ActionButton className="btn" onClick={onConnections} label="Register model" action="add"/></div>
     <div className="mapping-table" role="region" aria-label="Dataset model mappings table" tabIndex={0}>
       <table aria-label="Dataset model mappings"><colgroup><col className="mapping-category-column"/><col className="mapping-model-column"/><col/><col/><col/><col/></colgroup>
         <thead><tr><th scope="col">Category</th><th scope="col">Default model</th><th scope="col">Provider</th><th scope="col" className="mapping-tokens" title="Configured input limit for embeddings; total context limit for chat and extraction">Input / context</th><th scope="col" className="mapping-tokens" title="Configured maximum output tokens">Output</th><th scope="col">Status</th></tr></thead>
@@ -116,26 +120,39 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
             <td className="mapping-tokens" title={f.cap==='embedding'?'Not applicable to embeddings':'Maximum output tokens'}>{f.cap==='embedding'?'—':selected?.max_output_tokens?.toLocaleString()||'—'}</td>
             <td><span className={`pill ${selected?'green':'amber'}`} title={selected?'Model selected for this category; Save & Apply commits the mapping':'A model is required for this category'}>{selected?'Selected':'Required'}</span></td>
           </tr>;
-        })}</tbody>
+        })}<tr>
+          <th scope="row"><label htmlFor="mapping-ocr">OCR</label><small>Scans and document images</small></th>
+          <td><select id="mapping-ocr" aria-label="OCR model" title={selectedOcr?`${modelLabel(selectedOcr)} · ${selectedOcr.provider_model}`:ocr==='local'?'Configured local OCR service':'Automatic · dataset default'} value={ocr} onChange={e=>changeDefault('ocr',e.target.value)} disabled={busy}>
+            <option value="">Automatic · dataset default</option><option value="local">Configured local OCR service</option>
+            {ocrCandidates.map(model=><option key={model.id} value={model.id}>{modelLabel(model)} · {model.provider_model}</option>)}
+            {ocr&&ocr!=='local'&&!selectedOcr&&<option value={ocr} disabled>Saved OCR model unavailable</option>}
+          </select></td>
+          <td>{selectedOcr?(selectedOcr.connection?.endpoint?.includes('api.openai.com')?'OpenAI':'Google Gemini'):ocr==='local'?'Ollama':'Automatic'}</td>
+          <td className="mapping-tokens">{selectedOcr?.context_limit?.toLocaleString()||'—'}</td>
+          <td className="mapping-tokens">{selectedOcr?.max_output_tokens?.toLocaleString()||'—'}</td>
+          <td><span className={`pill ${!ocr||ocr==='local'||selectedOcr?'green':'amber'}`}>{!ocr?'Automatic':ocr==='local'?'Local':selectedOcr?'Selected':'Unavailable'}</span></td>
+        </tr></tbody>
       </table>
     </div>
+    <p className="muted small">OCR reads text from scanned PDFs and images in Word documents. Choose a compatible OpenAI or Gemini extraction registration, or use the configured local service. Automatic follows a compatible extraction model or uses local OCR.</p>
+    {ocrChanged&&<p className="notice" role="status">The next indexing job will use this OCR choice. Reindex existing documents to read their images again; their embedding model stays the same.</p>}
     <div className="mapping-availability">
       {(['chat','extraction'] as const).map(capability=><fieldset key={capability} disabled={busy||remoteChanged}>
         <legend>Available {capability} models</legend>
         <p className="muted small">Enable models to offer them in this dataset's {capability==='chat'?'chat':'extraction'} selector. Keep one default above.</p>
         <div className="mapping-model-options">{candidates(capability).map(model=>{
-          const isDefault=[chatDefault,extractDefault,embedding].includes(model.id);
+          const isDefault=[chatDefault,extractDefault,embedding,ocr==='local'?'':ocr].includes(model.id);
           const enabled=mappings.some(item=>item.model_id===model.id&&item.enabled!==false);
           return <label className="check mapping-model-option" key={model.id}>
             <input type="checkbox" aria-label={`Enable ${modelLabel(model)} for ${capability}`} checked={enabled} disabled={isDefault}
               onChange={event=>{dirty.current=true;setDraft(current=>setMappingEnabled(current,model.id,event.target.checked));}}/>
-            <span>{modelLabel(model)}<small>{model.provider_model}{isDefault?' · Dataset default':''}</small></span>
+            <span>{modelLabel(model)}<small>{model.provider_model}{[chatDefault,extractDefault,embedding].includes(model.id)?' · Dataset default':''}{ocr===model.id?' · OCR default':''}</small></span>
           </label>;
         })}</div>
       </fieldset>)}
     </div>
     {embeddingChanged && <div className="notice warn"><Settings2 size={17} /><div><strong>Changing the embedding model requires reindexing.</strong><p>Existing documents must be reindexed before they can be used again. Changing chat or extraction models does not change this embedding space.</p><label className="check"><input type="checkbox" checked={ackReindex} onChange={e => setAckReindex(e.target.checked)} />I understand existing documents will need reindexing.</label></div></div>}
-    <div className="row between wrap mapping-actions"><span className="muted small">Index generation {dataset.index_generation || 1} · Connection credentials remain encrypted</span><ActionButton className="btn primary" disabled={busy || remoteChanged || !complete || embeddingChanged && !ackReindex} onClick={() => run(async () => { const saved = await api(`/datasets/${dataset.id}/models`, "PUT", { mappings, default_chat_model_id: chatDefault || null, default_extraction_model_id: extractDefault || null, embedding_model_id: embedding || null, expected_version: dataset.version, acknowledge_reindex: ackReindex }); setDraft(savedDraft(saved)); dirty.current = false; notify(embeddingChanged ? "Mappings saved. Reindex existing documents with the new embedding model." : "Mappings applied. The next operation will use these selections."); reload(); })} label="Save & Apply" action="save"/></div>
+    <div className="row between wrap mapping-actions"><span className="muted small">Index generation {dataset.index_generation || 1} · Connection credentials remain encrypted</span><ActionButton className="btn primary" disabled={busy || remoteChanged || !complete || embeddingChanged && !ackReindex} onClick={() => run(async () => { const saved = await api(`/datasets/${dataset.id}/models`, "PUT", { mappings, default_chat_model_id: chatDefault || null, default_extraction_model_id: extractDefault || null, embedding_model_id: embedding || null, ocr_model_id: ocr || null, expected_version: dataset.version, acknowledge_reindex: ackReindex }); setDraft(savedDraft(saved)); dirty.current = false; notify(embeddingChanged ? "Mappings saved. Reindex existing documents with the new embedding model." : "Mappings applied. The next operation will use these selections."); reload(); })} label="Save & Apply" action="save"/></div>
   </div>;
 }
 
