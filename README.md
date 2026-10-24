@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.4` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.5` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+v26.1.12.5 uses a dataset's saved GPT-4o or GPT-4o Mini extraction connection for OCR of scanned PDFs and embedded Word images. OpenAI OCR is explicitly disclosed before processing, jobs pin the model and credential-profile version, and cloud failures do not fall back to laptop Ollama. Embeddings remain a separate text-only step; no dataset embedding mappings are changed by this release. Prepared locally; publication and live acceptance are pending.
 
 v26.1.12.4 routes broad knowledge-base summaries to read-only chat over the selected dataset/document scope. Short requests such as “summary” use model routing rather than assuming a prior extraction answer. Original-only and saved-result summaries remain distinct; all grounded answers retain hybrid retrieval, reranking and citation validation. Published and verified as described below.
 

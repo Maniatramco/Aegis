@@ -1,4 +1,4 @@
-"""Page OCR with dataset-pinned Gemini or the existing local vision service.
+"""Page OCR with dataset-pinned cloud models or the existing local vision service.
 
 VLM transcription is unverified source text, never calibrated confidence or
 verified image coordinates. Originals remain the authority for review.
@@ -46,8 +46,8 @@ def config():
         from . import core
         cloud = (core._execution.get() or {}).get('ocr_execution')
         if cloud:
-            from .ags_models.providers.ags_gcp import ocr as gemini_ocr
-            return gemini_ocr.configure(cloud, dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch))
+            from .ags_models import cloud_ocr
+            return cloud_ocr.adapter(cloud_ocr.provider(cloud)).configure(cloud, dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch))
         model = local_model_name(runtime_config.get('AEGIS_OCR_MODEL'))
         from .model_connections import validate_endpoint
         endpoint = validate_endpoint(runtime_config.get('AEGIS_OCR_URL') or os.getenv('AEGIS_OLLAMA_URL', 'http://127.0.0.1:11434'), 'ollama')
@@ -78,12 +78,13 @@ def available(cfg=None):
     cfg = cfg or config()
     if not cfg['enabled']:
         raise OcrError('OCR is disabled. Enable AEGIS_OCR_ENABLED or upload a searchable PDF.')
-    if cfg.get('provider') == 'gemini':
+    if cfg.get('provider') in ('gemini', 'openai'):
+        label = 'OpenAI' if cfg['provider'] == 'openai' else 'Gemini'
         try:
-            from .ags_models.providers.ags_gcp import ocr as gemini_ocr
-            return gemini_ocr.available(cfg)
+            from .ags_models import cloud_ocr
+            return cloud_ocr.adapter(cfg['provider']).available(cfg)
         except Exception:
-            raise OcrError('Gemini OCR configuration or saved credentials are unavailable. Check the dataset extraction registration.') from None
+            raise OcrError(label + ' OCR configuration or saved credentials are unavailable. Check the dataset extraction registration.') from None
     data = call(cfg, '/api/show', {'model': cfg['model']}, timeout=10)
     if 'vision' not in data.get('capabilities', []):
         raise OcrError('The configured OCR model does not support images. Install qwen2.5vl:3b or another compatible local vision model.')
@@ -139,12 +140,13 @@ def transcribe(image, cfg):
     # Qwen2.5-VL on Ollama 0.35.1 can repeat tokens indefinitely under the
     # nested schema grammar. JSON mode plus an explicit shape is compatible;
     # the same strict schema is still validated before any text is indexed.
-    if cfg.get('provider') == 'gemini':
+    if cfg.get('provider') in ('gemini', 'openai'):
+        label = 'OpenAI' if cfg['provider'] == 'openai' else 'Gemini'
         try:
-            from .ags_models.providers.ags_gcp import ocr as gemini_ocr
-            result = gemini_ocr.transcribe(image, cfg, INSTRUCTION, SCHEMA)
+            from .ags_models import cloud_ocr
+            result = cloud_ocr.adapter(cfg['provider']).transcribe(image, cfg, INSTRUCTION, SCHEMA)
         except Exception:
-            raise OcrError('Gemini OCR request failed. Check model access, saved API credentials, quota and service availability. No partial page was indexed.') from None
+            raise OcrError(label + ' OCR request failed. Check model access, saved API credentials, quota and service availability. No partial page was indexed.') from None
     else:
         result = call(cfg, '/api/chat', {'model': cfg['model'], 'stream': False, 'format': 'json',
         'messages': [{'role': 'system', 'content': INSTRUCTION}, {'role': 'user',

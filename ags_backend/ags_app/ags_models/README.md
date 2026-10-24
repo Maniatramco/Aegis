@@ -81,14 +81,27 @@ readiness is established. Existing Embedding/Extraction mappings and processing
 agents keep their contracts. Publish backend and frontend together when a live
 release is requested; no database schema change is needed.
 
-## Gemini OCR and cloud-only datasets
+## Cloud OCR and cloud-only datasets
 
 A dataset mapped to a `gemini-*` extraction model on the Gemini Developer API
 also uses that registration for scanned PDF pages and embedded DOCX images.
 Index jobs pin its model, profile version and encrypted credential reference;
 the API key is never copied into jobs or document metadata. Upload approval
-lists Gemini OCR as an image destination. Other datasets retain their own
-local OCR setup. A cloud OCR failure never falls back to Ollama.
+lists Gemini OCR as an image destination.
+
+Datasets whose default extraction registration uses GPT-4o or GPT-4o Mini on
+`https://api.openai.com/v1` use that saved OpenAI connection for scanned PDF
+pages and embedded DOCX images. Dated GPT-4o and GPT-4o Mini snapshots are
+supported too. OpenAI OCR is disclosed as an image destination, including when
+embeddings are local. Consent identities include the OCR endpoint, model and
+pinned credential-profile version. Unsupported OpenAI extraction models fail
+before inference; embedding models cannot transcribe images.
+
+Other datasets retain their own local OCR setup. Cloud OCR failures never fall
+back to Ollama. The embedding registration remains independent: changing OCR
+does not change dataset embeddings or index generation. Previously queued jobs
+retain their saved configuration, including job retries. Use the document's
+Reindex action after release to create a new cloud OCR snapshot.
 
 The adapter in `providers/ags_gcp/ocr.py` uses Google's
 [image input API](https://ai.google.dev/gemini-api/docs/openai#image-understanding).
