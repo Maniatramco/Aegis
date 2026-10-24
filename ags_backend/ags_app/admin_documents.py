@@ -87,6 +87,21 @@ def impact_token(saved):
     return hashlib.sha256(json.dumps({key:saved[key] for key in ('id','version','records','job_ids')},sort_keys=True).encode()).hexdigest()
 
 
+def recorded_mapping_matches(row,index,configuration,models):
+    """Catalog reads use saved mappings. Provider checks belong to submissions."""
+    if not index or index.get('dataset_id')!=row.parent_id or index.get('index_generation')!=configuration.get('index_generation'):return False
+    selected=index.get('model_selection') or {};embedding=configuration.get('embedding_snapshot') or {}
+    if selected.get('model_id')!=configuration.get('embedding_model_id'):return False
+    if any(selected.get(key)!=embedding.get(key) for key in ('model_id','model_version','connection_profile_version')):return False
+    model=models.get(selected.get('model_id'))
+    if not model or selected.get('model_version')!=model.version:return False
+    if index.get('uses_ocr'):
+        ocr=index.get('ocr_selection') or {};current=configuration.get('ocr_model_id') or configuration.get('default_extraction_model_id')
+        model=models.get(current)
+        if ocr.get('model_id')!=current or not model or ocr.get('model_version')!=model.version:return False
+    return True
+
+
 def cleanup_knowledge(ids):
     from . import providers
     from qdrant_client.models import PointIdsList
@@ -213,6 +228,7 @@ def install(app,auth):
         with core.Session() as session:
             docs=list(session.scalars(select(core.Record).where(core.Record.kind=='document').order_by(core.Record.created_at.desc())))
             datasets={r.id:r for r in session.scalars(select(core.Record).where(core.Record.kind=='knowledge_base'))}
+            models={r.id:r for r in session.scalars(select(core.Record).where(core.Record.kind=='model'))}
             extractions=list(session.scalars(select(core.Record).where(core.Record.kind=='extraction').order_by(core.Record.created_at.desc())))
             jobs=list(session.scalars(select(core.Job).order_by(core.Job.created_at.desc())))
         grouped={};warnings=0
@@ -222,15 +238,22 @@ def install(app,auth):
             for did in data.get('document_ids',[]):grouped.setdefault(did,[]).append(core.representation(result)|{'review_status':data.get('review_status','unreviewed'),'template_id':data.get('template_id')})
         docs=[d for d in docs if (not dataset_id or d.parent_id==dataset_id) and (not search or search.casefold() in (d.name+' '+datasets.get(d.parent_id,d).name+' '+d.id).casefold())]
         items=[]
-        snapshots={}
+        configurations={};adapters={}
         for row in docs[offset:offset+limit]:
-            try:public=routing.document_public(row,snapshots)
-            except HTTPException:public=core.representation(row)|{'requires_reindex':None}
+            dataset=datasets.get(row.parent_id)
+            if row.parent_id not in configurations:
+                try:configurations[row.parent_id]=core.store.json(dataset.ref) if dataset else {}
+                except (FileNotFoundError,ValueError):configurations[row.parent_id]={}
+            try:index_metadata=core.store.json('documents/'+row.id+'/index.json')
+            except (FileNotFoundError,ValueError):index_metadata={}
+            matches=recorded_mapping_matches(row,index_metadata,configurations[row.parent_id],models)
+            public=core.representation(row)|{'dataset_id':row.parent_id or None,'requires_reindex':not matches,'model_check':'saved_mapping'}
+            if not matches and row.status=='ready':public['index_notice']='The saved index differs from the current dataset mapping. Reindex to apply the current models.'
             index=next((j for j in jobs if j.target_id==row.id),None)
             try:ocr=core.store.json('documents/'+row.id+'/parsed.json').get('ocr')
             except FileNotFoundError:ocr=None
             items.append(public|{'dataset_name':datasets.get(row.parent_id,row).name,'dataset_deleted':bool(datasets.get(row.parent_id) and datasets[row.parent_id].status=='deleted'),
-                'storage':document_storage.original(row),'index_job':core.job_repr(index) if index else None,'ocr':ocr,'extractions':grouped.get(row.id,[])})
+                'storage':document_storage.original(row,adapters),'index_job':core.job_repr(index) if index else None,'ocr':ocr,'extractions':grouped.get(row.id,[])})
         return {'items':items,'total':len(docs),'offset':offset,'limit':limit,'metadata_warnings':warnings,'datasets':[{'id':r.id,'name':r.name} for r in datasets.values()]}
 
     @app.get('/api/admin/documents/{id}/deletion-preview')

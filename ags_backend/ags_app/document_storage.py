@@ -60,9 +60,15 @@ def erase(prefixes,keys=()):
     return len(items)
 
 
-def original(record):
+def original(record,adapters=None):
     destination=storage_config.route(record.ref)
-    try:state='present' if adapter(destination).stat(record.ref) else 'missing'
+    try:
+        if adapters is None:backend=adapter(destination)
+        else:
+            identity=json.dumps(destination,sort_keys=True)
+            if identity not in adapters:adapters[identity]=adapter(destination)
+            backend=adapters[identity]
+        state='present' if backend.stat(record.ref) else 'missing'
     except Exception:state='unavailable'
     return {'provider':destination['storage_provider'],'bucket':destination.get('oci_storage_bucket','') if destination['storage_provider']=='oci' else '',
         'key':((destination.get('oci_storage_prefix','').strip('/')+'/') if destination['storage_provider']=='oci' and destination.get('oci_storage_prefix') else '')+record.ref,

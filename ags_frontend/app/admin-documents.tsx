@@ -5,7 +5,7 @@ import {WorkflowStepper} from './workflow-stepper';
 import './admin-documents.css';
 
 type Entity=Record<string,any>;
-type Api=(path:string,method?:string,body?:any)=>Promise<any>;
+type Api=(path:string,method?:string,body?:any,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;
 const stamp=(v:number)=>new Date(v*1000).toLocaleString();
 const active=(status:string)=>['queued','running','processing','blocked'].includes(status);
 const stageNames:Record<string,string>={upload:'Upload',extract:'Text / OCR',index:'Index',ready:'Ready'};
@@ -17,12 +17,14 @@ export function AdminDocuments({api,onChanged,onReview}:{api:Api;onChanged:()=>v
  const [data,setData]=useState<Entity>({items:[],datasets:[],total:0}),[search,setSearch]=useState(''),[dataset,setDataset]=useState(''),[offset,setOffset]=useState(0);
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [operation,setOperation]=useState<Entity|null>(null),[confirmation,setConfirmation]=useState(''),[consent,setConsent]=useState(false),[selected,setSelected]=useState('');
- const sequence=useRef(0),mounted=useRef(true),form=useRef<HTMLDivElement>(null);
+ const sequence=useRef(0),mounted=useRef(true),form=useRef<HTMLDivElement>(null),inFlight=useRef(0);
  const load=useCallback(async(quiet=false)=>{
+  if(quiet&&inFlight.current)return;
+  inFlight.current++;
   const request=++sequence.current;if(!quiet)setLoading(true);
-  try{const next=await api(`/admin/documents?limit=25&offset=${offset}&search=${encodeURIComponent(search)}&dataset_id=${encodeURIComponent(dataset)}`);if(mounted.current&&request===sequence.current){setData(next);if(!quiet)setError('');}}
+  try{const next=await api(`/admin/documents?limit=25&offset=${offset}&search=${encodeURIComponent(search)}&dataset_id=${encodeURIComponent(dataset)}`,'GET',undefined,undefined,quiet);if(mounted.current&&request===sequence.current){setData(next);if(!quiet)setError('');}}
   catch(e){if(mounted.current&&request===sequence.current)setError(e instanceof Error?e.message:'Unable to load files.');}
-  finally{if(mounted.current&&request===sequence.current)setLoading(false);}
+  finally{inFlight.current--;if(mounted.current&&request===sequence.current)setLoading(false);}
  },[api,offset,search,dataset]);
  useEffect(()=>{mounted.current=true;const timer=setTimeout(()=>void load(),250);return()=>{clearTimeout(timer);mounted.current=false;sequence.current++;};},[load]);
  useEffect(()=>{const timer=setInterval(()=>{if(!busy&&!operation&&document.visibilityState==='visible')void load(true);},10000);return()=>clearInterval(timer);},[load,busy,operation]);

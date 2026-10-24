@@ -41,6 +41,27 @@ def test_listing_tracks_status_and_current_model_retry(accounts,system):
     assert s.api.get('/api/admin/documents').json()['items'][0]['requires_reindex'] is False
     assert s.api.get('/api/admin/documents?search=absent').json()['total']==0
 
+def test_listing_does_not_probe_model_services(accounts,system,monkeypatch):
+    from ags_app import dataset_models as routing
+    s,d=setup(accounts,system);doc=upload(s,d)['documents'][0]
+    def unavailable(*args,**kwargs):raise AssertionError('A file catalog must not contact model services')
+    monkeypatch.setattr(routing,'embedding_snapshot',unavailable)
+    result=s.api.get('/api/admin/documents')
+    assert result.status_code==200,result.text
+    row=result.json()['items'][0]
+    assert row['id']==doc['id'] and row['requires_reindex'] is False and row['model_check']=='saved_mapping'
+
+def test_catalog_reuses_storage_connections_but_checks_each_original(system,monkeypatch):
+    from types import SimpleNamespace
+    created=[];checked=[]
+    class Backend:
+        def stat(self,key):checked.append(key);return {'size':100}
+    monkeypatch.setattr(document_storage,'adapter',lambda destination:created.append(destination) or Backend())
+    adapters={}
+    for id in ('first','second'):
+        assert document_storage.original(SimpleNamespace(ref='documents/'+id+'/original'),adapters)['status']=='present'
+    assert len(created)==1 and checked==['documents/first/original','documents/second/original']
+
 def test_end_to_end_cleanup_is_scoped_to_document(accounts,system):
     s,d=setup(accounts,system);doc=upload(s,d)['documents'][0];other=upload(s,d)['documents'][0]
     result=extraction(s,d,[doc['id']]);unrelated=extraction(s,d,[other['id']])
