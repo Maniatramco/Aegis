@@ -1,6 +1,16 @@
 {
-  "version": "26.1.12.7",
+  "version": "26.1.12.8",
   "releases": [
+    {
+      "version": "26.1.12.8",
+      "date": "2026-10-24",
+      "title": "Cloud OCR page budgets",
+      "changes": [
+        "Use the selected OpenAI model's registered context limit for OCR.",
+        "Estimate GPT-4o and GPT-4o Mini image tokens with their cloud tile rules, preserving original pixels.",
+        "Keep cloud-only OCR selection and reject pages that exceed the registered model budget before inference."
+      ]
+    },
     {
       "version": "26.1.12.7",
       "date": "2026-10-24",

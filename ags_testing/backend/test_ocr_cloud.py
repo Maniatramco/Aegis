@@ -111,6 +111,37 @@ def test_openai_ocr_supported_vision_aliases_and_snapshots(model):
     limits={'enabled':True,'context':8192,'output':3000,'timeout':1200,'dpi':180,'batch':128}
     cfg=cloud_ocr.adapter('openai').configure(snapshot('openai',model),limits)
     assert cfg['model']==model and cfg['output']==2048 and cfg['timeout']==core.DEFAULTS['timeout']
+    assert cfg['context']==32768  # Registered cloud context, not local OCR's 8192.
+
+
+@pytest.mark.parametrize('model,expected',[('gpt-4o',1105),('gpt-4o-mini',36835)])
+def test_openai_landscape_page_uses_cloud_tile_budget(model,expected):
+    adapter=cloud_ocr.adapter('openai')
+    assert adapter.visual_tokens(2520,1530,model)==expected
+
+
+@pytest.mark.parametrize('model',['gpt-4o','gpt-4o-mini'])
+def test_large_openai_page_is_not_rejected_by_local_ocr_context_limit(monkeypatch,model):
+    cloud=snapshot('openai',model);cloud['settings']['context_limit']=128000
+    image=io.BytesIO();Image.new('RGB',(2520,1530),'white').save(image,format='PNG')
+    sent=[]
+    def post(self,path,payload,headers=None):
+        sent.append(payload)
+        return {'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'text':'Synthetic landscape page','unreadable':False})}}]}
+    monkeypatch.setattr(core,'execution_secret',lambda p:json.dumps({'api_key':'synthetic-only'}) if p=='connection' else None)
+    monkeypatch.setattr(ModelConnection,'post',post)
+    with core.execution_context({'settings':core.DEFAULTS,'ocr_execution':cloud}):
+        text,meta=ocr.transcribe(image.getvalue(),ocr.available())
+    assert text=='Synthetic landscape page' and len(sent)==1 and meta['model']==model
+
+
+def test_openai_small_registered_budget_still_fails_before_inference(monkeypatch):
+    cloud=snapshot('openai','gpt-4o-mini');cloud['settings']['context_limit']=8192
+    image=io.BytesIO();Image.new('RGB',(2520,1530),'white').save(image,format='PNG')
+    monkeypatch.setattr(ModelConnection,'post',lambda *a,**k:pytest.fail('Over-budget page was sent'))
+    with core.execution_context({'settings':core.DEFAULTS,'ocr_execution':cloud}):
+        with pytest.raises(ocr.OcrError,match='visual context budget'):
+            ocr.transcribe(image.getvalue(),ocr.config())
 
 
 @pytest.mark.parametrize('model',['text-embedding-3-small','gpt-3.5-turbo','gpt-4o-transcribe'])

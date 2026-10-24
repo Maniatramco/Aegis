@@ -2,6 +2,10 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.12.8 - 24 October 2026
+
+Complete cloud-only OCR with provider-specific GPT-4o/GPT-4o Mini high-detail image token estimates and the selected registration's context limit. Do not cap cloud OCR at the local OCR context setting. Count resized-service 512px tiles using official OpenAI sizing rules while preserving the complete original image payload; retain the rendering limit and reject actual over-budget pages before inference. Add landscape-size regression coverage for the selected DataLakeZones recovery. Supersedes undeployed v26.1.12.7; no dependencies, schema or runtime configuration changes.
+
 ## v26.1.12.7 - 24 October 2026
 
 Make dataset OCR cloud-only at the user's request. Remove the local OCR option from Model Mapping and reject local saves server-side. Automatic routing uses a compatible OpenAI/Gemini extraction default. New dataset execution snapshots prevent local OCR fallback; scanned content without a cloud vision registration receives a model-selection error while native text remains usable. Preserve independent OCR selection, embedding space, queued snapshots, cloud consent, original documents and strict transcription checks. Supersedes the undeployed v26.1.12.6 release plan. No database objects, dependencies, infrastructure or runtime settings change. Live deployment and the specifically authorized latest DataLakeZones recovery are recorded separately.

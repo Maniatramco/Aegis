@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.7` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.8` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+v26.1.12.8 completes cloud-only OCR with OpenAI-specific image tile estimates and the registered cloud model's context limit. Landscape pages no longer inherit the smaller local OCR context cap. Original inference pixels, rendering limits and pre-inference budget rejection are retained. Publication and live recovery are recorded separately.
 
 v26.1.12.7 makes dataset OCR cloud-only. Model Mapping offers compatible OpenAI/Gemini registrations and Automatic cloud extraction routing, removes the local option, and rejects local OCR saves. New dataset jobs never contact local Ollama for OCR; scanned content without an eligible cloud selection receives an actionable mapping message. Native text and existing embeddings remain available. Publication and live recovery are recorded separately.
 

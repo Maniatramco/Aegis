@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import math
 from .... import core, runtime_config
 from ...cloud_ocr import provider, eligible
 from ...connection import ModelConnection
@@ -16,12 +17,24 @@ def configure(snapshot, limits):
     identity = {key: snapshot.get(key) for key in ('model_id', 'model_version', 'connection_profile_id', 'connection_profile_version', 'provider_model')}
     identity.update(connection=connection, parameters=cfg.get('extra_parameters', {}))
     return limits | {'provider': 'openai', 'model': snapshot['provider_model'],
-        'endpoint': connection['endpoint'], 'protocol': 5, 'execution': snapshot,
+        'endpoint': connection['endpoint'], 'protocol': 6, 'execution': snapshot,
         'timeout': min(limits['timeout'], cfg['timeout']),
-        'context': min(limits['context'], cfg.get('context_limit') or runtime_config.get('AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS')),
+        'context': cfg.get('context_limit') or runtime_config.get('AEGIS_DEFAULT_MODEL_CONTEXT_TOKENS'),
         'output': min(limits['output'], cfg.get('max_output_tokens') or runtime_config.get('AEGIS_DEFAULT_MODEL_OUTPUT_TOKENS')),
         'digest': hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
         'digest_type': 'configuration'}
+
+
+def visual_tokens(width, height, model):
+    # Official high-detail GPT-4o sizing: 2048 square, then at most 768 short
+    # side, then 512 tiles. Estimate only; preserve original inference pixels.
+    scale=min(1,2048/max(width,height))
+    width=max(1,math.floor(width*scale));height=max(1,math.floor(height*scale))
+    if min(width,height)>768:
+        scale=768/min(width,height)
+        width=max(1,math.floor(width*scale));height=max(1,math.floor(height*scale))
+    base,tile=(2833,5667) if model.startswith('gpt-4o-mini') else (85,170)
+    return base+tile*math.ceil(width/512)*math.ceil(height/512)
 
 
 def available(cfg):

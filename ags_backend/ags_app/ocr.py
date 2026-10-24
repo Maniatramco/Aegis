@@ -138,7 +138,11 @@ def transcribe(image, cfg):
     except Exception:raise OcrError('OCR input is not a valid raster image.') from None
     # Conservative visual patch estimate, reserving the answer and instruction.
     # Never resolve a context overflow by silently dropping image content.
-    if ((width+27)//28)*((height+27)//28)+cfg['output']+1024>cfg['context']:
+    visual_tokens=((width+27)//28)*((height+27)//28)
+    if cfg.get('provider')=='openai':
+        from .ags_models.providers.ags_openai.ocr import visual_tokens as openai_visual_tokens
+        visual_tokens=openai_visual_tokens(width,height,cfg['model'])
+    if visual_tokens+cfg['output']+1024>cfg['context']:
         raise OcrError('Page exceeds the OCR visual context budget. Increase AEGIS_OCR_CONTEXT, reduce AEGIS_OCR_DPI or split the page, then retry.')
     started = time.monotonic()
     # Qwen2.5-VL on Ollama 0.35.1 can repeat tokens indefinitely under the
