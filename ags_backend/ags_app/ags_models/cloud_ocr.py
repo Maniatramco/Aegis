@@ -29,7 +29,7 @@ def dataset_snapshot(dataset):
     data = routing.dataset_config(dataset)
     selected = data.get('ocr_model_id')
     if selected == 'local':
-        return None
+        raise HTTPException(409, 'Select a cloud OCR model in Dataset Model Mapping. Local OCR is no longer selectable.')
     try:
         snapshot = routing.resolve_model(dataset, 'extraction', selected)
     except HTTPException:
@@ -40,7 +40,7 @@ def dataset_snapshot(dataset):
         return None
     if selected and not eligible(snapshot):
         raise HTTPException(409, 'Selected OCR model must be an enabled mapped vision-capable extraction registration.')
-    return snapshot if provider(snapshot) else None
+    return snapshot if eligible(snapshot) else None
 
 
 def adapter(name):

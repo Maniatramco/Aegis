@@ -27,6 +27,22 @@ def vision(monkeypatch):
     monkeypatch.setattr(ocr,'call',call);return requests
 
 
+@pytest.fixture
+def cloud_vision(system,monkeypatch):
+    from test_model_registration import body,register,select
+    from ags_app.ags_models.connection import ModelConnection
+    d=dataset(system)
+    model=register(system,body('extraction','openai-compatible',provider_model='gpt-4o-mini',context_limit=128000,max_output_tokens=4096))
+    select(system,d,model,'extraction')
+    requests=[]
+    def post(self,path,payload,headers=None):
+        requests.append((path,payload))
+        return {'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'text':'Alice Example\nInvoice total: 42.50','unreadable':False})}}]}
+    monkeypatch.setattr(ModelConnection,'post',post)
+    monkeypatch.setattr(ocr,'call',lambda *a,**k:pytest.fail('Dataset cloud OCR contacted Ollama'))
+    return d,requests
+
+
 def test_native_pdf_never_calls_ocr(vision):
     assert 'Alice' in worker.parse_document('native.pdf',pdf('Alice owns this fictional project.'))[0]['text']
     assert vision==[]
@@ -95,19 +111,19 @@ def test_invalid_config_is_actionable(monkeypatch,key,value):
     with pytest.raises(ocr.OcrError,match='configuration is invalid'):ocr.config()
 
 
-def test_scan_merge_upload_does_not_run_model_and_worker_keeps_every_source(system,vision):
-    d=dataset(system)
+def test_scan_merge_upload_does_not_run_model_and_worker_keeps_every_source(system,cloud_vision):
+    d,requests=cloud_vision
     parts=[('Alice.pdf',scan()),('Bob.pdf',scan('Bob'))]
-    result=system.api.post('/api/documents/upload',data={'dataset_id':d['id'],'merge_files':'true'},files=[('files',(n,b,'application/pdf')) for n,b in parts])
+    result=system.api.post('/api/documents/upload',data={'dataset_id':d['id'],'merge_files':'true','allow_external':'true'},files=[('files',(n,b,'application/pdf')) for n,b in parts])
     assert result.status_code==200,result.text
-    assert not vision
+    assert not requests
     did=result.json()['documents'][0]['id']
     assert worker.run_once()
     doc=system.api.get('/api/documents/'+did).json()
     assert doc['status']=='ready' and doc['ocr']['ocr_page_count']==2
     saved=core.store.json('documents/'+did+'/parsed.json')['pages']
     assert [(p['page'],p['source_filename'],p['source_page']) for p in saved]==[(1,'Alice.pdf',1),(2,'Bob.pdf',1)]
-    assert len([p for path,p in vision if path=='/api/chat'])==2
+    assert len([p for path,p in requests if path=='/chat/completions'])==2
     assert core.store.get('documents/'+did+'/merged-sources/2/original')==parts[1][1]
 
 
@@ -141,10 +157,10 @@ def test_docx_image_is_read_with_unknown_page(vision):
     assert pages[0]['ocr']['images'][0]['page'] is None
 
 
-def test_document_chat_preserves_unverified_ocr_citation(system,vision):
+def test_document_chat_preserves_unverified_ocr_citation(system,cloud_vision):
     from test_dataset_models import conversation,message
-    d=dataset(system)
-    response=system.api.post('/api/documents/upload',data={'dataset_id':d['id']},files={'files':('scan.pdf',scan(),'application/pdf')})
+    d,_=cloud_vision
+    response=system.api.post('/api/documents/upload',data={'dataset_id':d['id'],'allow_external':'true'},files={'files':('scan.pdf',scan(),'application/pdf')})
     assert response.status_code==200,response.text
     did=response.json()['documents'][0]['id']
     assert worker.run_once()

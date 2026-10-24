@@ -48,9 +48,13 @@ def config():
         if cloud:
             from .ags_models import cloud_ocr
             return cloud_ocr.adapter(cloud_ocr.provider(cloud)).configure(cloud, dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch))
+        if (core._execution.get() or {}).get('settings',{}).get('_ocr_cloud_only'):
+            raise OcrError('Select a cloud OCR model in Dataset Model Mapping. A compatible OpenAI or Gemini extraction registration is required; local OCR is disabled for dataset jobs.')
         model = local_model_name(runtime_config.get('AEGIS_OCR_MODEL'))
         from .model_connections import validate_endpoint
         endpoint = validate_endpoint(runtime_config.get('AEGIS_OCR_URL') or os.getenv('AEGIS_OLLAMA_URL', 'http://127.0.0.1:11434'), 'ollama')
+    except OcrError:
+        raise
     except Exception:
         raise OcrError('OCR configuration is invalid. Check the selected model, endpoint and OCR limits.') from None
     return dict(enabled=enabled, timeout=timeout, output=output, context=context, dpi=dpi, batch=batch, model=model, endpoint=endpoint, protocol=3, provider='ollama', digest_type='weights')

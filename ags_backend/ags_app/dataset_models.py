@@ -169,6 +169,7 @@ def _embedding_snapshot(r):
     from .database_control import vector_backend
     transport=vector_backend()
     if transport:cfg['search_provider']=transport
+    cfg['_ocr_cloud_only']=True
     snap['settings']=cfg
     from .ags_models import cloud_ocr
     vision=cloud_ocr.dataset_snapshot(r)
@@ -322,6 +323,7 @@ def save_mappings(r,body):
         try:core.enforce_local_only(cfg)
         except ValueError as exc:raise HTTPException(409,str(exc)) from exc
     selected_ocr=values['ocr_model_id']
+    if selected_ocr=='local':raise HTTPException(400,'Dataset OCR requires a cloud OpenAI or Gemini vision model. Local OCR is not selectable.')
     if selected_ocr not in (None,'local'):
         if selected_ocr not in eligible:raise HTTPException(400,'The OCR model must be enabled and mapped to this dataset.')
         selected=owned(selected_ocr,r.owner,'model');public=model_public(selected)

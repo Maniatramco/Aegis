@@ -85,8 +85,10 @@ release is requested; no database schema change is needed.
 
 Model Mapping exposes a separate `ocr_model_id` choice. A registered compatible
 OpenAI/Gemini extraction model can be selected independently of the extraction
-default. `null` keeps automatic routing and `local` explicitly uses the existing
-configured local OCR service. The selected model must be enabled, mapped and
+default. `null` uses a compatible cloud extraction default. Local OCR choices
+are rejected, and dataset image processing never falls back to Ollama. A dataset
+without a cloud vision selection can still read native text; scanned content
+requires choosing an eligible cloud OCR registration. The selected model must be enabled, mapped and
 accessible to the dataset owner; embeddings and chat-only registrations are
 ineligible. Legacy clients omitting the field preserve its saved value. Changing
 OCR does not change embeddings or index generation; reindex documents to rerun OCR.

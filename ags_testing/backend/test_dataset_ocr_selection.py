@@ -31,7 +31,7 @@ def test_ocr_saved_independently_and_old_clients_preserve_choice(system):
     assert choose(s,d,None)['ocr_model_id'] is None
 
 
-def test_ocr_uses_selected_model_instead_of_default_extraction_and_local_is_explicit(system):
+def test_ocr_uses_selected_model_instead_of_default_extraction_and_rejects_local(system):
     s=system;d=dataset(s);default=vision(s,'gpt-4o');select(s,d,default,'extraction');selected=vision(s)
     choose(s,d,selected)
     record=routing.owned(d['id'],s.owner,'knowledge_base')
@@ -39,10 +39,30 @@ def test_ocr_uses_selected_model_instead_of_default_extraction_and_local_is_expl
     assert snap['ocr_execution']['model_id']==selected['id']
     assert snap['settings']['ocr_model']=='gpt-4o-mini'
     assert snap['settings']['ocr_provider']=='openai'
-    mapping(s,d,ocr_model_id='local')
-    assert 'ocr_execution' not in routing.execution_snapshot(routing.owned(d['id'],s.owner,'knowledge_base'),'embedding')
+    cfg=s.api.get('/api/datasets/'+d['id']+'/models').json()
+    payload={key:cfg[key] for key in ('mappings','embedding_model_id','default_chat_model_id','default_extraction_model_id')}
+    rejected=s.api.put('/api/datasets/'+d['id']+'/models',json=payload|{'ocr_model_id':'local'})
+    assert rejected.status_code==400 and 'cloud' in rejected.json()['detail']
+    assert s.api.get('/api/datasets/'+d['id']+'/models').json()==cfg
     mapping(s,d,ocr_model_id=None)
     assert routing.execution_snapshot(routing.owned(d['id'],s.owner,'knowledge_base'),'embedding')['ocr_execution']['model_id']==default['id']
+
+
+def test_dataset_scan_without_cloud_selection_never_contacts_ollama(system,monkeypatch):
+    d=dataset(system)
+    snap=routing.execution_snapshot(routing.owned(d['id'],system.owner,'knowledge_base'),'embedding')
+    monkeypatch.setattr(ocr,'call',lambda *a,**k:pytest.fail('Dataset OCR attempted local Ollama'))
+    with core.execution_context(snap):
+        with pytest.raises(ocr.OcrError,match='Select a cloud OCR model'):
+            worker.parse_document('scan.pdf',scan())
+        assert worker.parse_document('native.txt',b'Existing native text stays available')[0]['text']=='Existing native text stays available'
+
+
+def test_legacy_local_choice_requires_cloud_selection(system):
+    d=dataset(system);record=routing.owned(d['id'],system.owner,'knowledge_base')
+    core.store.put_json(record.ref,routing.dataset_config(record)|{'ocr_model_id':'local'})
+    with pytest.raises(main.HTTPException,match='cloud OCR model'):
+        cloud_ocr.dataset_snapshot(record)
 
 
 @pytest.mark.parametrize('which',['embedding','text','disabled','unmapped','foreign'])

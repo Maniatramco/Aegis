@@ -97,7 +97,7 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
   const selectedEmbedding = models.find(m => m.id === embedding);
   const ocrCandidates = models.filter(m=>m.enabled!==false&&m.ocr_eligible===true);
   const selectedOcr = ocrCandidates.find(m=>m.id===ocr);
-  const complete=candidates('chat').some(m=>m.id===chatDefault)&&candidates('extraction').some(m=>m.id===extractDefault)&&candidates('embedding').some(m=>m.id===embedding)&&(!ocr||ocr==='local'||!!selectedOcr);
+  const complete=candidates('chat').some(m=>m.id===chatDefault)&&candidates('extraction').some(m=>m.id===extractDefault)&&candidates('embedding').some(m=>m.id===embedding)&&(!ocr||!!selectedOcr);
   const ocrChanged = ocr !== (dataset.ocr_model_id || '');
   const pinnedEmbedding = dataset.embedding_selection;
   const embeddingChanged = !!dataset.embedding_model_id && (embedding !== dataset.embedding_model_id || !!pinnedEmbedding && !!selectedEmbedding && (pinnedEmbedding.model_version !== selectedEmbedding.version || pinnedEmbedding.connection_profile_version !== selectedEmbedding.connection_profile_version));
@@ -122,19 +122,19 @@ export function DatasetMappings({ dataset, models, api, run, busy, reload, notif
           </tr>;
         })}<tr>
           <th scope="row"><label htmlFor="mapping-ocr">OCR</label><small>Scans and document images</small></th>
-          <td><select id="mapping-ocr" aria-label="OCR model" title={selectedOcr?`${modelLabel(selectedOcr)} · ${selectedOcr.provider_model}`:ocr==='local'?'Configured local OCR service':'Automatic · dataset default'} value={ocr} onChange={e=>changeDefault('ocr',e.target.value)} disabled={busy}>
-            <option value="">Automatic · dataset default</option><option value="local">Configured local OCR service</option>
+          <td><select id="mapping-ocr" aria-label="OCR model" title={selectedOcr?`${modelLabel(selectedOcr)} · ${selectedOcr.provider_model}`:'Automatic · cloud extraction default'} value={ocr} onChange={e=>changeDefault('ocr',e.target.value)} disabled={busy}>
+            <option value="">Automatic · cloud extraction default</option>
             {ocrCandidates.map(model=><option key={model.id} value={model.id}>{modelLabel(model)} · {model.provider_model}</option>)}
-            {ocr&&ocr!=='local'&&!selectedOcr&&<option value={ocr} disabled>Saved OCR model unavailable</option>}
+            {ocr&&!selectedOcr&&<option value={ocr} disabled>Choose a cloud OCR model</option>}
           </select></td>
-          <td>{selectedOcr?(selectedOcr.connection?.endpoint?.includes('api.openai.com')?'OpenAI':'Google Gemini'):ocr==='local'?'Ollama':'Automatic'}</td>
+          <td>{selectedOcr?(selectedOcr.connection?.endpoint?.includes('api.openai.com')?'OpenAI':'Google Gemini'):'Cloud'}</td>
           <td className="mapping-tokens">{selectedOcr?.context_limit?.toLocaleString()||'—'}</td>
           <td className="mapping-tokens">{selectedOcr?.max_output_tokens?.toLocaleString()||'—'}</td>
-          <td><span className={`pill ${!ocr||ocr==='local'||selectedOcr?'green':'amber'}`}>{!ocr?'Automatic':ocr==='local'?'Local':selectedOcr?'Selected':'Unavailable'}</span></td>
+          <td><span className={`pill ${!ocr||selectedOcr?'green':'amber'}`}>{!ocr?'Automatic':selectedOcr?'Selected':'Unavailable'}</span></td>
         </tr></tbody>
       </table>
     </div>
-    <p className="muted small">OCR reads text from scanned PDFs and images in Word documents. Choose a compatible OpenAI or Gemini extraction registration, or use the configured local service. Automatic follows a compatible extraction model or uses local OCR.</p>
+    <p className="muted small">OCR reads text from scanned PDFs and images in Word documents using cloud models only. Choose a compatible OpenAI or Gemini extraction registration. Automatic uses the compatible cloud extraction default; it never falls back to local OCR.</p>
     {ocrChanged&&<p className="notice" role="status">The next indexing job will use this OCR choice. Reindex existing documents to read their images again; their embedding model stays the same.</p>}
     <div className="mapping-availability">
       {(['chat','extraction'] as const).map(capability=><fieldset key={capability} disabled={busy||remoteChanged}>
