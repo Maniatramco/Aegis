@@ -2,6 +2,12 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.12.4 - 24 October 2026
+
+Aegis Agent could ask which information to summarize despite a selected dataset and an explicit knowledge-base summary request. Clarify in both routing instructions and tool-branch descriptions that broad summaries are complete information requests and that “extract a summary” requests a read-only chat answer, not an extraction job. Route knowledge-base summaries over original content and saved results within the selected scope, rather than workspace dataset catalogs or application guides. Remove the short-summary shortcut that always assumed a previous extraction answer; use normal model routing with verified scope/reference context instead. Preserve ambiguous-input clarification, processing confirmations, access/document filters, hybrid retrieval, reranking and answer/citation validation. No database or dependency changes. Deployment pending.
+
+Validation: 154 focused backend regressions, 246 frontend unit tests and both TypeScript checks passed. Six isolated real-provider Agent API checks passed with GPT-4o and GPT-4o Mini for the reported request, bare “summary” and an original-document summary. Real OpenAI routing and answer generation used a synthetic balance sheet; embedding and reranking were test doubles. These are targeted checks, not live-deployment acceptance or a full-suite guarantee.
+
 ## v26.1.12.3 - 24 October 2026
 
 The Model Mapping screen previously rebuilt the enabled mapping list from only the three role defaults whenever any default changed. This removed alternative Chat/Extraction models from dataset pickers even though the backend supports multiple enabled mappings. Add explicit available-model checkboxes for Chat and Extraction, preserve all unrelated mappings and metadata when selecting a default, and prevent disabling a model used by any selected default. Saving remains dataset-scoped and uses the existing expected-version concurrency guard. Embedding mapping, pinned index generation, access checks, registrations and saved source/results are preserved. No backend, dependency or database changes.

@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.3` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.4` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+v26.1.12.4 routes broad knowledge-base summaries to read-only chat over the selected dataset/document scope. Short requests such as “summary” use model routing rather than assuming a prior extraction answer. Original-only and saved-result summaries remain distinct; all grounded answers retain hybrid retrieval, reranking and citation validation. Deployment is pending.
 
 **Verified live application: v26.1.12.3, published 24 October 2026 (Asia/Calcutta).** Release `release-20261024-151741-a53c85` deployed frontend commit `60a83afc0daa14b451835c93a641f1eaa2a0b512` (tag `v26.1.12.3`). The web rollout, independent receipt/configuration verification, HTTPS and five public-file byte comparisons passed. API/worker/relay/HTTPS images, runtime settings, infrastructure and stored data were preserved; DB_Object=N and no database scripts ran.
 
