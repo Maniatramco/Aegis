@@ -762,7 +762,7 @@ export default function App() {
                   className={loading ? "animate-spin" : ""}
                 />
               </button>
-              {view === "Extract" && extractionTab !== "Create" && <ActionButton className="btn primary" onClick={()=>navigate('Extract','Create')} label="New extraction" action="add"/>}
+              {(view === "Extract Data" || view === "Extract" && extractionTab !== "Create") && <ActionButton className="btn primary" onClick={()=>navigate('Extract','Create')} label="New extraction" action="add" showLabel/>}
             </div>}
             <span className="pill">
               <span className="dot" />

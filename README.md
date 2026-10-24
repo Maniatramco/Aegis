@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.9` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.10` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+v26.1.12.10 adds a labeled New extraction action to Extract, using the existing creation flow and selected dataset. Save actions show their text labels and a Save icon across mapping, registration and settings. New extraction labels stay visible on mobile. Backend processing, current-model routing and saved results are unchanged; publication is recorded separately.
 
 v26.1.12.9 uses the dataset's current mapped models for new Re-extract, prompt Resume and Reindex submissions. Changed OCR selections make scanned source indexes stale so Review re-extraction rebuilds them with the current embedding/OCR selections before extracting. Accepted jobs keep their submission snapshot. Historical retries cannot replay outdated mappings or overwrite a successful index/result; use a fresh Reindex/Re-extract instead. Earlier results and originals are preserved.
 

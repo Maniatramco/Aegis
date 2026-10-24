@@ -6,6 +6,9 @@ body .shell .action-icon {
  flex:0 0 36px;vertical-align:middle;
 }
 body .shell .action-icon>svg{width:17px;height:17px;flex-shrink:0}
+body .shell .action-label{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:auto;max-width:100%;min-height:36px;padding:7px 12px;flex-shrink:0}
+body .shell .action-label>svg{width:17px;height:17px;flex-shrink:0}
+body .shell .action-label>span{white-space:normal;text-align:center}
 body .shell .extract-row-actions{display:flex;gap:6px;flex-wrap:nowrap;align-items:center}
 body .shell .prompt-library-filters{grid-template-columns:minmax(160px,.7fr) minmax(180px,1fr) 40px}
 body .shell .prompt-library-filters .prompt-library-new{width:40px;min-width:40px;max-width:40px;height:40px;min-height:40px;padding:0}

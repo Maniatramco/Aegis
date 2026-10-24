@@ -48,7 +48,7 @@ body .shell .workspace-region .dataset-directory-table { max-height: max(220px,c
 body .shell .workspace-region .prompt-directory-scroll { max-height: max(220px,calc(100dvh - 260px)); }
 body .shell .workspace-region .registration-table { max-height: calc(100dvh - 230px); }
 @media (max-width: 600px) {
-  body .shell > .topbar .workspace-page-actions .btn > span { display: none; }
+  body .shell > .topbar .workspace-page-actions .btn:not(.action-label) > span { display: none; }
   body .shell > .topbar .top-actions { gap: 6px; }
   .workspace-page-actions { gap: 6px; }
   body .shell > .topbar:has(.home-search-control[data-expanded=true]) .breadcrumb { display: none; }
