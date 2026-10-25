@@ -9,6 +9,7 @@
         "Reconcile the existing local S3, SharePoint and Google Drive source-connection candidate with the later Sprint 1 admin-processing and model-routing fixes.",
         "Import explicitly selected cloud copies through the existing dataset upload/index path, preserving encrypted credentials, scoped access, provenance, duplicate handling and consent. Imports are snapshots; source ACLs, updates and deletions are not automatically synchronized.",
         "Preserve safe recognized model HTTP quota/rate-limit advice without exposing provider response messages or credentials.",
+        "Include every source-connection route in the read-only API reference with its administrator, consent and snapshot limitations.",
         "Show the approved Aegis shield, readable product identity and banner palette independently of raster artwork details on the sign-in screen.",
         "Keep sign-in before secondary artwork in mobile reading and visual order, with existing labels, autocomplete, focus and authentication behavior preserved.",
         "Local preview only. No source push, production publication or authentication/recovery change."

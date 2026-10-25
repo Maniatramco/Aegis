@@ -8,6 +8,8 @@ Local Sprint 2 candidate from committed Sprint 1 `48ce4b9`. Reconcile the previo
 
 Sign-in exposes the approved Aegis identity and product message as readable live text, with scoped navy/teal/silver accents. The form precedes supporting artwork in mobile DOM and visual order; desktop keeps its two-column presentation. Keep labels, username/current-password autocomplete, password visibility, validation and focus behavior. Shorten the artwork alternative to its actual visual content. No authentication, recovery endpoint or credential-flow change is included. Recovery guidance and broader authenticated UX remain separate review work.
 
+The full backend run identified missing API-reference notes for the six reconciled source-connection routes. Add those notes and their group, and enrich the reference after every application route is registered. Preserve administrator, credential, consent and snapshot limitations in the descriptions; no endpoint/authentication behavior changes. Add explicit contract-coverage regression assertions.
+
 Use synthetic local fixtures for validation. Live provider/account acceptance, final Sprint 1 reconciliation/publication and deployment are not claimed. No push or cloud publication is part of this preview.
 
 ## v26.1.12.12 - 24 October 2026

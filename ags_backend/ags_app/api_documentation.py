@@ -5,6 +5,12 @@ from fastapi.routing import APIRoute
 
 # Keyed by method and path so similar operations cannot share misleading notes.
 NOTES = {
+    'GET /api/source-connections': 'Administrator only: list authorized dataset source connections and credential-configured flags without returning secret values. Imported copies follow Aegis dataset access; source permissions are not mirrored.',
+    'POST /api/source-connections/test': 'Administrator only: test read access to a proposed scoped S3, SharePoint or Google Drive location without saving configuration, importing files or writing to the cloud source.',
+    'POST /api/source-connections': 'Administrator only: save a dataset source connection with encrypted versioned credentials. Saving does not import files or synchronize source permissions, updates or deletions.',
+    'PUT /api/source-connections/{identifier}': 'Administrator only: update an authorized source connection and its credential version. Changed locations require credentials again; disabling a connection preserves previously imported copies.',
+    'GET /api/source-connections/{identifier}/files': 'Administrator only: browse an enabled scoped source location with expiring actor/dataset/connection-bound selection and pagination capabilities. No files are imported.',
+    'POST /api/source-connections/{identifier}/import': 'Administrator only: explicitly publish selected source copies to an authorized dataset through the existing upload/index pipeline, with dataset-sharing acknowledgement and any required external-processing consent. Preserve provenance and completed duplicate submissions; inspect per-file failures. Remote files and permissions are not changed or synchronized.',
     'GET /api/dataset-chat/catalog': 'Read the authorized dataset, document, prompt and model catalog for Dashboard Dataset Knowledge Chat without starting a conversation or inference.',
     'GET /api/dataset-chat/conversations': 'List the signed-in user\'s separate Dashboard chat history, omitting conversations whose saved dataset/document scope is no longer accessible.',
     'GET /api/dataset-chat/conversations/{id}': 'Read an owned Dashboard conversation and its saved messages after rechecking access to its dataset and document scope.',
@@ -153,6 +159,7 @@ NOTES = {
 }
 
 GROUPS = {
+    'source-connections': 'Source connections',
     'auth': 'Authentication', 'datasets': 'Datasets', 'knowledge-bases': 'Datasets',
     'models': 'Models', 'model-registrations': 'Models', 'model-providers': 'Models', 'local-models': 'Models',
     'documents': 'Documents', 'conversations': 'Chat', 'messages': 'Chat',
