@@ -2,6 +2,14 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.13.3 - 25 October 2026
+
+Redesign Dashboard around accessible dataset cards rather than an unopened chat. Add compact counts for active datasets, indexed sources, sources needing attention and processing using existing loaded records. Exclude inactive/unassigned sources; stale or failed sources count once in attention. Show unavailable counts during loading or failed refreshes and surface the existing workspace error notice. Dataset descriptions, textual readiness and contextual actions support choosing the next task without decorative analytics.
+
+Keep the existing scoped knowledge workspace, source selection, multi-dataset picker, drag/drop, chat drafts/history, metadata review and explicit expansion. Returning to the dataset overview preserves mounted chat state. Mobile starts with datasets and retains Chat/Sources controls. Preserve original menu/submenu ordering. Design informed by Carbon, Cloudscape, NN/g and inspected visual frames from Kole Jain's Dashboard UI guide; no unavailable video transcript is represented as reviewed.
+
+Local review only. No source push, deployment, production provider request or Sprint 1 edit.
+
 ## v26.1.13.2 - 25 October 2026
 
 Restore `workspace-navigation.tsx` to the original pre-UX menu/submenu structure and sequence. Keep Dataset, Prompt, Extract, Review and Source Connections under Onboard; keep Model Registration, Model Mapping, Users & passwords, Jobs & activity, Storage and Files & processing under Manage workspace. Existing Jobs improvements remain accessible in their original location. Add explicit order/active-selection/keyboard/mobile regression coverage.

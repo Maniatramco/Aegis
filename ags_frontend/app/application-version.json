@@ -1,6 +1,18 @@
 {
-  "version": "26.1.13.2",
+  "version": "26.1.13.3",
   "releases": [
+    {
+      "version": "26.1.13.3",
+      "date": "2026-10-25",
+      "title": "Dataset-first Dashboard",
+      "changes": [
+        "Make authorized dataset cards the starting point on desktop and mobile, with descriptions, readiness and contextual actions in the existing navy, teal and silver theme.",
+        "Summarize active datasets, indexed sources, sources needing attention and processing from loaded accessible dataset records; exclude inactive and unassigned sources and avoid invented activity or growth statistics.",
+        "Open the existing scoped knowledge workspace on request. Preserve source exclusions, multi-dataset selection, drag/drop, drafts, conversations, explicit expansion and metadata review.",
+        "Expose existing workspace read errors on Dashboard and show unavailable metrics while loading or after a failed refresh.",
+        "Preserve the original menu and submenu sequence and all existing routes. Local preview only; no source push, deployment or live data change."
+      ]
+    },
     {
       "version": "26.1.13.2",
       "date": "2026-10-25",

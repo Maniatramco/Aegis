@@ -4,7 +4,9 @@ import applicationVersion from '../../ags_frontend/app/application-version.json'
 const models=[{id:'preview-chat',name:'Preview chat model',enabled:true,capabilities:['chat'],provider:'mock'}];
 const datasets=[{id:'finance',name:'Finance',description:'Synthetic finance knowledge',active:true,models,default_chat_model_id:'preview-chat'},{id:'policy',name:'Policies',description:'Synthetic policy knowledge',active:true,models,default_chat_model_id:'preview-chat'},{id:'inactive',name:'Archived',active:false,models}];
 const documents=[...Array.from({length:24},(_,i)=>({id:'finance-'+i,parent_id:'finance',dataset_id:'finance',name:i===0?'term-sheet.txt':`finance-evidence-${String(i+1).padStart(2,'0')}.txt`,status:'ready'})),{id:'policy-1',parent_id:'policy',dataset_id:'policy',name:'retention-policy.txt',status:'ready'},{id:'stale',dataset_id:'policy',name:'old-policy.txt',status:'ready',requires_reindex:true},{id:'private',dataset_id:'unassigned',name:'unassigned.txt',status:'ready'}];
-async function preview(page:Page){
+let fixtureRevision=0;
+async function preview(page:Page,options:{datasets?:any[];documents?:any[];datasetsError?:boolean;holdDatasets?:Promise<void>}={}){
+ const fixtureDatasets=options.datasets??datasets,fixtureDocuments=options.documents??documents;
  const sent:any[]=[];
  page.on('pageerror',error=>console.error('Dashboard preview error:',error.message));
  await page.route('**/api/**',async route=>{
@@ -12,12 +14,12 @@ async function preview(page:Page){
   const json=(value:any)=>route.fulfill({json:value});
   if(path==='/api/auth/me')return json({user:{id:'preview',username:'Preview user',is_admin:true,role:'administrator'},csrf_token:'synthetic-preview',chat_session_id:'synthetic-dashboard-preview'});
   if(path==='/api/auth/status')return json({setup_required:false});
-  if(path==='/api/datasets')return json(datasets);
-  if(path==='/api/documents')return json(documents);
+  if(path==='/api/datasets'){if(options.holdDatasets)await options.holdDatasets;return options.datasetsError?route.fulfill({status:503,json:{detail:'Synthetic dataset service unavailable'}}):json(fixtureDatasets);}
+  if(path==='/api/documents')return json(fixtureDocuments);
   if(path==='/api/models')return json(models);
   if(path==='/api/storage/status')return json({files:{provider:'local',name:'Synthetic files'},database:{provider:'local',name:'Synthetic database'},knowledge:{provider:'local',name:'Synthetic knowledge'}});
   if(path==='/api/settings')return json({max_upload_mb:25,storage_provider:'local',search_provider:'local'});
-  if(path==='/api/dataset-chat/catalog')return json({datasets,documents,models});
+  if(path==='/api/dataset-chat/catalog')return json({datasets:fixtureDatasets,documents:fixtureDocuments,models});
   if(path==='/api/dataset-chat/conversations')return json([]);
   if(path==='/api/dataset-chat/reply'){
    sent.push(route.request().postDataJSON());
@@ -26,9 +28,58 @@ async function preview(page:Page){
   if(path==='/api/runtime-connections')return json({});
   return json([]);
  });
- await page.goto('/#Dashboard');await expect(page.getByRole('heading',{level:1,name:'Dashboard',exact:true})).toBeVisible();await expect(page.getByLabel('Refresh workspace',{exact:true})).toBeEnabled();
+ await page.goto(`/?dashboard-fixture=${++fixtureRevision}#Dashboard`);await expect(page.getByRole('heading',{level:1,name:'Dashboard',exact:true})).toBeVisible();await expect(page.getByLabel('Refresh workspace',{exact:true})).toBeEnabled();
  return sent;
 }
+
+test('dataset-first overview has truthful summaries, readable cards and a keyboard path without submitting',async({page})=>{
+ await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);
+ const metrics=page.getByLabel('Active dataset overview',{exact:true});await expect(metrics).toBeVisible();
+ await expect(metrics.locator('dd')).toHaveText(['2','25','1','0']);
+ const card=page.getByRole('button',{name:'Ask Aegis about Finance',exact:true});
+ await expect(card).toContainText('Synthetic finance knowledge');await expect(card).toContainText('Ask with sources');
+ expect((await card.boundingBox())!.width).toBeGreaterThan(280);
+ await card.focus();await expect(card).toBeFocused();await page.keyboard.press('Enter');
+ const composer=page.getByLabel('Message Dataset Knowledge Chat',{exact:true});await composer.fill('Retain my overview draft');
+ await page.getByRole('button',{name:'Dataset overview',exact:true}).click();await expect(metrics).toBeVisible();
+ await expect(composer).toHaveValue('Retain my overview draft');expect(sent).toEqual([]);
+ await page.getByRole('button',{name:'Expand Dataset Knowledge Chat',exact:true}).click();await expect(composer).toHaveValue('Retain my overview draft');
+ await overview(page);expect(sent).toEqual([]);
+});
+
+test('overview reflows long dataset names and retains all mobile source controls at 320, 390 and 768 pixels',async({page})=>{
+ const longName='Research '+ 'exceptionallylongdatasetname'.repeat(5);
+ await preview(page,{datasets:[{...datasets[0],name:longName},datasets[1],datasets[2]]});
+ for(const width of [320,390,768]){
+  await page.setViewportSize({width,height:844});
+  const returnButton=page.getByRole('button',{name:'Dataset overview',exact:true});if(await returnButton.isVisible())await returnButton.click();
+  await expect(page.getByRole('button',{name:`Ask Aegis about ${longName}`,exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.getByRole('button',{name:`Ask Aegis about ${longName}`,exact:true}).click();
+  await page.getByRole('button',{name:'Sources (24)',exact:true}).click();await expect(page.getByLabel('Search dataset sources',{exact:true})).toBeVisible();
+  await page.getByRole('checkbox',{name:'Include source term-sheet.txt',exact:true}).uncheck();
+  await page.getByRole('button',{name:'Knowledge Chat',exact:true}).click();
+  await expect(page.getByLabel('Message Dataset Knowledge Chat',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+});
+
+test('empty, filtered, loading and failed dataset reads have honest states and no automatic model request',async({page})=>{
+ const sent=await preview(page,{datasets:[],documents:[]});
+ await expect(page.getByText('No datasets available',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['0','0','0','0']);expect(sent).toEqual([]);
+ await page.unrouteAll({behavior:'wait'});await preview(page,{datasetsError:true,documents:[]});
+ await expect(page.getByText('Datasets could not be loaded',{exact:true})).toBeVisible();
+ await expect(page.getByRole('main',{name:'Dashboard',exact:true}).getByRole('alert')).toContainText('Synthetic dataset service unavailable');
+ await page.getByRole('button',{name:'Dismiss error',exact:true}).click();
+ await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['—','—','—','—']);
+ await page.unrouteAll({behavior:'wait'});let release!:()=>void;const held=new Promise<void>(resolve=>release=resolve);
+ const ready=preview(page,{holdDatasets:held});
+ await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['—','—','—','—']);release();await ready;
+ await page.getByRole('button',{name:'Search datasets',exact:true}).click();await page.getByRole('textbox',{name:'Search datasets',exact:true}).fill('missing synthetic dataset');
+ await expect(page.getByText('No matching datasets',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Clear search',exact:true}).last().click();
+ await expect(page.getByRole('button',{name:'Ask Aegis about Finance',exact:true})).toBeVisible();
+});
 
 async function overview(page:Page){const restore=page.getByRole('button',{name:'Restore Dashboard layout',exact:true});if(await restore.isVisible())await restore.click();}
 // Dataset selection keeps the three-panel layout; explicit expansion retains the mounted chat.

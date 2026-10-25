@@ -167,6 +167,7 @@ function Notice({
   return (
     <div
       className={`notice ${tone === "error" ? "error" : tone === "warn" ? "warn" : ""}`}
+      role={tone === "error" ? "alert" : undefined}
     >
       <AlertCircle size={16} />
       <div>{children}</div>
@@ -252,6 +253,7 @@ export default function App() {
   // A list response started before an upload must not erase its accepted result.
   const uploadRevision = useRef(0);
   const [kbs, setKbs] = useState<Entity[]>([]);
+  const [dashboardReadError,setDashboardReadError]=useState(false);
   const [kb, setKb] = useState("");
   const [jobs, setJobs] = useState<Entity[]>([]);
   const [agentVisibleJobIds, setAgentVisibleJobIds] = useState<string[]>([]);
@@ -397,6 +399,7 @@ export default function App() {
     if (!user) return;
     let active = true;
     setLoading(true);
+    setDashboardReadError(false);
     const controller=new AbortController();
     const revision=uploadRevision.current;
     const list=(value:Entity|Entity[],key:string)=>Array.isArray(value)?value:value[key]||[];
@@ -409,7 +412,7 @@ export default function App() {
     ];
     Promise.allSettled(tasks.map(async([path,update])=>{
       try {const value=await api(path,'GET',undefined,controller.signal,true);if(active)update(value);}
-      catch(error){if(active)setError(error instanceof Error?error.message:'Could not refresh workspace.');}
+      catch(error){if(active){setError(error instanceof Error?error.message:'Could not refresh workspace.');if(path==='/datasets'||path==='/documents')setDashboardReadError(true);}}
     })).finally(()=>{if(active)setLoading(false);});
     return () => {
       active = false;
@@ -793,7 +796,7 @@ export default function App() {
           </div>
         </header>
         <main id="workspace-main" tabIndex={-1} aria-label={viewLabel(view)} className={`workspace workspace-region${view==='Home'?' home-page-shell':''}${view === "Aegis agent V2" ? " agent-v2-workspace" : view === "Extract" ? " extract-page-shell" : view === "Extract Data" ? " extract-data-workspace" : ""}${view === 'Review' ? ` review-page-shell${extraction?' has-review':''}` : ''}`}>
-          {error && view !== "Home" && (
+          {error && (
             <Notice tone="error">
               {error}
               <button title="Dismiss error"
@@ -806,7 +809,7 @@ export default function App() {
               </button>
             </Notice>
           )}
-          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard metadataApi={api} onMetadataReview={openReview} username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
+          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard metadataApi={api} onMetadataReview={openReview} username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} loadError={dashboardReadError} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
           {view === "About" && <AboutAegis/>}
           {view === "Files & processing" && (user.is_admin?<AdminDocuments api={api} onChanged={reload} onReview={openReview}/>:<div className="panel" role="alert">Administrator access is required to manage files and processing.</div>)}
           {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}

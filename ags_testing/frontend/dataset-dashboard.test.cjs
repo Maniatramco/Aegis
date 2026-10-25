@@ -5,7 +5,7 @@ let hooks=[],cursor=0;
 const original=compiled.require.bind(compiled);
 compiled.require=id=>id==='./dataset-knowledge-scope'?scopeModule.exports:id==='react'?{useState(initial){const slot=cursor++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>{hooks[slot]=typeof value==='function'?value(hooks[slot]):value;}];}}:id.endsWith('.css')?{}:id==='./dataset-knowledge-picker'?{DatasetKnowledgePicker:props=>({type:'picker',props})}:id==='lucide-react'||id==='./agent-logo'?new Proxy({},{get:()=>()=>null}):original(id);
 compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
-const {DatasetDashboard,datasetDocuments,datasetReadiness}=compiled.exports;
+const {DatasetDashboard,datasetDocuments,datasetReadiness,dashboardOverview}=compiled.exports;
 const datasets=[{id:'a',name:'Invoices'},{id:'b',name:'Policies'}],documents=[{id:'one',parent_id:'a',name:'invoice.txt',status:'ready'},{id:'two',dataset_id:'b',name:'policy.txt',status:'ready'},{id:'stale',kb_id:'a',name:'old.txt',status:'ready',requires_reindex:true}];
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):typeof node.type==='function'?all(node.type(node.props)):[node,...all(node.props?.children)];
 const text=node=>!node?'':typeof node==='string'?node:Array.isArray(node)?node.map(text).join(''):text(node.props?.children);
@@ -17,6 +17,23 @@ test('source summaries keep dataset boundaries and do not count stale indexes as
  assert.deepEqual(datasetDocuments(documents,'a').map(d=>d.id),['one','stale']);
  assert.deepEqual(datasetReadiness(datasets[0],datasetDocuments(documents,'a')),{ready:1,label:'1 need reindex',state:'pending'});
  assert.equal(datasetReadiness({active:false},[]).label,'Inactive');
+});
+test('overview counts only accessible active dataset documents, with stale and failed sources counted once',()=>{
+ const sets=[...datasets,{id:'inactive',active:false}];
+ const docs=[...documents,{id:'bad',dataset_id:'a',status:'failed',requires_reindex:true},{id:'cancel',dataset_id:'a',status:'cancelled'},{id:'working',dataset_id:'b',status:'processing'},{id:'private',dataset_id:'unassigned',status:'ready'},{id:'archived',dataset_id:'inactive',status:'ready'}];
+ assert.deepEqual(dashboardOverview(sets,docs),{active:2,indexed:2,attention:3,processing:1});
+ assert.deepEqual(dashboardOverview([],docs),{active:0,indexed:0,attention:0,processing:0});
+});
+test('overview and mobile default to datasets, and returning preserves the mounted chat scope',()=>{
+ const v=mount();assert.equal(find(v,'Dataset dashboard').props['data-overview'],true);assert.equal(find(v,'Dataset dashboard').props['data-mobile-panel'],'datasets');
+ find(v,'Ask Aegis about Invoices').props.onClick();v.render();const scope=v.agents[0].sourceScope;
+ assert.equal(find(v,'Dataset dashboard').props['data-overview'],false);
+ v.nodes.find(n=>n.type==='button'&&text(n)==='Dataset overview').props.onClick();v.render();
+ assert.equal(find(v,'Dataset dashboard').props['data-overview'],true);assert.equal(v.agents[0].id,'a');assert.deepEqual(v.agents[0].sourceScope,scope);
+});
+test('loading and failed reads do not display false zero metrics or assignment instructions',()=>{
+ for(const values of [{loading:true},{loadError:true}]){const v=mount({...values,datasets:[],documents:[]});const metrics=find(v,'Active dataset overview');assert.equal(all(metrics).filter(n=>n.type==='dd').some(n=>n.props.children===0),false);}
+ const v=mount({loadError:true,datasets:[],documents:[]});assert.match(text(v.nodes),/Datasets could not be loaded/);assert.doesNotMatch(text(v.nodes),/No datasets assigned/);
 });
 test('notebook exposes only selected dataset sources',()=>{
  const v=mountChat({selectedId:'a'});assert.deepEqual(v.agents.map(a=>a.id),['a']);

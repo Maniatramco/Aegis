@@ -65,3 +65,52 @@ body .shell .notebook-dashboard .notebook-panel-heading h3{display:flex;align-it
 @media(prefers-reduced-motion:reduce){.notebook-dashboard *{scroll-behavior:auto}}
 
 .dataset-knowledge-picker{width:min(660px,calc(100vw - 32px));max-height:85dvh;border:1px solid #d5e2ed;border-radius:16px;padding:22px;color:#365772;box-shadow:0 25px 90px #17365130}.dataset-knowledge-picker::backdrop{background:#18365155}.dataset-knowledge-picker>header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.dataset-knowledge-picker h2{font-size:20px!important;margin:0 0 8px}.dataset-knowledge-picker p{font-size:11px;color:#8299ab;line-height:1.7}.knowledge-picker-search{display:flex;gap:10px;align-items:center;border:1px solid #dfe9f1;border-radius:9px;padding:9px 12px;margin:17px 0;color:#87a0b5}.knowledge-picker-search input{border:0;background:none;padding:0;box-shadow:none;width:100%;font-size:12px}.knowledge-picker-list{max-height:48dvh;overflow:auto}.knowledge-picker-list>section{border:1px solid #e2eaf2;border-radius:10px;margin:0 0 12px;overflow:hidden}.knowledge-picker-dataset,.knowledge-picker-file{display:flex;align-items:center;gap:9px;padding:13px;cursor:pointer}.knowledge-picker-dataset{background:#f2f7fc;font-size:12px}.knowledge-picker-dataset>strong{flex:1;font-weight:500}.knowledge-picker-dataset>span{font-size:10px;color:#8aa0b2}.knowledge-picker-file{font-size:11px;padding-left:28px;border-top:1px solid #eef3f7;color:#708da3}.knowledge-picker-file>span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dataset-knowledge-picker input[type=checkbox]{appearance:auto;width:14px;height:14px;accent-color:#518abc;margin:0}.knowledge-picker-list>section>p{padding:0 14px}.dataset-knowledge-picker>footer{display:flex;align-items:center;gap:9px;margin-top:17px}.dataset-knowledge-picker>footer>span{flex:1;font-size:11px;color:#90a2b0}.dataset-knowledge-picker .btn{font-size:11px}.workspace-knowledge-card{background:#eef4fc}
+
+/* Dataset-first overview; opening knowledge retains the existing scoped workspace. */
+.notebook-dashboard{--notebook-muted:#51677c;height:calc(100dvh - 116px);min-height:560px}
+.notebook-heading{padding:2px 2px 8px;align-items:center}
+.notebook-heading>.dashboard-title{display:block}.dashboard-eyebrow{display:block;font-size:11px;color:#51677c;margin-bottom:5px}
+.notebook-heading .dashboard-title h2{font-size:23px!important;letter-spacing:-.025em;color:#152e49;font-weight:650}
+.dashboard-title p{font-size:12px;line-height:1.5;margin:6px 0 0;color:#51677c}
+.metadata-dashboard-actions{flex-wrap:wrap;justify-content:flex-end}.metadata-dashboard-actions>.btn{color:#21495c;min-height:38px}
+.dashboard-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;border:1px solid #dce5ed;border-radius:12px;background:#fff;flex-shrink:0}
+.dashboard-summary>div{min-width:0;padding:13px 18px;border-right:1px solid #e1e8ef}.dashboard-summary>div:last-child{border-right:0}
+.dashboard-summary dt{font-size:12px;color:#51677c}.dashboard-summary dd{font-size:27px;font-weight:650;letter-spacing:-.03em;color:#152e49;margin:4px 0}.dashboard-summary span{display:block;font-size:11px;color:#51677c;line-height:1.5}
+.dashboard-gallery-hint{font-size:11px;color:#51677c;white-space:nowrap}
+.notebook-dashboard[data-overview=true]{height:auto;min-height:calc(100dvh - 116px)}
+.notebook-dashboard[data-overview=true]>.notebook-workspace{grid-template-columns:minmax(0,2.1fr) minmax(280px,1fr)}
+.notebook-dashboard[data-overview=true]>.notebook-workspace{min-height:480px;flex:auto}
+.notebook-dashboard[data-overview=true] .notebook-sources{display:none}
+.notebook-dashboard[data-overview=true] .dashboard-dataset-rail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:max-content;align-content:start;gap:12px;padding:14px;overflow:visible}
+.notebook-dashboard[data-overview=true] .workspace-knowledge-card{grid-column:1/-1;min-height:64px;background:#edf6f7;border-color:#bbd9df}
+.notebook-dashboard[data-overview=true] .dashboard-dataset-tile{background:#fff;border-color:#d8e2eb;box-shadow:0 2px 4px #19354c04}
+.notebook-dashboard[data-overview=true] .dashboard-dataset-tile[data-included=true]{border-color:#9dbfc7}
+.notebook-dashboard[data-overview=true] .dashboard-dataset-tile>.dashboard-dataset{display:flex;align-items:flex-start;flex-wrap:wrap;gap:10px;padding:16px;min-height:163px}
+.notebook-dashboard[data-overview=true] .dashboard-dataset-tile>.dashboard-dataset>.dashboard-dataset-icon{display:grid;background:#edf6f7;color:#207588}
+.notebook-dashboard[data-overview=true] .notebook-card-copy strong{font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+.notebook-dashboard[data-overview=true] .notebook-card-copy>span{font-size:12px;color:#51677c}
+.dashboard-card-description{display:none}.notebook-dashboard[data-overview=true] .dashboard-card-description{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12px;line-height:1.6}
+.dashboard-card-action{display:none}.notebook-dashboard[data-overview=true] .dashboard-card-action{display:flex;align-items:center;gap:6px;width:100%;font-size:12px;font-weight:600;color:#176377;padding-left:37px}
+.dashboard-dataset-include{color:#3e5f74;min-height:36px}.notebook-card-copy [data-state=failed]{color:#a33e36}.notebook-card-copy [data-state=pending]{color:#7f5b17}.notebook-card-copy [data-state=ready]{color:#1c7157}
+.notebook-dashboard[data-overview=true] .dashboard-agent-empty{padding:24px;justify-content:center;background:linear-gradient(150deg,#fff 55%,#f0f6f9)}
+.notebook-dashboard[data-overview=true] .dashboard-agent-empty>.aegis-agent-logo{width:44px;height:44px}
+.notebook-dashboard[data-overview=true] .dashboard-agent-empty h3{font-size:22px;line-height:1.3;margin:18px 0 12px}
+.dashboard-agent-empty p,.dashboard-empty,.notebook-muted,.notebook-empty p{color:#51677c}
+.notebook-dashboard[data-overview=true] .dashboard-knowledge-toolbar{flex-wrap:wrap}
+.notebook-dashboard[data-overview=true] .notebook-chat-scope{display:none}
+.notebook-dashboard[data-overview=false] .dashboard-card-action{display:none}
+.dashboard-guide,.dashboard-guide>summary span,.notebook-source-copy small,.notebook-source-selection,.dashboard-datasets-footer,.notebook-source-footer{color:#51677c}
+@media(max-width:1100px) and (min-width:901px){.notebook-dashboard[data-overview=true]>.notebook-workspace{grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr)}.notebook-dashboard[data-overview=true] .dashboard-dataset-rail{grid-template-columns:minmax(0,1fr)}.dashboard-title p{max-width:350px}.notebook-heading .dashboard-title h2{font-size:20px!important}}
+@media(max-width:900px){
+ .notebook-dashboard{height:auto;min-height:calc(100dvh - 140px)}
+ .notebook-dashboard>.notebook-heading{align-items:flex-start;flex-wrap:wrap;gap:12px}.notebook-heading>.dashboard-title{flex:1;min-width:200px}
+ .notebook-dashboard>.notebook-heading>.metadata-dashboard-actions{width:auto;max-width:100%;margin:0;justify-content:flex-start;flex-wrap:wrap}.notebook-dashboard>.notebook-heading>.metadata-dashboard-actions>.btn{width:auto;max-width:100%;padding:7px 10px;min-width:36px;white-space:normal}.notebook-dashboard>.notebook-heading>.metadata-dashboard-actions>.btn>span{display:inline}
+ .dashboard-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-summary>div{padding:12px 14px}.dashboard-summary>div:nth-child(2){border-right:0}.dashboard-summary>div:nth-child(-n+2){border-bottom:1px solid #e1e8ef}.dashboard-summary dd{font-size:25px}
+ .notebook-dashboard[data-overview=true] .dashboard-dataset-rail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}
+ .notebook-dashboard[data-overview=true] .dashboard-datasets{min-height:350px}.notebook-dashboard[data-overview=true] .dashboard-dataset-tile>.dashboard-dataset{min-height:160px}
+ .notebook-dashboard[data-overview=false]>.notebook-workspace{height:calc(100dvh - 280px);min-height:460px;flex:auto}
+ .notebook-dashboard[data-chat-focused=true]{min-height:0;height:auto}.notebook-dashboard[data-chat-focused=true]>.notebook-workspace{height:auto;min-height:0;flex:1}
+ .notebook-dashboard[data-overview=true][data-mobile-panel=datasets] .dashboard-datasets{display:flex}
+ .notebook-dashboard[data-overview=false][data-mobile-panel=sources] .notebook-sources{display:flex}
+}
+@media(max-width:560px){.notebook-dashboard[data-overview=true] .dashboard-dataset-rail{grid-template-columns:minmax(0,1fr);padding:10px}.notebook-dashboard[data-overview=true] .dashboard-dataset-tile>.dashboard-dataset{min-height:150px}.notebook-heading .dashboard-title h2{font-size:22px!important;white-space:normal!important;overflow:visible!important}.dashboard-title p{font-size:12px}.dashboard-panel-switcher>button{font-size:11px;padding:8px 4px}.dashboard-summary span{font-size:10px}.dashboard-summary dt{font-size:11px}.dashboard-gallery-hint{font-size:10px}}
