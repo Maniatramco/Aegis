@@ -5,7 +5,7 @@ const models=[{id:'preview-chat',name:'Preview chat model',enabled:true,capabili
 const datasets=[{id:'finance',name:'Finance',description:'Synthetic finance knowledge',active:true,models,default_chat_model_id:'preview-chat'},{id:'policy',name:'Policies',description:'Synthetic policy knowledge',active:true,models,default_chat_model_id:'preview-chat'},{id:'inactive',name:'Archived',active:false,models}];
 const documents=[...Array.from({length:24},(_,i)=>({id:'finance-'+i,parent_id:'finance',dataset_id:'finance',name:i===0?'term-sheet.txt':`finance-evidence-${String(i+1).padStart(2,'0')}.txt`,status:'ready'})),{id:'policy-1',parent_id:'policy',dataset_id:'policy',name:'retention-policy.txt',status:'ready'},{id:'stale',dataset_id:'policy',name:'old-policy.txt',status:'ready',requires_reindex:true},{id:'private',dataset_id:'unassigned',name:'unassigned.txt',status:'ready'}];
 let fixtureRevision=0;
-async function preview(page:Page,options:{datasets?:any[];documents?:any[];datasetsError?:boolean;holdDatasets?:Promise<void>}={}){
+async function preview(page:Page,options:{datasets?:any[];documents?:any[];datasetsError?:boolean;holdDatasets?:Promise<void>;onDatasetsRequested?:()=>void}={}){
  const fixtureDatasets=options.datasets??datasets,fixtureDocuments=options.documents??documents;
  const sent:any[]=[];
  page.on('pageerror',error=>console.error('Dashboard preview error:',error.message));
@@ -14,7 +14,7 @@ async function preview(page:Page,options:{datasets?:any[];documents?:any[];datas
   const json=(value:any)=>route.fulfill({json:value});
   if(path==='/api/auth/me')return json({user:{id:'preview',username:'Preview user',is_admin:true,role:'administrator'},csrf_token:'synthetic-preview',chat_session_id:'synthetic-dashboard-preview'});
   if(path==='/api/auth/status')return json({setup_required:false});
-  if(path==='/api/datasets'){if(options.holdDatasets)await options.holdDatasets;return options.datasetsError?route.fulfill({status:503,json:{detail:'Synthetic dataset service unavailable'}}):json(fixtureDatasets);}
+  if(path==='/api/datasets'){options.onDatasetsRequested?.();if(options.holdDatasets)await options.holdDatasets;return options.datasetsError?route.fulfill({status:503,json:{detail:'Synthetic dataset service unavailable'}}):json(fixtureDatasets);}
   if(path==='/api/documents')return json(fixtureDocuments);
   if(path==='/api/models')return json(models);
   if(path==='/api/storage/status')return json({files:{provider:'local',name:'Synthetic files'},database:{provider:'local',name:'Synthetic database'},knowledge:{provider:'local',name:'Synthetic knowledge'}});
@@ -32,11 +32,15 @@ async function preview(page:Page,options:{datasets?:any[];documents?:any[];datas
  return sent;
 }
 
-test('chat owns the first viewport while compact context retains truthful counts and keyboard selection',async({page})=>{
+async function openReadiness(page:Page){const summary=page.locator('.dashboard-readiness-summary');if(await summary.getAttribute('open')===null)await summary.locator('summary').click();}
+
+test('chat owns the first viewport while genuine dataset cards retain details and keyboard selection',async({page})=>{
  await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);
- const metrics=page.getByLabel('Active dataset overview',{exact:true});await expect(metrics).toBeVisible();
+ await openReadiness(page);const metrics=page.getByLabel('Active dataset overview',{exact:true});await expect(metrics).toBeVisible();
  await expect(metrics.locator('dd')).toHaveText(['2','25','1','0']);
+ await page.locator('.dashboard-readiness-summary > summary').click();
  const card=page.getByRole('button',{name:'Ask Aegis about Finance',exact:true});
+ await expect(card.locator('.dashboard-card-description')).toBeVisible();await expect(card).toContainText('Synthetic finance knowledge');await expect(card).toContainText('24 sources');
  const chat=await page.getByLabel('Dataset knowledge workspace chat',{exact:true}).boundingBox(),workspace=await page.locator('.notebook-workspace').boundingBox();
  expect(chat!.width/workspace!.width).toBeGreaterThan(.70);expect(chat!.width/workspace!.width).toBeLessThan(.79);expect(chat!.y).toBeLessThan(180);
  await card.focus();await expect(card).toBeFocused();await page.keyboard.press('Enter');
@@ -44,7 +48,7 @@ test('chat owns the first viewport while compact context retains truthful counts
  await expect(page.getByLabel('Included indexed source count',{exact:true})).toHaveText('24 indexed sources');
  await page.getByRole('button',{name:'Summarize the key themes',exact:true}).click();await expect(composer).toBeFocused();await expect(composer).toHaveValue('Summarize the key themes');expect(sent).toEqual([]);
  await composer.fill('Retain my overview draft');
- await page.getByRole('button',{name:'Datasets (3)',exact:true}).click();await expect(metrics).toBeVisible();
+ await page.getByRole('button',{name:'Datasets (3)',exact:true}).click();await expect(card).toContainText('Selected');
  await expect(composer).toHaveValue('Retain my overview draft');expect(sent).toEqual([]);
  await page.getByRole('button',{name:'Expand Dataset Knowledge Chat',exact:true}).click();await expect(composer).toHaveValue('Retain my overview draft');
  await overview(page);expect(sent).toEqual([]);
@@ -72,14 +76,14 @@ test('mobile opens on chat with its composer visible, while long dataset names a
 test('empty, filtered, loading and failed dataset reads have honest states and no automatic model request',async({page})=>{
  const sent=await preview(page,{datasets:[],documents:[]});
  await expect(page.getByText('No datasets available',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['0','0','0','0']);expect(sent).toEqual([]);
+ await openReadiness(page);await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['0','0','0','0']);expect(sent).toEqual([]);
  await page.unrouteAll({behavior:'wait'});await preview(page,{datasetsError:true,documents:[]});
  await expect(page.getByText('Datasets could not be loaded',{exact:true})).toBeVisible();
  await expect(page.getByRole('main',{name:'Dashboard',exact:true}).getByRole('alert')).toContainText('Synthetic dataset service unavailable');
  await page.getByRole('button',{name:'Dismiss error',exact:true}).click();
- await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['—','—','—','—']);
- await page.unrouteAll({behavior:'wait'});let release!:()=>void;const held=new Promise<void>(resolve=>release=resolve);
- const ready=preview(page,{holdDatasets:held});
+ await openReadiness(page);await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['—','—','—','—']);
+ await page.unrouteAll({behavior:'wait'});let release!:()=>void,observed!:()=>void;const held=new Promise<void>(resolve=>release=resolve),requested=new Promise<void>(resolve=>observed=resolve);
+ const ready=preview(page,{holdDatasets:held,onDatasetsRequested:observed});await requested;await openReadiness(page);
  await expect(page.getByLabel('Active dataset overview',{exact:true}).locator('dd')).toHaveText(['—','—','—','—']);release();await ready;
  await page.getByRole('button',{name:'Search datasets',exact:true}).click();await page.getByRole('textbox',{name:'Search datasets',exact:true}).fill('missing synthetic dataset');
  await expect(page.getByText('No matching datasets',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Clear search',exact:true}).last().click();
@@ -87,7 +91,23 @@ test('empty, filtered, loading and failed dataset reads have honest states and n
 });
 
 async function overview(page:Page){const restore=page.getByRole('button',{name:'Restore Dashboard layout',exact:true});if(await restore.isVisible())await restore.click();}
-// Dataset selection keeps the three-panel layout; explicit expansion retains the mounted chat.
+
+test('mobile card shelf is visible with chat, collapses without losing a draft, and has a non-swipe route to all cards',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const sent=await preview(page);
+ const shelf=page.getByRole('region',{name:'Quick dataset selection',exact:true});await expect(shelf).toBeVisible();
+ const card=shelf.getByRole('button',{name:'Ask Aegis about Finance',exact:true});await expect(card.locator('.dashboard-card-description')).toBeVisible();
+ const shelfBounds=await shelf.boundingBox(),cardBounds=await card.boundingBox();expect(cardBounds!.width).toBeLessThan(shelfBounds!.width);expect(shelfBounds!.height).toBeLessThan(140);
+ await card.focus();await page.keyboard.press('Enter');const composer=page.getByLabel('Message Dataset Knowledge Chat',{exact:true});await expect(composer).toBeFocused();await composer.fill('Keep this card-selection draft');
+ await shelf.getByRole('button',{name:'Ask Aegis about Finance',exact:true}).click();await expect(composer).toHaveValue('Keep this card-selection draft');await expect(card).toContainText('Selected');
+ await page.getByRole('button',{name:'Hide dataset cards',exact:true}).click();await expect(shelf).toBeHidden();await expect(composer).toHaveValue('Keep this card-selection draft');await expect(composer).toBeInViewport();
+ await page.getByRole('button',{name:'Show dataset cards',exact:true}).click();await expect(shelf).toBeVisible();
+ await page.getByRole('button',{name:'All datasets',exact:true}).click();await expect(page.getByLabel('Authorized datasets',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Authorized datasets',{exact:true})).toBeFocused();
+ await expect(page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).locator('.dashboard-card-description')).toBeVisible();
+ await page.getByRole('button',{name:'Knowledge Chat',exact:true}).click();await expect(composer).toHaveValue('Keep this card-selection draft');expect(sent).toEqual([]);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&scrollY===0)).toBe(true);
+});
+// Context controls and explicit expansion retain the mounted chat.
 
 test('including knowledge keeps compact context without sending, and expansion preserves drafts and conversation',async({page})=>{
  await page.setViewportSize({width:1440,height:1000});const sent=await preview(page);

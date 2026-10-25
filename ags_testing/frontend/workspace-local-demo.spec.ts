@@ -9,15 +9,21 @@ async function fits(page:Page){expect(await page.evaluate(()=>document.documentE
 test('synthetic Dashboard, direct navigation, keyboard skip and responsive jobs remain usable',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await info(page);
  await goto(page,'Dashboard');await expect(page.getByText('Local demo · synthetic data',{exact:true})).toBeVisible();
+ await page.keyboard.press('Tab');await expect(page.getByRole('link',{name:'Skip to workspace',exact:true})).toBeFocused();await page.keyboard.press('Enter');await expect(page.locator('main')).toBeFocused();
  if(process.env.AEGIS_DASHBOARD_DESKTOP_SCREENSHOT){
   await expect(page.getByRole('button',{name:'Ask Aegis about Operations handbook',exact:true})).toBeVisible();
   await expect(page.getByLabel('Active dataset overview',{exact:true})).toHaveAttribute('aria-busy','false');await expect(page.getByLabel('Dataset chat model',{exact:true})).toBeEnabled();
-  await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:process.env.AEGIS_DASHBOARD_DESKTOP_SCREENSHOT,fullPage:true});
+  await page.setViewportSize({width:1366,height:768});
+  await page.getByRole('button',{name:'Ask Aegis about Operations handbook',exact:true}).click();await expect(page.getByLabel('Dataset chat model',{exact:true})).toBeEnabled();
+  const composer=await page.locator('.dataset-knowledge-chat .agent-v2-composer').boundingBox(),footer=await page.getByRole('contentinfo',{name:'Application status',exact:true}).boundingBox();expect(composer!.y+composer!.height).toBeLessThanOrEqual(footer!.y);
+  for(const suggestion of await page.locator('.notebook-chat .agent-v2-suggestions button').all())await expect(suggestion).toBeInViewport({ratio:1});
+  await page.evaluate(()=>window.scrollTo(0,0));
+  await page.screenshot({path:process.env.AEGIS_DASHBOARD_DESKTOP_SCREENSHOT,fullPage:false});
   await page.setViewportSize({width:390,height:844});await fits(page);
+  for(const suggestion of await page.locator('.notebook-chat .agent-v2-suggestions button').all())await expect(suggestion).toBeInViewport({ratio:1});
   if(process.env.AEGIS_DASHBOARD_MOBILE_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_DASHBOARD_MOBILE_SCREENSHOT,fullPage:false});
   await page.setViewportSize({width:1440,height:1000});
  }
- await page.keyboard.press('Tab');await expect(page.getByRole('link',{name:'Skip to workspace',exact:true})).toBeFocused();await page.keyboard.press('Enter');await expect(page.locator('main')).toBeFocused();
  await page.getByRole('button',{name:'Open navigation',exact:true}).click();const navigation=page.getByRole('navigation',{name:'Workspace pages'});await navigation.getByRole('button',{name:'Manage workspace',exact:true}).click();await navigation.getByRole('button',{name:'Jobs & activity',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Processing history'})).toBeVisible();await expect(page.locator('.job-row').first()).toBeVisible();
  for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:900});await fits(page);await expect(page.getByRole('group',{name:'Filter jobs'})).toBeVisible();}

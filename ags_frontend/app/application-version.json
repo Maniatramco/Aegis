@@ -1,6 +1,18 @@
 {
-  "version": "26.1.13.4",
+  "version": "26.1.13.5",
   "releases": [
+    {
+      "version": "26.1.13.5",
+      "date": "2026-10-25",
+      "title": "Dataset cards and spacious chat",
+      "changes": [
+        "Keep chat dominant while restoring genuine dataset cards in a compact desktop library: names, descriptions, source counts, readiness icons/text and explicit selected state.",
+        "Show a shallow card shelf beside mobile chat, with next-card preview, keyboard access, an All datasets route and a collapse control that preserves the current conversation and draft.",
+        "Move aggregate readiness behind an optional context disclosure and retain dataset inclusion, source exclusions, drag/drop, existing history and full-width expansion.",
+        "Adapt welcome typography and suggestions to shorter desktop/mobile canvases while keeping the composer visible.",
+        "Preserve original navigation and existing processing, access and provider contracts. Local preview only; no push, deployment or live service change."
+      ]
+    },
     {
       "version": "26.1.13.4",
       "date": "2026-10-25",

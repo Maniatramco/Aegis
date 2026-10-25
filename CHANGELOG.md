@@ -2,6 +2,14 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.13.5 - 25 October 2026
+
+Refine Dashboard as a dataset library beside a spacious conversation. Desktop cards show the approved icon treatment, dataset name/description, real source count, readiness icon/text and explicit Selected state in a compact supporting pane. Keep inclusion separate from the card's primary selection action. Aggregate readiness is available through an optional disclosure rather than a persistent metric row.
+
+Mobile keeps chat first while exposing a shallow horizontal card shelf with a next-card preview, keyboard access, All datasets navigation and explicit collapse. Shelf display changes and selecting the current scope preserve its draft; scope changes retain existing per-scope chat/history contracts. Adapt the welcome and suggestions to shorter canvases so the composer remains visible. Original menu/submenu ordering, access/source filtering and backend/provider behavior remain unchanged.
+
+Local preview only. No source push, deployment, publication or original Sprint 1 source changes.
+
 ## v26.1.13.4 - 25 October 2026
 
 Make chat the main Dashboard workspace, superseding the dataset-first layout in v26.1.13.3. Chat uses about 74% of desktop content width; datasets and sources share a compact context pane, and mobile opens on chat. Keep readiness in a quiet strip, preserve explicit expansion and use the knowledge toolbar as an additional dataset drop target. Existing scope, source exclusions, drafts, conversation history and navigation ordering remain unchanged.
