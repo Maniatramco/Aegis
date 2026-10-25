@@ -1,6 +1,19 @@
 {
-  "version": "26.1.12.12",
+  "version": "26.1.13.0",
   "releases": [
+    {
+      "version": "26.1.13.0",
+      "date": "2026-10-25",
+      "title": "Local Sprint 2 preview",
+      "changes": [
+        "Reconcile the existing local S3, SharePoint and Google Drive source-connection candidate with the later Sprint 1 admin-processing and model-routing fixes.",
+        "Import explicitly selected cloud copies through the existing dataset upload/index path, preserving encrypted credentials, scoped access, provenance, duplicate handling and consent. Imports are snapshots; source ACLs, updates and deletions are not automatically synchronized.",
+        "Preserve safe recognized model HTTP quota/rate-limit advice without exposing provider response messages or credentials.",
+        "Show the approved Aegis shield, readable product identity and banner palette independently of raster artwork details on the sign-in screen.",
+        "Keep sign-in before secondary artwork in mobile reading and visual order, with existing labels, autocomplete, focus and authentication behavior preserved.",
+        "Local preview only. No source push, production publication or authentication/recovery change."
+      ]
+    },
     {
       "version": "26.1.12.12",
       "date": "2026-10-24",

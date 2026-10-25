@@ -13,6 +13,9 @@ __pycache__/
 .venv/
 node_modules/
 .next/
+.next-sprint2-build/
+.next-cloud-sources/
+.next-cloud-sources-build/
 out/
 coverage/
 playwright-report/

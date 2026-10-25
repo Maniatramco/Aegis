@@ -9,6 +9,34 @@ from .parameters import check_budget, validate_parameters, ParameterError
 from .validation import ConnectionError, PROTOCOLS, AUTH_MODES, validate_endpoint, validate_connection, validate_credentials, credentials
 from .provider_registry import provider
 
+def http_failure(response):
+    """Expose only recognized error classifications, never provider messages/keys."""
+    if response.status_code != 429:
+        return 'Model request failed (HTTP ' + str(response.status_code) + '). Check credentials, model access, quota, and protocol.'
+    try:
+        data = response.json()
+        error = data.get('error', {}) if isinstance(data, dict) else {}
+        code = error.get('code', '') if isinstance(error, dict) else ''
+        kind = error.get('type', '') if isinstance(error, dict) else ''
+    except (ValueError, TypeError):
+        code = kind = ''
+    reasons = {
+        'credit_balance_exhausted': 'The API account has no prepaid credits remaining. Ask the API administrator to add credits before testing again.',
+        'organization_spend_limit_exceeded': 'The API organization reached its spend limit. Ask the API administrator to review that limit before testing again.',
+        'project_spend_limit_exceeded': 'The API project reached its spend limit. Ask the API administrator to review that limit before testing again.',
+        'organization_usage_limit_exceeded': 'The API organization reached its approved usage limit. Ask the API administrator to review its API limits before testing again.',
+        'insufficient_quota': 'The API account has insufficient quota. Ask the API administrator to check API billing, credits and project/organization limits before testing again.',
+    }
+    if isinstance(code, str) and code in reasons:
+        return 'Model request rejected (HTTP 429). ' + reasons[code]
+    if kind == 'insufficient_quota':
+        return 'Model request rejected (HTTP 429). ' + reasons['insufficient_quota']
+    if code in ('rate_limit_exceeded', 'slow_down') or kind in ('rate_limit_error', 'rate_limit_exceeded'):
+        delay = response.headers.get('retry-after', '')
+        timing = ' Wait at least ' + str(int(delay)) + ' seconds before trying again.' if delay.isdigit() and len(delay) <= 6 and 0 < int(delay) <= 604800 else ' Wait for the provider rate limit to reset before trying again.'
+        return 'Model request rate limited (HTTP 429).' + timing + ' Reduce concurrent requests or the request token budget if this repeats.'
+    return 'Model request rejected (HTTP 429). The provider did not identify a recognized cause. Check API billing/quota and request/token rate limits with the API administrator before retrying.'
+
 class ModelConnection:
     def __init__(self, cfg, embedding=False, credentials_override=None):
         self.cfg = cfg
@@ -36,7 +64,7 @@ class ModelConnection:
             with httpx.Client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
                 response = client.post(self.c['endpoint'] + path, json=payload, headers=headers)
             if response.status_code >= 300:
-                raise ConnectionError('Model request failed (HTTP ' + str(response.status_code) + '). Check credentials, model access, quota, and protocol.')
+                raise ConnectionError(http_failure(response))
             return response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise ConnectionError('Model service is unavailable, timed out, or returned invalid JSON.') from exc

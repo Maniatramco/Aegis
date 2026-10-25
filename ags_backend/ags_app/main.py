@@ -1170,3 +1170,6 @@ from . import api_documentation
 from . import admin_documents
 admin_documents.install(app,auth)
 api_documentation.install(app,auth)
+
+from . import source_connections
+source_connections.install(app, auth, __import__(__name__, fromlist=['app']))

@@ -258,6 +258,10 @@ def require_indexes(docs,snapshot):
 
 def document_public(d,snapshots=None):
     result=core.representation(d)|{'dataset_id':d.parent_id or None,'requires_reindex':True}
+    try:
+        source=core.local_store.json('configuration/source-provenance/'+d.id+'.json')
+        result['cloud_source']={key:source.get(key) for key in ('provider','connection_id','connection_name','original_url','revision','imported_at')}
+    except FileNotFoundError:pass
     try:result['ocr']=core.store.json('documents/'+d.id+'/parsed.json').get('ocr')
     except FileNotFoundError:pass
     from . import merged_documents

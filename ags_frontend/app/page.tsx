@@ -1,7 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { SignInLayout } from "./sign-in-layout";
 import { DatasetSearch } from "./dataset-directory";
 import {ReviewDetail} from './review-detail';
 import { ExtractionDirectory } from "./extraction-directory";
@@ -13,6 +13,7 @@ import { WorkflowOverview } from "./workflow-overview";
 import { DatasetDashboard } from "./dataset-dashboard";
 import {DatasetKnowledgeChat,knowledgeScopeKey} from "./dataset-knowledge-chat";
 import { StorageConfiguration } from "./storage-configuration";
+import { SourceConnections } from "./source-connections";
 import { ConnectionSettings } from "./connection-settings";
 import { ConnectionStatus } from "./connection-status";
 import { AboutAegis } from "./about-aegis";
@@ -68,6 +69,7 @@ type View =
   | "Prompt templates"
   | "Jobs & activity"
   | "Storage"
+  | "Source Connections"
   | "Files & processing"
   | "Model Registration"
   | "Model Mapping"
@@ -86,6 +88,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Prompt templates", icon: FileText },
   { name: "Jobs & activity", icon: Activity },
   { name: "Storage", icon: HardDrive },
+  { name: "Source Connections", icon: Database },
   { name: "Files & processing", icon: FileText },
   { name: "Model Registration", icon: Layers },
   { name: "Model Mapping", icon: BookOpen },
@@ -300,9 +303,10 @@ export default function App() {
       const section=({overview:'workspace summary',jobs:'workflow status',settings:'workspace settings',conversations:'chats',models:'available models',templates:'prompt templates'} as Record<string,string>)[resource]||resource.replaceAll('-',' ');
       const testingModel=path==='/model-registrations/test';
       const planningAgent=path==='/agent-v2/plans'&&method==='POST';
+      const importingCloud=path.startsWith('/source-connections/')&&path.endsWith('/import')&&method==='POST';
       const label=path==='/templates/validate'?'Validating prompt JSON…':path.startsWith('/temporary-chat/')?(path==='/temporary-chat/messages'?'Answering from the temporary document…':method==='DELETE'?'Clearing temporary document…':body instanceof FormData?'Reading temporary document…':'Loading temporary document…'):testingModel?'Testing model connection…':path.startsWith('/datasets/')&&path.endsWith('/models')&&method==='PUT'?'Applying dataset model mappings…':`${method==='GET'?'Loading':method==='POST'&&body instanceof FormData?'Uploading':'Saving'} ${section}…`;
       if(!quiet)setRequests(previous=>[...previous,{id:requestId,label}]);
-      const timeout=AbortSignal.timeout(planningAgent?630000:testingModel?Math.min(630000,(Number((body as Entity)?.timeout)||60)*1000+30000):method==='GET'?30000:120000);
+      const timeout=AbortSignal.timeout(planningAgent||importingCloud?630000:testingModel?Math.min(630000,(Number((body as Entity)?.timeout)||60)*1000+30000):method==='GET'?30000:120000);
       try {
       const headers: Record<string, string> = {};
       if (body && !(body instanceof FormData))
@@ -638,8 +642,7 @@ export default function App() {
     );
   if (!user)
     return (
-      <main className="login-shell"><div className="login-layout"><section className="login-story" aria-label="About the Aegis platform"><figure className="login-illustration"><Image className="login-artwork" src="/aegis-banner.jpg" alt="Aegis — Secure Data Lakehouse and AI Platform. Multi-model AI for trusted enterprise knowledge, with retrieval, vector search and grounded answers." width={906} height={1280} sizes="(max-width: 760px) calc(100vw - 36px), (max-height: 820px) 465px, 540px" priority /></figure></section>
-        <section className="login-card" aria-labelledby="login-heading">
+      <SignInLayout>
           <h1 id="login-heading" className="screen-heading">{bootstrap ? "Create your workspace" : "Welcome back"}</h1>
           <p className="login-description">{bootstrap ? "Set up your first account to get started." : roleChangedNotice ? "Your role changed. Sign in again to use your updated access." : passwordChangedNotice ? "Password changed. Sign in with your new password." : "Sign in to your workspace."}</p>
           {error && <div className="login-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}
@@ -700,8 +703,7 @@ export default function App() {
           {bootstrap && <button className="login-switch" type="button" onClick={() => {
             setBootstrap(false); setBootstrapToken(""); setPassword(""); setShowPassword(false); setSignInErrors({}); setError("");
           }}>Already configured? Sign in</button>}
-        </section></div>
-      </main>
+      </SignInLayout>
     );
 
   return (
@@ -722,7 +724,7 @@ export default function App() {
           <span className="brand-name">Aegis</span>
         </div>
         <div className="brand-sub">AI Data Platform</div>
-        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["About","Home","Datasets","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity"].includes(s.name)))}/>
+        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["About","Home","Datasets","Source Connections","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity"].includes(s.name)))}/>
 
         <div className="nav-footer">
           <div className="row" style={{ marginBottom: 9 }}>
@@ -988,6 +990,7 @@ export default function App() {
               )}
             </section>
           )}
+          {view === "Source Connections" && user.is_admin && <SourceConnections api={api} datasets={kbs} documents={docs} selectedDataset={kb} onDatasetChange={changeDataset} onChanged={reload} onChat={id=>{changeDataset(id);navigate('Aegis agent V2');}} onModels={()=>navigate('Model Mapping')}/>}
           {view === "Model Registration" && <ModelRegistration models={models} settings={settings} api={api} run={run} busy={busy}
             onSaved={model => { setModels(current => current.some(m => m.id === model.id) ? current.map(m => m.id === model.id ? model : m) : [model, ...current]); notify("Model saved. New runs use the updated connection; apply embedding changes in Model Mapping."); reload(); }}
             onMapping={() => navigate("Model Mapping")} />}

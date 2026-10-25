@@ -2,6 +2,14 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.13.0 - 25 October 2026
+
+Local Sprint 2 candidate from committed Sprint 1 `48ce4b9`. Reconcile the previously uncommitted source-connection and safe HTTP 429-advice work without replacing intervening admin file processing, cleanup, OCR selection, rerun routing or release history. Source Connections supports administrator-selected read-only S3/SharePoint/Google Drive imports through the existing consent/upload/index pipeline, with encrypted credentials, scoped selection, provenance and duplicate handling. Imports are snapshots; source ACLs, updates/deletions, scheduled synchronization and delegated-user OAuth are not mirrored. Existing original working files are preserved separately.
+
+Sign-in exposes the approved Aegis identity and product message as readable live text, with scoped navy/teal/silver accents. The form precedes supporting artwork in mobile DOM and visual order; desktop keeps its two-column presentation. Keep labels, username/current-password autocomplete, password visibility, validation and focus behavior. Shorten the artwork alternative to its actual visual content. No authentication, recovery endpoint or credential-flow change is included. Recovery guidance and broader authenticated UX remain separate review work.
+
+Use synthetic local fixtures for validation. Live provider/account acceptance, final Sprint 1 reconciliation/publication and deployment are not claimed. No push or cloud publication is part of this preview.
+
 ## v26.1.12.12 - 24 October 2026
 
 File catalog reads could wait on live model metadata for older local mappings, while overlapping timed refreshes superseded a slow initial response. Compare saved index generations, model/profile versions and OCR selections for catalog status; retain live validation when processing is submitted. Prevent quiet polling from overlapping pending catalog reads and keep background refreshes out of the global request overlay. Add slow-response and no-provider-probe regression coverage. Preserve indexing/extraction execution and the v26.1.12.11 cleanup chain. No schema, dependency, configuration or infrastructure changes.
