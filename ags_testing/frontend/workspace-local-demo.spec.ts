@@ -14,7 +14,7 @@ test('synthetic Dashboard, direct navigation, keyboard skip and responsive jobs 
  await expect(page.getByRole('heading',{name:'Processing history'})).toBeVisible();await expect(page.locator('.job-row').first()).toBeVisible();
  for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:900});await fits(page);await expect(page.getByRole('group',{name:'Filter jobs'})).toBeVisible();}
  await page.emulateMedia({reducedMotion:'reduce'});await page.locator('.job-details summary').first().click();
- expect(await page.locator('.workflow-stepper *').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).animationDuration==='0s'||getComputedStyle(node).animationName==='none'))).toBe(true);
+ expect(await page.locator('.workflow-frame').count()).toBeGreaterThan(0);expect(await page.locator('.workflow-frame *').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).animationDuration==='0s'||getComputedStyle(node).animationName==='none'))).toBe(true);
  expect(errors).toEqual([]);
 });
 
@@ -54,6 +54,12 @@ test('demo refuses real account/provider configuration and arbitrary document up
  const ids=await info(page);expect((await page.request.post('/api/auth/login',{data:{username:'synthetic-probe',password:'not-a-real-password'}})).status()).toBe(403);
  expect((await page.request.patch('/api/settings',{data:{model_provider:'openai'}})).status()).toBe(403);
  expect((await page.request.post('/api/documents/upload',{multipart:{dataset_id:ids.datasets.operations,files:{name:'synthetic-rejected.txt',mimeType:'text/plain',buffer:Buffer.from('Synthetic bytes outside the allowlisted sample.')}}})).status()).toBe(403);
+});
+
+test('active Jobs owns inline progress without a blocking duplicate and respects reduced motion',async({page})=>{
+ const ids=await info(page);await page.route('**/api/jobs',route=>route.fulfill({json:[{id:'synthetic-inline-progress',kind:'index',target_id:ids.documents.policy,status:'running',workflow:{current:'index',stages:{upload:{status:'completed'},extract:{status:'completed'},index:{status:'running'},ready:{status:'blocked'}}}}]}));
+ await goto(page,'Jobs & activity');await expect(page.getByLabel('Workspace progress',{exact:true})).toHaveCount(0);await page.getByText('View processing stages',{exact:true}).click();const marker=page.locator('.job-details .stage-running .stage-symbol');await expect(marker).toHaveCount(1);expect(await marker.evaluate(node=>getComputedStyle(node,'::before').animationName)).not.toBe('none');
+ await page.emulateMedia({reducedMotion:'reduce'});expect(await page.locator('.job-details .workflow-frame').evaluateAll(frames=>frames.length>0&&frames.every(frame=>[...frame.querySelectorAll('*')].every(node=>['','::before','::after'].every(pseudo=>getComputedStyle(node,pseudo||null).animationName==='none'))))).toBe(true);
 });
 
 test('original navigation order, active submenu and keyboard dismissal survive mobile layouts',async({page})=>{

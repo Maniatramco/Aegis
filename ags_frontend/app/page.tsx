@@ -992,7 +992,7 @@ export default function App() {
         <span className="agent-shortcut-badge" aria-hidden="true"><MessageSquare size={11}/></span>
         <span className="agent-shortcut-label" aria-hidden="true">Aegis Agent</span>
       </button>}
-      {view !== "Storage" && <OperationProgress agentWorkspace={agentWorkspace} compact={view === "Review" || view === "Extract" || agentWorkspace} workspaceLoading={loading} requests={requests} jobs={jobs} documents={docs} visibleJobIds={agentWorkspace ? agentVisibleJobIds : []} visibleJobId={reviewProgressJob?.id || (view === "Extract" ? visibleExtractionJobId : null)}/>}
+        {view !== "Storage" && <OperationProgress agentWorkspace={agentWorkspace} compact={view === "Review" || view === "Extract" || agentWorkspace} workspaceLoading={loading} requests={requests} jobs={jobs} documents={docs} visibleJobIds={agentWorkspace ? agentVisibleJobIds : view === "Jobs & activity" ? jobs.map(job=>job.id) : []} visibleJobId={reviewProgressJob?.id || (view === "Extract" ? visibleExtractionJobId : null)}/>}
     </>
   );
 }
