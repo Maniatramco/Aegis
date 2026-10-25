@@ -11,7 +11,7 @@ test('synthetic Dashboard, direct navigation, keyboard skip and responsive jobs 
  await goto(page,'Dashboard');await expect(page.getByText('Local demo · synthetic data',{exact:true})).toBeVisible();
  if(process.env.AEGIS_DASHBOARD_DESKTOP_SCREENSHOT){
   await expect(page.getByRole('button',{name:'Ask Aegis about Operations handbook',exact:true})).toBeVisible();
-  await expect(page.getByLabel('Active dataset overview',{exact:true})).toHaveAttribute('aria-busy','false');
+  await expect(page.getByLabel('Active dataset overview',{exact:true})).toHaveAttribute('aria-busy','false');await expect(page.getByLabel('Dataset chat model',{exact:true})).toBeEnabled();
   await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:process.env.AEGIS_DASHBOARD_DESKTOP_SCREENSHOT,fullPage:true});
   await page.setViewportSize({width:390,height:844});await fits(page);
   if(process.env.AEGIS_DASHBOARD_MOBILE_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_DASHBOARD_MOBILE_SCREENSHOT,fullPage:false});

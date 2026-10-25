@@ -1,6 +1,18 @@
 {
-  "version": "26.1.13.3",
+  "version": "26.1.13.4",
   "releases": [
+    {
+      "version": "26.1.13.4",
+      "date": "2026-10-25",
+      "title": "Chat-first knowledge workspace",
+      "changes": [
+        "Give Dataset Knowledge Chat about three quarters of desktop workspace width and open directly on chat on mobile, with compact dataset/source context available alongside or through accessible controls.",
+        "Keep readiness in a quiet context strip rather than large metric cards. Preserve source exclusions, history, drafts, multi-dataset selection, drag/drop and explicit full-width expansion.",
+        "Refine the conversation hierarchy, readable answer width, source-count composer and three suggestions that fill the composer without submitting a model request.",
+        "Preserve initial keyboard focus instead of opening a mobile keyboard automatically. Explicit dataset selection and knowledge inclusion focus the composer without scrolling the page.",
+        "Retain the original menu/submenu order, load-error safeguards and Aegis brand. Local preview only; no source push, deployment or live service change."
+      ]
+    },
     {
       "version": "26.1.13.3",
       "date": "2026-10-25",

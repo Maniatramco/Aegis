@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Local preview branch: `ags_sprint2` (provisional). Current working version: `v26.1.13.3` (base: `v26.1.0.0`).** This isolated candidate starts from Sprint 1 commit `48ce4b98274ae9f27551612a53f1c1e87c5c264a`. The original source freeze remains tagged `aegis-freeze-2026-10-15`. Sprint 1's final reconciliation/push/freeze is deferred; no remote Sprint 2 branch or deployment is claimed.
+**Local preview branch: `ags_sprint2` (provisional). Current working version: `v26.1.13.4` (base: `v26.1.0.0`).** This isolated candidate starts from Sprint 1 commit `48ce4b98274ae9f27551612a53f1c1e87c5c264a`. The original source freeze remains tagged `aegis-freeze-2026-10-15`. Sprint 1's final reconciliation/push/freeze is deferred; no remote Sprint 2 branch or deployment is claimed.
+
+v26.1.13.4 makes Dataset Knowledge Chat the main workspace on desktop and mobile, with compact dataset/source context, a refined multiline composer, readable answers and suggestions that fill without sending. Readiness and error safeguards, source exclusions, drafts/history and the original menu order are preserved. Local preview only.
 
 v26.1.13.3 redesigns Dashboard around dataset cards with existing descriptions, textual readiness and contextual actions. Compact accessible-data counts replace decorative analytics. The scoped chat workspace, source selection and drafts remain available on request, and mobile starts with datasets. Original navigation ordering and production behavior are preserved. Local preview only.
 

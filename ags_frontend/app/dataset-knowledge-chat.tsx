@@ -1,12 +1,13 @@
 "use client";
 import {useEffect,useRef,useState} from 'react';
-import {ArrowUp,History,Plus,Square} from 'lucide-react';
+import {ArrowUp,ArrowUpRight,History,Plus,Square} from 'lucide-react';
 import {AgentLogo} from './agent-logo';
 import {AgentRequest,AgentChatAnswer} from './agent-v2-chat';
 import {DatasetChatStatus} from './dataset-chat-status';
 import {readChatStream} from './chat-stream';
 import {eligibleAgentModels} from './agent-document-selection';
 import type {DatasetKnowledgeScope} from './dataset-knowledge-picker';
+import {availableKnowledge} from './dataset-knowledge-scope';
 import './agent-v2.css';
 
 type Entity=Record<string,any>;
@@ -16,7 +17,7 @@ export function DatasetKnowledgeChat({api,stream,username,scope,onBusy,onReview,
  const [catalog,setCatalog]=useState<Entity>({datasets:[],documents:[],models:[]}),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const [model,setModel]=useState(''),[text,setText]=useState(''),[messages,setMessages]=useState<Entity[]>([]),[conversation,setConversation]=useState('');
  const [busy,setBusy]=useState(false),[history,setHistory]=useState<Entity[]|null>(null),[attempt,setAttempt]=useState(0),[restoring,setRestoring]=useState(true);
- const controller=useRef<AbortController|null>(null),locked=useRef(false),mounted=useRef(true),thread=useRef<HTMLDivElement>(null);
+ const controller=useRef<AbortController|null>(null),locked=useRef(false),mounted=useRef(true),thread=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null);
  const signature=knowledgeScopeKey(scope),login=typeof sessionStorage==='undefined'?'':sessionStorage.getItem(`aegis-agent-v2:${username}-login-session`)||'preview';
  // This storage namespace and these server threads belong only to Dataset Chat.
  const key=`aegis-dataset-chat:${username}:${login}:${signature}`;
@@ -27,6 +28,7 @@ export function DatasetKnowledgeChat({api,stream,username,scope,onBusy,onReview,
  useEffect(()=>{let stopped=false;setLoading(true);void api('/dataset-chat/catalog','GET',undefined,undefined,true).then(result=>{if(!stopped){setCatalog(result);setError('');}}).catch(e=>{if(!stopped)setError(e.message);}).finally(()=>{if(!stopped)setLoading(false);});return()=>{stopped=true;};},[api,catalogRevision,attempt]);
  useEffect(()=>{let stopped=false;setRestoring(true);const id=sessionStorage.getItem(key);if(id)void api(`/dataset-chat/conversations/${id}`,'GET',undefined,undefined,true).then(saved=>{if(!stopped){if(knowledgeScopeKey({datasetIds:saved.dataset_ids,documentIds:saved.document_ids})!==signature)throw new Error('Saved chat has different dataset knowledge.');setMessages(saved.messages||[]);setConversation(saved.id);}}).catch(e=>{if(!stopped)setError(e.message);}).finally(()=>{if(!stopped)setRestoring(false);});else setRestoring(false);return()=>{stopped=true;};},[api,key,signature]);
  useEffect(()=>{thread.current?.scrollTo({top:thread.current.scrollHeight,behavior:'auto'});},[messages]);
+ const sourceCount=availableKnowledge(catalog.datasets,catalog.documents).filter(doc=>scope.datasetIds.includes(doc.dataset_id||doc.kb_id||doc.parent_id)&&(scope.documentIds===null||scope.documentIds.includes(doc.id))).length;
  const send=async(request=text,summary=false)=>{
   if(locked.current||loading||restoring||!request.trim())return;
   if(!selectedModel){setError('Choose an available chat model.');return;}
@@ -57,9 +59,9 @@ export function DatasetKnowledgeChat({api,stream,username,scope,onBusy,onReview,
   <div ref={thread} className="agent-v2-thread" aria-label="Dataset chat conversation" tabIndex={0}>
    {loading&&<p role="status">Loading accessible dataset knowledge…</p>}
    {error&&<div role="alert" className="agent-v2-error">{error}<button className="btn" onClick={()=>setAttempt(value=>value+1)}>Refresh chat catalog</button></div>}
-   {!loading&&!messages.length&&<div className="agent-v2-welcome"><AgentLogo size={48}/><h2>{username}'s Knowledge Source</h2><p>Ask questions about the included indexed files and saved results. Answers include source citations.</p><div className="agent-v2-suggestions">{['Summarize the key themes','Compare the included knowledge','What evidence supports the main findings?'].map(prompt=><button key={prompt} className="btn" onClick={()=>setText(prompt)}>{prompt}</button>)}</div></div>}
+   {!loading&&!messages.length&&<div className="agent-v2-welcome"><AgentLogo size={44}/><span className="dataset-chat-eyebrow">Aegis knowledge chat</span><h2>What would you like to understand?</h2><p>Ask about your selected sources and saved results. Grounded answers include citations you can follow.</p><div className="agent-v2-suggestions">{['Summarize the key themes','Compare the included knowledge','What evidence supports the main findings?'].map(prompt=><button key={prompt} className="btn" onClick={()=>{setText(prompt);composer.current?.focus({preventScroll:true});}}><span>{prompt}</span><ArrowUpRight size={15} aria-hidden="true"/></button>)}</div></div>}
    {messages.map(message=>message.role==='user'?<AgentRequest key={message.id} text={message.summary?'Workspace overview · Included dataset knowledge':message.text} attachments={[]}/>:<section key={message.id} className="agent-v2-message"><div className="agent-v2-speaker"><AgentLogo size={23}/><strong>Dataset Knowledge Chat</strong><DatasetChatStatus message={message}/></div><AgentChatAnswer message={message} api={api} onError={setError} onReview={onReview}/>{['failed','aborted'].includes(message.status)&&message.request&&<button className="btn" disabled={busy} onClick={()=>void send(message.request,message.summary)}>Retry question</button>}</section>)}
   </div>
-  <div className="agent-v2-composer"><div className="agent-v2-compose-box"><div className="agent-v2-input"><textarea autoFocus aria-label="Message Dataset Knowledge Chat" placeholder="Ask about your included dataset knowledge…" value={text} rows={2} disabled={busy} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void send();}}}/></div><div className="agent-v2-compose-controls"><label className="agent-v2-model-control"><span>Chat model</span><select aria-label="Dataset chat model" value={selectedModel} disabled={busy||loading} onChange={e=>setModel(e.target.value)}><option value="">Choose a Chat model</option>{models.map((item:Entity)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="agent-v2-send-controls">{busy?<button className="btn icon" aria-label="Stop dataset chat" onClick={()=>controller.current?.abort()}><Square size={17}/></button>:<button className="btn icon primary" aria-label="Send dataset chat question" disabled={loading||!text.trim()||!selectedModel} onClick={()=>void send()}><ArrowUp size={20}/></button>}</div></div></div><div className="agent-v2-footer"><span>Read-only knowledge chat. Open Aegis Agent for onboarding, uploads and extraction.</span></div></div>
+  <div className="agent-v2-composer"><div className="agent-v2-compose-box"><div className="agent-v2-input"><textarea ref={composer} aria-label="Message Dataset Knowledge Chat" placeholder="Ask about your included dataset knowledge…" value={text} rows={2} disabled={busy} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void send();}}}/></div><div className="agent-v2-compose-controls"><label className="agent-v2-model-control"><span>Chat model</span><select aria-label="Dataset chat model" value={selectedModel} disabled={busy||loading} onChange={e=>setModel(e.target.value)}><option value="">Choose a Chat model</option>{models.map((item:Entity)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><span className="dataset-chat-scope-note" aria-label="Included indexed source count">{loading?'Loading knowledge':`${sourceCount} indexed source${sourceCount===1?'':'s'}`}</span><div className="agent-v2-send-controls">{busy?<button className="btn icon" aria-label="Stop dataset chat" onClick={()=>controller.current?.abort()}><Square size={17}/></button>:<button className="btn icon primary" aria-label="Send dataset chat question" disabled={loading||!text.trim()||!selectedModel} onClick={()=>void send()}><ArrowUp size={20}/></button>}</div></div></div><div className="agent-v2-footer"><span>Read-only knowledge chat. Open Aegis Agent for onboarding, uploads and extraction.</span></div></div>
  </div>;
 }

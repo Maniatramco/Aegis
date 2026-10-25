@@ -2,6 +2,14 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.13.4 - 25 October 2026
+
+Make chat the main Dashboard workspace, superseding the dataset-first layout in v26.1.13.3. Chat uses about 74% of desktop content width; datasets and sources share a compact context pane, and mobile opens on chat. Keep readiness in a quiet strip, preserve explicit expansion and use the knowledge toolbar as an additional dataset drop target. Existing scope, source exclusions, drafts, conversation history and navigation ordering remain unchanged.
+
+Refine the conversation canvas with restrained source-grounded chat references: centered idle prompt, three real-capability suggestions that fill the composer, readable answer width, a rounded composer with truthful indexed-source count and compact model control. Avoid automatic initial focus/phone keyboard activation; explicit knowledge selection focuses the composer without scrolling. Preserve read-only behavior, error handling, processing, authorization and provider contracts. No model request runs until explicit Send.
+
+Local preview only. No push, deployment, publication or original Sprint 1 source changes.
+
 ## v26.1.13.3 - 25 October 2026
 
 Redesign Dashboard around accessible dataset cards rather than an unopened chat. Add compact counts for active datasets, indexed sources, sources needing attention and processing using existing loaded records. Exclude inactive/unassigned sources; stale or failed sources count once in attention. Show unavailable counts during loading or failed refreshes and surface the existing workspace error notice. Dataset descriptions, textual readiness and contextual actions support choosing the next task without decorative analytics.

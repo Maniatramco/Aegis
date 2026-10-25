@@ -12,7 +12,7 @@ const text=node=>!node?'':typeof node==='string'?node:Array.isArray(node)?node.m
 function mount(values={}){const state=[],selected=[],agents=[],destinations=[],reviews=[];let root;const props={username:'tester',datasets,documents,loading:false,search:'',onClearSearch(){},onBrowse(){},canManage:false,selectedId:'',onSelect:id=>{selected.push(id);props.selectedId=id;},onNavigate:path=>destinations.push(path),onReview:id=>reviews.push(id),renderAgent:(id,onBusy,sourceScope,onSourceChange,knowledgeScope)=>{agents.push({id,onBusy,sourceScope,onSourceChange,knowledgeScope});return null;},guide:null,...values};
  const render=()=>{hooks=state;cursor=0;agents.length=0;root=DatasetDashboard(props);};render();return {render,get nodes(){return all(root);},selected,agents,destinations,reviews};}
 function find(v,label){return v.nodes.find(n=>n.props?.['aria-label']===label);}
-function mountChat(values={}){const v=mount(values);v.nodes.find(n=>n.type==='button'&&text(n)==='Open chat').props.onClick();v.render();return v;}
+function mountChat(values={}){return mount(values);}
 test('source summaries keep dataset boundaries and do not count stale indexes as ready',()=>{
  assert.deepEqual(datasetDocuments(documents,'a').map(d=>d.id),['one','stale']);
  assert.deepEqual(datasetReadiness(datasets[0],datasetDocuments(documents,'a')),{ready:1,label:'1 need reindex',state:'pending'});
@@ -24,12 +24,10 @@ test('overview counts only accessible active dataset documents, with stale and f
  assert.deepEqual(dashboardOverview(sets,docs),{active:2,indexed:2,attention:3,processing:1});
  assert.deepEqual(dashboardOverview([],docs),{active:0,indexed:0,attention:0,processing:0});
 });
-test('overview and mobile default to datasets, and returning preserves the mounted chat scope',()=>{
- const v=mount();assert.equal(find(v,'Dataset dashboard').props['data-overview'],true);assert.equal(find(v,'Dataset dashboard').props['data-mobile-panel'],'datasets');
+test('chat is mounted by default and compact context switching preserves its scope',()=>{
+ const v=mount();assert.equal(find(v,'Dataset dashboard').props['data-mobile-panel'],'chat');assert.equal(v.agents.length,1);
  find(v,'Ask Aegis about Invoices').props.onClick();v.render();const scope=v.agents[0].sourceScope;
- assert.equal(find(v,'Dataset dashboard').props['data-overview'],false);
- v.nodes.find(n=>n.type==='button'&&text(n)==='Dataset overview').props.onClick();v.render();
- assert.equal(find(v,'Dataset dashboard').props['data-overview'],true);assert.equal(v.agents[0].id,'a');assert.deepEqual(v.agents[0].sourceScope,scope);
+ for(const panel of ['Datasets (2)','Sources (2)','Knowledge Chat']){v.nodes.find(n=>n.type==='button'&&text(n)===panel).props.onClick();v.render();assert.equal(v.agents[0].id,'a');assert.deepEqual(v.agents[0].sourceScope,scope);}
 });
 test('loading and failed reads do not display false zero metrics or assignment instructions',()=>{
  for(const values of [{loading:true},{loadError:true}]){const v=mount({...values,datasets:[],documents:[]});const metrics=find(v,'Active dataset overview');assert.equal(all(metrics).filter(n=>n.type==='dd').some(n=>n.props.children===0),false);}
@@ -72,11 +70,10 @@ test('including available knowledge opens a bounded cross-dataset scope',()=>{
  assert.equal(v.selected.at(-1),'');assert.deepEqual(v.agents[0].knowledgeScope,{datasetIds:['a','b'],documentIds:['one','two']});
 });
 
-test('Dashboard does not initialize chat on first load, including a preselected dataset',()=>{
- for(const selectedId of ['', 'a']){const v=mount({selectedId});assert.equal(v.agents.length,0);v.render();assert.equal(v.agents.length,0);assert.ok(v.nodes.some(n=>n.type==='button'&&text(n)==='Open chat'));find(v,'Ask Aegis about Policies').props.onClick();v.render();assert.deepEqual(v.agents.map(a=>a.id),['b']);}
+test('Dashboard opens its read-only chat surface immediately for available authorized knowledge',()=>{
+ for(const selectedId of ['', 'a']){const v=mount({selectedId});assert.equal(v.agents.length,1);assert.equal(find(v,'Dataset dashboard').props['data-mobile-panel'],'chat');find(v,'Ask Aegis about Policies').props.onClick();v.render();assert.deepEqual(v.agents.map(a=>a.id),['b']);}
+ const empty=mount({datasets:[],documents:[]});assert.equal(empty.agents.length,0);
 });
-
-
 test('sticky knowledge action remains outside the scrollable source list and collapsed sources',()=>{
  const v=mount();const toolbar=v.nodes.find(n=>n.props?.['aria-label']==='Dataset knowledge actions');
  assert.ok(all(toolbar).some(n=>n.type==='button'&&text(n)==='Add Dataset Knowledge'));
@@ -138,7 +135,7 @@ test('only explicit expansion hides panels; restoring and peeking preserve activ
 });
 
 test('initial, inactive, unindexed and emptied selections keep the three-panel layout',()=>{
- const initial=mount();assert.equal(find(initial,'Dataset dashboard').props['data-chat-focused'],false);assert.equal(initial.agents.length,0);
+ const initial=mount();assert.equal(find(initial,'Dataset dashboard').props['data-chat-focused'],false);assert.equal(initial.agents.length,1);
  for(const values of [{documents:[]},{datasets:[{id:'a',name:'Invoices',active:false}],documents}]){
   const v=mount(values);find(v,'Ask Aegis about Invoices').props.onClick();v.render();assert.equal(find(v,'Dataset dashboard').props['data-chat-focused'],false);
  }
