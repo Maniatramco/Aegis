@@ -42,6 +42,7 @@ export function ExtractionReview({extraction:e,documents,jobs,api,onSaved,onDirt
   },[e.id,openRequest]);
   const [draft,setDraft]=useState(JSON.stringify(e.result??{},null,2)),[selected,setSelected]=useState("");
   const [saving,setSaving]=useState(false),[error,setError]=useState(""),[preview,setPreview]=useState<Entity|null>(null);
+  const [previewRetry,setPreviewRetry]=useState(0);
   const [sourceDocument,setSourceDocument]=useState('');
   const [profile,setProfile]=useState('all');
   const [pane,setPane]=useState('fields');
@@ -80,7 +81,7 @@ export function ExtractionReview({extraction:e,documents,jobs,api,onSaved,onDirt
   useEffect(()=>{setDraft(JSON.stringify(e.result??{},null,2));setError("");},[e.id,e.version,e.status,openRequest]);
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
   useEffect(()=>{if(!dirty)return;const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();};window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[dirty]);
-  useEffect(()=>{const current=++generation.current;setPreview(null);if(document&&e.status==='ready')api(`${sourceBase}/preview`,'GET',undefined,undefined,true).then(value=>{if(current===generation.current)setPreview(value);}).catch(err=>{if(current===generation.current)setPreview({error:err.message});});return()=>{generation.current++;};},[sourceBase,e.status,api]);
+  useEffect(()=>{const current=++generation.current;setPreview(null);if(document&&e.status==='ready')api(`${sourceBase}/preview`,'GET',undefined,undefined,true).then(value=>{if(current===generation.current)setPreview(value);}).catch(err=>{if(current===generation.current)setPreview({error:err.message});});return()=>{generation.current++;};},[sourceBase,e.status,api,previewRetry]);
   const reload=async()=>{if(dirty&&!window.confirm("Discard unsaved changes and reload the latest saved values?"))return;setError("");try{onSaved(await api(`/extractions/${e.id}`));}catch(err){setError((err as Error).message);}};
   const save=async()=>{if(saving||locked||parsed===undefined)return;setSaving(true);setError("");try{const result=JSON.parse(draft);onSaved(await api(`/extractions/${e.id}`,"PATCH",{result,version:e.version}));}catch(err){setError((err as Error).message);}finally{setSaving(false);}};
   const page=originalAsset?origin?.source_page:origin?.page;
@@ -106,10 +107,10 @@ export function ExtractionReview({extraction:e,documents,jobs,api,onSaved,onDirt
         </div></div>)}
         {parsed===undefined&&<p role="alert" className="review-error">Invalid JSON. Correct the syntax before saving.</p>}
       </div></section>
-      <section className="review-source" aria-label="Original document"><div className="review-panel-heading"><h3>Source document</h3><span title={document?.name}>{document?.name||'Unavailable'}</span></div>
+      <section className="review-source" aria-label="Original document" aria-busy={Boolean(document)&&!preview}><div className="review-panel-heading"><h3>Source document</h3><span title={document?.name}>{document?.name||'Unavailable'}</span></div>
         {sourceChoices.length>1&&<label>Original source files<select aria-label="Review source document" value={choice?.id||''} onChange={event=>setSourceDocument(event.target.value)}>{sourceChoices.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><span className="small muted">{e.merge_records?'Each original has its own fields in this combined result.':'These sources were combined into one result.'} Choose an original to inspect it.</span></label>}
         {document ? <>
-          {/\.pdf$/i.test(document.name)?<OriginalPdfViewer sourceBase={sourceBase} name={document.name} pageCount={preview?.page_count} evidencePage={page}/>:<><a className="text-button" href={`/api${sourceBase}/download`} download>Download unchanged original</a><pre className="source-text">{preview?.error||preview?.text||"Loading extracted text…"}</pre></>}
+          {/\.pdf$/i.test(document.name)?<OriginalPdfViewer sourceBase={sourceBase} name={document.name} pageCount={preview?.page_count} evidencePage={page}/>:<><a className="text-button" href={`/api${sourceBase}/download`} download>Download unchanged original</a>{preview?.error?<div className="source-preview-unavailable" role="alert"><p>Source preview could not be loaded. {preview.error}</p><ActionButton className="btn" onClick={()=>setPreviewRetry(value=>value+1)} label="Retry source preview" action="retry"/></div>:<pre className="source-text">{preview?.text||"Loading extracted text…"}</pre>}</>}
           <details className="review-source-evidence" key={selected} open={!!selected}><summary>Source evidence{page?` · page ${page}`:''}</summary><p className="source-location-note">{page&&exactEvidence?"The recorded source page is shown for this field.":page?"This is a retrieved source page; no verified field-level location was saved.":"Source page location is unavailable for this field."} Region coordinates are unavailable; no highlight is invented.</p>
           {(origin?.quote||origin?.text)&&<blockquote className="source-quote"><strong>{exactEvidence?'Recorded field evidence':'Retrieved document passage'}</strong><p>{evidenceExcerpt(origin.quote||origin.text,[fields(parsed).find(f=>f.path===selected)?.value])}</p>{(e.edited_fields||[]).includes(selected)&&<small>Original evidence; recheck your edited value.</small>}</blockquote>}
           {/\.docx$/i.test(document.name)&&<p className="small muted">DOCX text is shown as a fallback. Download the original to inspect layout; page numbers cannot be inferred.</p>}

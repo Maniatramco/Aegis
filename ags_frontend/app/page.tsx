@@ -1,5 +1,7 @@
 "use client";
 import {ActionButton} from "./action-button";
+import {JobsActivity} from "./jobs-activity";
+import {DemoWorkspaceNotice} from "./demo-workspace-notice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SignInLayout } from "./sign-in-layout";
 import { DatasetSearch } from "./dataset-directory";
@@ -709,6 +711,7 @@ export default function App() {
   return (
     <>
       {drawerOpen && <div className="navigation-backdrop" aria-hidden="true" onClick={() => setMobile(false)} />}
+      <a className="skip-workspace" href="#workspace-main">Skip to workspace</a>
       <aside id="workspace-navigation" ref={navigationRef} className={`sidebar ${view === 'Aegis agent V2' || view === 'Home' ? 'agent-navigation-drawer' : ''} ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label="Workspace navigation" inert={navigationIsDrawer && !drawerOpen}>
         <button title="Close navigation"
           className="btn icon mobile-close"
@@ -724,7 +727,7 @@ export default function App() {
           <span className="brand-name">Aegis</span>
         </div>
         <div className="brand-sub">AI Data Platform</div>
-        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["About","Home","Datasets","Source Connections","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity"].includes(s.name)))}/>
+        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["About","Home","Datasets","Source Connections","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Jobs & activity","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity"].includes(s.name)))}/>
 
         <div className="nav-footer">
           <div className="row" style={{ marginBottom: 9 }}>
@@ -769,10 +772,7 @@ export default function App() {
               </button>
               {(view === "Extract Data" || view === "Extract" && extractionTab !== "Create") && <ActionButton className="btn primary" onClick={()=>navigate('Extract','Create')} label="New extraction" action="add" showLabel/>}
             </div>}
-            <span className="pill">
-              <span className="dot" />
-              Private workspace
-            </span>
+            {user.preview_only===true?<DemoWorkspaceNotice onChanged={reload} onJobs={()=>navigate('Jobs & activity')}/>:<span className="pill"><span className="dot" />Private workspace</span>}
             <div className="avatar" title={user.username}>
               {(user.username || "A").slice(0, 2).toUpperCase()}
             </div>
@@ -792,7 +792,7 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main aria-label={viewLabel(view)} className={`workspace workspace-region${view==='Home'?' home-page-shell':''}${view === "Aegis agent V2" ? " agent-v2-workspace" : view === "Extract" ? " extract-page-shell" : view === "Extract Data" ? " extract-data-workspace" : ""}${view === 'Review' ? ` review-page-shell${extraction?' has-review':''}` : ''}`}>
+        <main id="workspace-main" tabIndex={-1} aria-label={viewLabel(view)} className={`workspace workspace-region${view==='Home'?' home-page-shell':''}${view === "Aegis agent V2" ? " agent-v2-workspace" : view === "Extract" ? " extract-page-shell" : view === "Extract Data" ? " extract-data-workspace" : ""}${view === 'Review' ? ` review-page-shell${extraction?' has-review':''}` : ''}`}>
           {error && view !== "Home" && (
             <Notice tone="error">
               {error}
@@ -810,8 +810,8 @@ export default function App() {
           {view === "About" && <AboutAegis/>}
           {view === "Files & processing" && (user.is_admin?<AdminDocuments api={api} onChanged={reload} onReview={openReview}/>:<div className="panel" role="alert">Administrator access is required to manage files and processing.</div>)}
           {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
-          {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}
-          {view === "Datasets" && <DatasetWorkspace directorySearch={directorySearch} onClearDirectorySearch={()=>setDirectorySearch('')} onDirectoryVisibilityChange={setDatasetDirectoryVisible} canManage={Boolean(user.is_admin)} datasets={kbs} models={models} documents={docs}
+          {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 previewOnly={user.preview_only===true} catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}
+          {view === "Datasets" && <DatasetWorkspace directorySearch={directorySearch} onClearDirectorySearch={()=>setDirectorySearch('')} onDirectoryVisibilityChange={setDatasetDirectoryVisible} canManage={Boolean(user.is_admin)} datasets={kbs} models={models} documents={docs} extractions={extractions}
             storageKey={`aegis-new-dataset:${user.id}`} defaults={selectedDataset} onSelect={changeDataset} onCreated={d=>{setKbs(current=>[...current.filter(item=>item.id!==d.id),d]);changeDataset(d.id);}}
             api={api} reload={reload} notify={notify} onUse={navigate}/>
           }
@@ -873,123 +873,9 @@ export default function App() {
           {view === "Prompt templates" && <PromptTemplates templates={templates} datasets={kbs} selectedDataset={kb} api={api} initialId={templateId} onDirty={onTemplateDirty} onSaved={d => { setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)]); chooseTemplate(d.id); notify("Prompt template saved."); }} onUse={id => { const saved=templates.find(t=>t.id===id); if(saved?.dataset_id&&saved.dataset_id!==kb)changeDataset(saved.dataset_id); chooseTemplate(id); navigate("Extract", "Create"); }} />}
           {view === "Extract" && reextractSource && <ReExtractionDialog key={reextractSource.id} source={reextractSource} documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id=>{changeDataset(id);navigate('Model Mapping');}} onReview={d=>openReview(d.id)} onClose={()=>setReextractSource(null)}/>}
 
-          {view === "Jobs & activity" && (
-            <section className="panel flush">
-              <div className="panel-head" style={{ padding: "22px 22px 0" }}>
-                <span className="pill" title="Automatically refreshes every 6 seconds">{jobs.length} jobs</span>
-              </div>
-              {jobs.length ? (
-                <div className="table-scroll" role="region" aria-label="Scrollable data table" tabIndex={0}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Job / document</th>
-                        <th>Status</th>
-                        <th>Progress</th>
-                        <th>Attempts</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {jobs.map((j) => (
-                        <tr key={j.id}>
-                          <td>
-                            <strong>
-                              {(j.kind || j.type || "Processing").replaceAll(
-                                "_",
-                                " ",
-                              )}
-                            </strong>
-                            <div className="muted" style={{ marginTop: 5 }}>
-                              {docs.find((d) => d.id === j.document_id)?.name ||
-                                j.document_id ||
-                                j.id}
-                            </div>
-                            {j.error && (
-                              <div
-                                style={{
-                                  color: "#ae4a5b",
-                                  fontSize: "var(--text-caption)",
-                                  maxWidth: 360,
-                                  marginTop: 6,
-                                }}
-                              >
-                                {j.error}
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            <Status value={j.status} />
-                          </td>
-                          <td style={{ minWidth: 100 }}>
-                            {Math.round(j.progress || 0)}%
-                            <div className="progress">
-                              <span
-                                style={{
-                                  width: `${Math.min(100, j.progress || 0)}%`,
-                                }}
-                              />
-                            </div>
-                          </td>
-                          <td>{j.attempts || 0}</td>
-                          <td className="muted">{date(j.created_at)}</td>
-                          <td>
-                            <div className="row">
-                              {["failed", "cancelled"].includes(j.status) && (
-                                <ActionButton
-                                  className="btn"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    run(async () => {
-                                      await api(`/jobs/${j.id}/retry`, "POST");
-                                      notify("Retry requested.");
-                                      reload();
-                                    })
-                                  }
-                                 label="Retry" action="retry"/>
-                              )}
-                              {["pending", "queued", "running"].includes(
-                                j.status,
-                              ) && (
-                                <button
-                                  className="btn danger"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    setConfirm({
-                                      title: "Cancel processing job?",
-                                      body: "Cancellation is best-effort. A request already sent to a model provider may continue and incur usage charges.",
-                                      action: async () => {
-                                        await api(
-                                          `/jobs/${j.id}/cancel`,
-                                          "POST",
-                                        );
-                                        notify("Cancellation requested.");
-                                        reload();
-                                      },
-                                    })
-                                  }
-                                >
-                                  <Square size={13} />
-                                  Cancel
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <Empty
-                  icon={Activity}
-                  title="No processing jobs yet"
-                  detail="Document uploads, reindexing, and extractions will be tracked here."
-                />
-              )}
-            </section>
-          )}
+          {view === "Jobs & activity" && <JobsActivity jobs={jobs} documents={docs} extractions={extractions} onReview={id=>{openReview(id);}} busy={busy}
+            onRetry={job=>void run(async()=>{await api(`/jobs/${job.id}/retry`,"POST");notify("Retry requested.");reload();})}
+            onCancel={job=>setConfirm({title:"Cancel processing job?",body:"Cancellation is best-effort. A request already sent to a model provider may continue and incur usage charges.",action:async()=>{await api(`/jobs/${job.id}/cancel`,"POST");notify("Cancellation requested.");reload();}})}/>}
           {view === "Source Connections" && user.is_admin && <SourceConnections api={api} datasets={kbs} documents={docs} selectedDataset={kb} onDatasetChange={changeDataset} onChanged={reload} onChat={id=>{changeDataset(id);navigate('Aegis agent V2');}} onModels={()=>navigate('Model Mapping')}/>}
           {view === "Model Registration" && <ModelRegistration models={models} settings={settings} api={api} run={run} busy={busy}
             onSaved={model => { setModels(current => current.some(m => m.id === model.id) ? current.map(m => m.id === model.id ? model : m) : [model, ...current]); notify("Model saved. New runs use the updated connection; apply embedding changes in Model Mapping."); reload(); }}

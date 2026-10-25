@@ -93,6 +93,7 @@ export default function PasswordRecoveryPage() {
     <p className="muted">Your account, documents, and model settings stay in place.</p>
     {state === "loading" && <p role="status">Preparing password reset.</p>}
     {error && <p className="error" role="alert">{error}</p>}
+    {state==='unavailable'&&<section className="recovery-guidance" aria-labelledby="recovery-next-heading"><h2 id="recovery-next-heading">What you can do next</h2><ul><li>For a shared workspace, ask an administrator who can still sign in to open <strong>Users & passwords</strong> and reset your account.</li><li>If no administrator can sign in, ask the person who operates this installation to follow its documented recovery procedure. A recovery contact is not configured on this page.</li><li>For a local desktop installation, open Aegis on the computer where it is running. This browser page cannot enable desktop recovery for a network-hosted installation.</li></ul><p>Do not send your password or a private recovery link to anyone.</p></section>}
     {state === "ready" && <form onSubmit={reset} noValidate className="login-form">
       <p>Choose a new password. Your other sign-in sessions will end.</p>
       {mode === "local" && <><label htmlFor="recovery-username">Username</label><input id="recovery-username" autoComplete="username" maxLength={120} value={username} onChange={event => setUsername(event.target.value)} disabled={busy} /></>}

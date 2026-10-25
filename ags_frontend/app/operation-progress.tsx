@@ -24,8 +24,8 @@ export function JobProgress({job}:{job:Entity}) {
   const summary=job.status==='completed'?'Extraction completed. Your result is ready to review.':failed?'Extraction stopped. Check the reason below.':job.workflow?.current==='generate'?'The model is extracting your fields. Progress follows completed stages.':stages.length?'Preparing and validating your extraction. Progress follows completed stages.':'Stage details are unavailable for this job. Check its status.';
   return <div className="job-progress" aria-label="Processing workflow"><section className="batch-progress is-compact" aria-label="Extraction workflow">
    <div className="batch-progress-heading"><strong>Extraction workflow</strong><span>{job.status==='completed'?'Ready':failed?'Needs attention':job.status==='running'?'In progress':'Queued'}</span></div>
-   <div className="batch-progress-track" role="progressbar" aria-label="Extraction progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={stages.length?`${completed} of ${stages.length} stages completed`:'Stage details unavailable'}><span style={{width:`${progress}%`}}/></div>
-   <WorkflowStepper label="Extraction workflow steps" steps={stages.map(([name,stage])=>({id:name,label:labels[name]||name,status:stage.status,statusLabel:stage.status==='blocked'?'Waiting':undefined}))}/>
+   <div className="batch-progress-track" role="progressbar" aria-label="Extraction progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={stages.length?progress:undefined} aria-valuetext={stages.length?`${completed} of ${stages.length} stages completed`:'Stage details unavailable'}><span style={{width:`${progress}%`}}/></div>
+   <WorkflowStepper label="Extraction workflow steps" steps={stages.map(([name,stage])=>({id:name,label:labels[name]||name,status:job.status==='cancelled'&&stage.status==='running'?'cancelled':stage.status,statusLabel:stage.status==='blocked'?'Waiting':undefined}))}/>
    <p className="batch-progress-summary" role="status">{summary}</p>
    {job.error&&<p role="alert" className="review-error">{job.error}</p>}
   </section></div>;
@@ -33,7 +33,7 @@ export function JobProgress({job}:{job:Entity}) {
  if(job.kind==='index'&&stages.length)return <div className="job-progress" aria-label="Processing workflow"><BatchProgress compact items={[{id:job.target_id||job.id,name:'Document',status:'submitted',document:{status:job.status==='completed'?'ready':'processing'},job,ready:job.status==='completed',failed:['failed','cancelled'].includes(job.status),processing:['queued','running'].includes(job.status)}]}/>{job.error&&<p role="alert" className="review-error">{job.error}</p>}</div>;
  return <div className="job-progress" aria-label="Processing workflow">
   <div className="row between"><strong>{job.kind==='extract'?'Extraction':'Document processing'}</strong><span>{job.status==='running'?'In progress':job.status}</span></div>
-  <progress max={100} value={job.progress||0} aria-label="Processing progress" />
+  <progress max={100} value={typeof job.progress==='number'?Math.max(0,Math.min(100,job.progress)):undefined} aria-label="Processing progress" />
   {job.workflow?.stages?.extract?.detail&&<p role="status" className="small muted">{job.workflow.stages.extract.detail}</p>}
   <WorkflowStepper label="Document processing steps" steps={stages.map(([name,stage])=>({id:name,label:labels[name]||name,status:stage.status,statusLabel:stage.status==='blocked'?'Waiting':undefined}))}/>
   {job.status==='running'&&<p className="small muted">{job.workflow?.current==='generate'?'The model is extracting your fields. This may take a few minutes for long documents.':'Processing continues in the background.'} Progress reports completed stages, not an estimated time.</p>}

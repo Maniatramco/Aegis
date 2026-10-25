@@ -8,6 +8,7 @@ import {useDatasetLifecycle} from "./dataset-lifecycle";
 import {DirectoryRows} from "./dataset-directory";
 import {AgentOnboarding} from "./agent-onboarding";
 import {selectMappingDefault,setMappingEnabled,type MappingDraft} from './dataset-mapping-draft';
+import {datasetMilestones} from './dataset-readiness';
 
 type Entity = Record<string, any>;
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
@@ -32,15 +33,17 @@ export function ModelPicker({ dataset, capability, value, onChange, onConfigure,
       <div className="model-unavailable"><strong>No eligible {capability} models</strong><p>Map an enabled model with {capability} capability to this dataset.</p><ActionButton type="button" className="text-button" onClick={onConfigure} label="Configure dataset models" action="mapping"/></div> : models.length === 1 ?
       <div className="model-readonly" aria-label={label}><Layers size={16} /><span>{modelLabel(models[0])}<small>{models[0].provider_model} · Only eligible model</small></span><CheckCircle2 size={15} /></div> :
       <select aria-label={label} value={value} onChange={e => onChange(e.target.value)} disabled={disabled}><option value="" disabled>Select a mapped model</option>{models.map(m => <option key={m.id} value={m.id}>{modelLabel(m)}{m.id === defaultId ? " · Dataset default" : ""}</option>)}</select>}
-    {local && <p className="muted small" role="status">Local · Ollama · {localModels === null ? "Checking installation…" : !localModels.available ? "Ollama unavailable" : installed ? "Installed · No paid API" : "Model not installed"}<br />Embedding: {dataset?.models?.find((m:Entity)=>m.id===dataset?.embedding_model_id)?.provider_model || "Not mapped"}. Changing the chat model keeps this dataset’s embedding index.</p>}
+    {local && <p className="muted small" role="status">Local · Ollama · {localModels === null ? "Checking installation…" : !localModels.available ? "Ollama unavailable" : installed ? "Installed · No paid API" : "Model not installed"}<br />Embedding: {dataset?.models?.find((m:Entity)=>m.id===dataset?.embedding_model_id)?.provider_model || "Not mapped"}. Changing the chat model keeps this dataset's embedding index.</p>}
+    {dataset&&models.length>0&&<details className="model-effects"><summary>When model changes take effect</summary><p>New requests use your selected {capability} model. Accepted work keeps its saved model configuration. This choice does not rebuild the embedding index; embedding changes are managed in Model Mapping and can require reindexing.</p></details>}
   </div>;
 }
 
-export function DatasetWorkspace({datasets,models,documents,onSelect,onCreated,api,reload,notify,onUse,canManage=true,directorySearch,onClearDirectorySearch,onDirectoryVisibilityChange,storageKey,defaults}: {
-  datasets:Entity[];models:Entity[];documents:Entity[];onSelect:(id:string)=>void;onCreated:(dataset:Entity)=>void;api:Api;reload:()=>void;notify:(text:string)=>void;onUse:(view:"Aegis agent V2"|"Extract")=>void;canManage?:boolean;directorySearch:string;onClearDirectorySearch:()=>void;onDirectoryVisibilityChange:(visible:boolean)=>void;storageKey:string;defaults?:Entity;
+export function DatasetWorkspace({datasets,models,documents,extractions=[],onSelect,onCreated,api,reload,notify,onUse,canManage=true,directorySearch,onClearDirectorySearch,onDirectoryVisibilityChange,storageKey,defaults}: {
+  datasets:Entity[];models:Entity[];documents:Entity[];extractions?:Entity[];onSelect:(id:string)=>void;onCreated:(dataset:Entity)=>void;api:Api;reload:()=>void;notify:(text:string)=>void;onUse:(view:"Aegis agent V2"|"Extract")=>void;canManage?:boolean;directorySearch:string;onClearDirectorySearch:()=>void;onDirectoryVisibilityChange:(visible:boolean)=>void;storageKey:string;defaults?:Entity;
 }) {
   const lifecycle=useDatasetLifecycle(api,reload,canManage);
   const [creating,setCreating]=useState(false),[onboardingBusy,setOnboardingBusy]=useState(false);
+  const milestones=datasetMilestones(undefined,documents,extractions);
   useEffect(()=>{onDirectoryVisibilityChange(!creating);return()=>onDirectoryVisibilityChange(false);},[creating,onDirectoryVisibilityChange]);
   const completed=(dataset:Entity)=>{
     sessionStorage.removeItem(storageKey);sessionStorage.removeItem(storageKey+'-request');
@@ -50,7 +53,7 @@ export function DatasetWorkspace({datasets,models,documents,onSelect,onCreated,a
     {!creating&&lifecycle.controls}
     {!creating&&<div className="dataset-intro dataset-navigation"><span className="pill">{datasets.length} dataset{datasets.length===1?'':'s'}</span>{canManage&&<ActionButton className="btn primary" onClick={()=>setCreating(true)} label="New dataset" action="add"/>}</div>}
     {creating?<AgentOnboarding datasetOnly api={api} models={models} defaults={defaults} storageKey={storageKey} onBusy={setOnboardingBusy} onReady={()=>{}} onCompleted={completed} onUse={()=>{}} onClose={()=>{if(!onboardingBusy)setCreating(false);}}/>:<>
-      {datasets.length>0&&<DirectoryRows onDelete={canManage?lifecycle.requestDelete:undefined} datasets={datasets} documents={documents} search={directorySearch} onClearSearch={onClearDirectorySearch} onChat={id=>{onSelect(id);onUse('Aegis agent V2');}}/>}
+      {datasets.length>0&&<><div className="readiness-legend" aria-label="Dataset readiness summary"><span><strong>{milestones.added}</strong> files added</span><span><strong>{milestones.indexed}</strong> indexed</span><span><strong>{milestones.extracted}</strong> with extracted results</span><span><strong>{milestones.reviewed}</strong> with reviewed results</span><p>Indexing enables questions. It does not mean fields have been extracted or reviewed.</p></div><DirectoryRows onDelete={canManage?lifecycle.requestDelete:undefined} datasets={datasets} documents={documents} extractions={extractions} search={directorySearch} onClearSearch={onClearDirectorySearch} onChat={id=>{onSelect(id);onUse('Aegis agent V2');}}/></>}
       {!datasets.length&&<div className="panel dataset-empty"><Database size={30}/><h3>{canManage?'Your first dataset starts here':'No datasets assigned'}</h3><p>{canManage?'Create a dataset and choose its models.':'Ask your administrator to assign a dataset to your account.'}</p>{canManage&&<ActionButton className="btn primary" onClick={()=>setCreating(true)} label="New dataset" action="add"/>}</div>}
     </>}
   </div>;

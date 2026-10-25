@@ -1,6 +1,6 @@
 export const uploadStages = ["upload", "extract", "index", "ready"] as const;
 export type UploadStage = typeof uploadStages[number];
-export type StageStatus = "completed" | "running" | "failed" | "waiting" | "unknown";
+export type StageStatus = "completed" | "running" | "failed" | "cancelled" | "waiting" | "unknown";
 export type UploadProgressItem = {
   id: string; name: string; status: string; ready?: boolean; processing?: boolean; failed?: boolean; error?:string;
   document?: { id?:string; status?: string; requires_reindex?: boolean; error?:string };
@@ -19,6 +19,7 @@ export function uploadStageStatus(item: UploadProgressItem, stage: UploadStage):
   if (stage === "upload") return "completed";
   const workflow = item.job?.workflow;
   const actual = workflow?.stages?.[stage]?.status;
+  if (!item.processing && item.job?.status==='cancelled' && (workflow?.current===stage || actual==='running' || (!workflow?.current&&stage==='index'))) return "cancelled";
   if (item.failed && (workflow?.current === stage || (!workflow?.current && stage === "index"))) return "failed";
   // A requested rebuild cannot reuse completion from an older index job.
   if (item.processing && ["completed", "failed", "cancelled"].includes(item.job?.status || "")) return "unknown";
@@ -31,8 +32,8 @@ export function summarizeUploadBatch(items: UploadProgressItem[]) {
   const stages = uploadStages.map(stage => {
     const statuses = items.map(item => uploadStageStatus(item, stage));
     const count = (status: StageStatus) => statuses.filter(value => value === status).length;
-    const completed = count("completed"), running = count("running"), failed = count("failed"), unknown = count("unknown");
-    const status: StageStatus = completed === items.length && items.length ? "completed" : running ? "running" : failed ? "failed" : unknown ? "unknown" : "waiting";
+    const completed = count("completed"), running = count("running"), failed = count("failed"), cancelled=count('cancelled'), unknown = count("unknown");
+    const status: StageStatus = completed === items.length && items.length ? "completed" : running ? "running" : failed ? "failed" : cancelled?'cancelled':unknown ? "unknown" : "waiting";
     return { stage, status, completed, running, failed, unknown };
   });
   const ready = items.filter(item => item.ready).length;
@@ -48,10 +49,10 @@ export function documentJourneySteps(items: UploadProgressItem[]) {
   const {stages,total}=summarizeUploadBatch(items);
   const groups=[{id:'document',label:'Document',icon:'document',stages:['upload','extract']},
     {id:'knowledge',label:'Knowledge',icon:'knowledge',stages:['index']},
-    {id:'chat',label:'AI Chat',icon:'chat',stages:['ready']}] as const;
+    {id:'chat',label:'Ready to ask',icon:'chat',stages:['ready']}] as const;
   return groups.map(group=>{
     const members=stages.filter(stage=>group.stages.some(name=>name===stage.stage));
-    const status=members.every(stage=>stage.status==='completed')?'completed':members.some(stage=>stage.status==='running')?'running':members.some(stage=>stage.status==='failed')?'failed':'pending';
+    const status=members.every(stage=>stage.status==='completed')?'completed':members.some(stage=>stage.status==='running')?'running':members.some(stage=>stage.status==='failed')?'failed':members.some(stage=>stage.status==='cancelled')?'cancelled':members.some(stage=>stage.status==='unknown')?'unknown':'pending';
     const completed=items.filter(item=>group.stages.every(stage=>uploadStageStatus(item,stage)==='completed')).length;
     return {id:group.id,label:group.label,icon:group.icon,status,detail:total>1?`${completed}/${total} done`:undefined};
   });
@@ -62,6 +63,7 @@ export function currentUploadStep(item: UploadProgressItem): string {
   if (item.status === "uncertain") return "Upload not confirmed";
   if (item.status === "invalid") return "File needs attention";
   if (item.status === "failed" && !item.document) return "Upload failed";
+  if (!item.processing && item.job?.status==='cancelled') return 'Processing cancelled';
   if (item.document?.requires_reindex && !item.processing && !item.failed) return "Reindex required";
   const labels: Record<UploadStage,string> = { upload:"Uploading original", extract:"Reading document", index:"Building index", ready:"Finishing" };
   const failed = uploadStages.find(stage => uploadStageStatus(item,stage) === "failed");

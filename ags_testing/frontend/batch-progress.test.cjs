@@ -221,7 +221,7 @@ test('extraction uses the shared horizontal workflow and real completed-stage pr
  assert.match(failed,/Needs attention/);assert.match(failed,/stage-failed/);assert.match(failed,/Model unavailable/);assert.match(failed,/aria-valuenow="25"/);
  const done=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'completed',workflow:{stages:Object.fromEntries(Object.keys(stages).map(name=>[name,{status:'completed'}]))}}}));
  assert.match(done,/aria-valuenow="100"/);assert.match(done,/Your result is ready to review/);
- const legacy=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'running'}}));assert.match(legacy,/Stage details are unavailable/);assert.match(legacy,/aria-valuenow="0"/);
+ const legacy=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'running'}}));assert.match(legacy,/Stage details are unavailable/);assert.doesNotMatch(legacy,/aria-valuenow=/);
 });
 const {WorkflowStepper}=load(path.resolve(__dirname,'../../ags_frontend/app/workflow-stepper.tsx'));
 const {BatchProgress}=load(path.resolve(__dirname,'../../ags_frontend/app/batch-progress.tsx'));
@@ -246,7 +246,7 @@ test('particles feed only the active stage; Knowledge to Chat waits until Knowle
 test('document journey uses real reading, knowledge and chat-readiness states',()=>{
  const item={id:'doc',name:'evidence.txt',status:'submitted',document:{status:'processing'},processing:true,job:{status:'running',workflow:{current:'index',stages:{extract:{status:'completed'},index:{status:'running'},ready:{status:'blocked'}}}}};
  const render=()=>renderToStaticMarkup(React.createElement(BatchProgress,{items:[item],compact:true}));
- const active=render();assert.match(active,/>Document</);assert.match(active,/>Knowledge</);assert.match(active,/>AI Chat</);
+ const active=render();assert.match(active,/>Document</);assert.match(active,/>Knowledge</);assert.match(active,/>Ready to ask</);assert.doesNotMatch(active,/>AI Chat</);
  assert.equal((active.match(/stage-running/g)||[]).length,1);
  assert.equal((active.match(/connector-flowing/g)||[]).length,1);
  item.job.status='failed';item.processing=false;item.failed=true;item.job.workflow.stages.index.status='failed';

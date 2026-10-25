@@ -1,0 +1,24 @@
+/* Shared Aegis banner palette. Status/error colors retain their own meaning. */
+:root{--aegis-navy:#11152c;--aegis-teal:#126a78;--aegis-cyan:#27cbd9;--aegis-silver:#d8ddf0;--aegis-lavender:#aba9dc;--aegis-focus:#087b8a;--blue:var(--aegis-teal);--ink:#202b3c;--muted:#53627c}
+body .shell .workspace-region .btn.primary,body .shell .topbar .btn.primary{background:var(--aegis-navy);border-color:var(--aegis-navy);color:#fff}
+body .shell .workspace-region .btn.primary:hover,body .shell .topbar .btn.primary:hover{background:#1a5365;border-color:#1a5365}
+body #workspace-navigation .nav-item.selected{color:#104d59;background:#e9f5f6;box-shadow:inset 3px 0 var(--aegis-teal)}
+body #workspace-navigation .nav-item:hover{color:#104d59;background:#f0f7f8}
+body .workspace-title,body .brand-name{color:var(--aegis-navy)}
+body .shell .workspace-region .screen-heading{border-color:var(--aegis-silver);background:linear-gradient(115deg,#f2f2fc,#effafb,#fff)}
+body .shell :is(button,a,input,select,textarea,summary,[tabindex="0"]):focus-visible{outline:3px solid var(--aegis-focus);outline-offset:3px}
+.skip-workspace{position:fixed;left:12px;top:8px;z-index:2000;transform:translateY(-180%);padding:10px 16px;background:var(--aegis-navy);color:#fff;border-radius:6px;text-decoration:none}
+.skip-workspace:focus{transform:none}
+.demo-workspace-notice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 20px;border-bottom:1px solid #d2e6e9;background:#ecf8f9;color:#174f5b;font-size:12px;line-height:1.5}
+.demo-workspace-notice strong{font-weight:650}.demo-workspace-notice a{color:inherit;text-underline-offset:3px}.demo-workspace-notice details{margin-left:auto}.demo-workspace-notice summary{cursor:pointer}.demo-workspace-notice details>div{padding:10px 0;display:flex;gap:8px;flex-wrap:wrap;max-width:640px}.demo-workspace-notice .btn{font-size:12px;min-height:32px}
+.demo-workspace-menu{position:relative;font-size:12px}.demo-workspace-menu>summary{cursor:pointer;list-style:none;background:#e7f5f6;color:#145563;border:1px solid #9dc7ce;white-space:nowrap}.demo-workspace-menu>div{position:absolute;right:0;top:calc(100% + 12px);z-index:100;width:min(350px,calc(100vw - 28px));padding:18px;background:white;border:1px solid #cbdde4;border-radius:10px;box-shadow:0 12px 36px #15283c26;color:#35475f;line-height:1.6}.demo-workspace-menu>div>.btn{margin:0 8px 8px 0;font-size:12px;min-height:38px}.demo-workspace-menu a{display:block;color:#175f6e;text-underline-offset:3px}
+.model-effects{margin:8px 0;color:var(--muted);font-size:12px;line-height:1.55}.model-effects summary{cursor:pointer;color:#245b68}.model-effects p{margin:7px 0 0;max-width:65ch}
+.dataset-stage-note{display:block;color:var(--muted);font-size:11px;line-height:1.5;margin-top:5px;white-space:normal}
+.readiness-legend{display:flex;align-items:baseline;gap:8px 16px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;background:#f4f8fb;border:1px solid #dfe8ef;border-radius:8px;color:#42536c;font-size:12px}.readiness-legend p{flex-basis:100%;margin:0;color:var(--muted)}
+.recovery-guidance{margin:20px 0;padding:16px;background:#f3f7fa;border:1px solid #d8e4ec;border-radius:8px;color:#35475f;line-height:1.6}.recovery-guidance h2{font-size:16px;margin:0 0 8px}.recovery-guidance p{margin:8px 0}.recovery-guidance li+li{margin-top:8px}
+.source-preview-unavailable{padding:16px;line-height:1.6;color:#6d3a25;background:#fff9f1}.source-preview-unavailable p{margin:0 0 10px}
+@media(max-width:700px){.demo-workspace-notice{padding:8px 12px;gap:4px 10px}.demo-workspace-notice details{margin-left:0;width:100%}.readiness-legend{padding:10px;gap:6px 12px}}
+@media(max-width:560px){.demo-workspace-menu>summary{font-size:11px;padding:5px 7px}.demo-synthetic-label{display:none}.demo-workspace-menu>div{position:fixed;left:14px;right:14px;top:70px;width:auto;max-height:calc(100dvh - 90px);overflow:auto}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}body .skip-workspace{transition:none}}
+/* Keep fixture identity visible even where ordinary workspace pills collapse. */
+@media(max-width:960px){body .top-actions .demo-workspace-menu>summary{display:flex}}

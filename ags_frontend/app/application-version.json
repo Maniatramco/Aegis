@@ -1,6 +1,21 @@
 {
-  "version": "26.1.13.0",
+  "version": "26.1.13.1",
   "releases": [
+    {
+      "version": "26.1.13.1",
+      "date": "2026-10-25",
+      "title": "Local workspace UX review",
+      "changes": [
+        "Apply the approved Aegis navy, teal, cyan and silver palette to primary actions, navigation and focus treatment, with direct Extract, Review and Jobs navigation.",
+        "Distinguish indexed files, saved extraction results and reviewed results using unique dataset-scoped sources. Explain model changes without changing mapping or accepted-job behavior.",
+        "Resolve real job resource names, expose stage-based or explicitly unavailable progress, and retain explicit retry and best-effort cancellation through existing contracts.",
+        "Reuse the compact shared workflow stepper with truthful stopped, skipped and unknown states, restrained activity and reduced-motion support. Indexing finishes at Ready to ask; it does not imply an answer ran.",
+        "Retry an interrupted source-text preview without losing review edits. Preserve existing Cancel, Reviewed locks, versions, source provenance and original files.",
+        "Give accurate browser recovery/operator guidance without adding contacts, credentials or authentication endpoints. The installation recovery owner/contact remains unconfigured.",
+        "Provide a clearly labelled synthetic local workspace preview for Dashboard, Jobs, Extract, Review and Ask. No real accounts, documents or external providers are connected.",
+        "Local review only. No source push, live service change, deployment or cloud publication."
+      ]
+    },
     {
       "version": "26.1.13.0",
       "date": "2026-10-25",

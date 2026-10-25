@@ -2,6 +2,16 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.13.1 - 25 October 2026
+
+Refine existing workspace flows with the approved navy/teal/cyan/silver palette, visible keyboard focus and skip navigation. Expose direct Extract, Review and Jobs navigation while preserving route aliases and administrator-only configuration. Separate indexed source readiness from saved extraction/review counts using unique dataset-scoped documents. Explain model changes and accepted configuration snapshots through progressive disclosure.
+
+Jobs resolves actual target identifiers to document/result names, distinguishes completed-stage counts from legacy reported percentages and unavailable progress, filters processing history and exposes explicit contextual retry/cancel and saved-result review. Preserve existing confirmation, best-effort cancellation and backend checks. Reuse the shared compact stepper for actual running/completed/stopped/skipped/unknown states; respect reduced motion and stop animating terminal cancellation. Ingest readiness is labelled Ready to ask, without claiming an answer occurred.
+
+Source-text preview retry retains review drafts. Existing saved versions, Reviewed locks, source fallback and unchanged-original downloads remain in place. Browser recovery guidance names existing administrator/operator procedures and honestly identifies missing recovery-owner/contact configuration. Authentication, credentials, token flows, authorization, retention and processing semantics are unchanged.
+
+The authenticated review preview uses disposable synthetic records, mock models and a process-level outbound-network guard outside production source. No real account or arbitrary document is accepted. This candidate is local only; no source push, live/published service change or deployment is included. Mock responses validate contracts, not provider answer quality. Physical screen readers, Safari and real-provider acceptance are not certified.
+
 ## v26.1.13.0 - 25 October 2026
 
 Local Sprint 2 candidate from committed Sprint 1 `48ce4b9`. Reconcile the previously uncommitted source-connection and safe HTTP 429-advice work without replacing intervening admin file processing, cleanup, OCR selection, rerun routing or release history. Source Connections supports administrator-selected read-only S3/SharePoint/Google Drive imports through the existing consent/upload/index pipeline, with encrypted credentials, scoped selection, provenance and duplicate handling. Imports are snapshots; source ACLs, updates/deletions, scheduled synchronization and delegated-user OAuth are not mirrored. Existing original working files are preserved separately.

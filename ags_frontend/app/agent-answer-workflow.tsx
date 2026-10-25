@@ -7,7 +7,7 @@ import './agent-answer-workflow.css';
 export type AnswerWorkflow={status:string;started_at:number;steps:{id:string;label:string;status:string;started_at:number;duration_ms?:number}[]};
 export const stepElapsed=(step:AnswerWorkflow['steps'][number],now:number)=>Math.max(0,step.duration_ms??now-step.started_at);
 export const elapsedLabel=(ms:number)=>ms<1000?`${(ms/1000).toFixed(1)}s`:ms<60000?`${Math.floor(ms/1000)}s`:`${Math.floor(ms/60000)}m ${Math.floor(ms/1000)%60}s`;
-const stageStatus=(status:string)=>({completed:'Completed',running:'In progress',failed:'Needs attention',aborted:'Stopped',cancelled:'Stopped'}[status]||'Pending');
+const stageStatus=(status:string)=>({completed:'Completed',running:'In progress',failed:'Needs attention',aborted:'Stopped',cancelled:'Stopped',skipped:'Not used',not_required:'Not used',unknown:'Status unavailable'}[status]||'Pending');
 export function AgentAnswerWorkflow({workflow,status='completed'}:{workflow?:AnswerWorkflow;status?:string}){
  const [now,setNow]=useState(Date.now());
  const state=workflow?.status||(status==='streaming'?'running':status);
