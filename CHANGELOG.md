@@ -2,6 +2,14 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.13.2 - 25 October 2026
+
+Restore `workspace-navigation.tsx` to the original pre-UX menu/submenu structure and sequence. Keep Dataset, Prompt, Extract, Review and Source Connections under Onboard; keep Model Registration, Model Mapping, Users & passwords, Jobs & activity, Storage and Files & processing under Manage workspace. Existing Jobs improvements remain accessible in their original location. Add explicit order/active-selection/keyboard/mobile regression coverage.
+
+Revisit reachable workspace and nested screens with synthetic records, including Dashboard/relationships, dataset creation/lifecycle, templates/versions, extraction/review/rerun, Agent scope/history/attachments, models/mappings, users/assignments, storage/advanced connections, source configuration, files/processing and entry/setup/recovery. Preserve existing working forms and processing semantics. Shared styling covers primary actions, focus and selected providers without changing navigation or status meanings. Fix the small-phone header action row that overflowed Review history and Re-extract at 320px. Add an accessible dataset-assignment filter label and correct storage-independent file-management copy.
+
+Local preview only. Real connector browsing/import, credential/account changes, storage activation/migration/archive/reset and live inference are outside this synthetic review. No source push, deployment or original Sprint 1 modification is included; screen-reader, physical-device and real-provider acceptance remain separate.
+
 ## v26.1.13.1 - 25 October 2026
 
 Refine existing workspace flows with the approved navy/teal/cyan/silver palette, visible keyboard focus and skip navigation. Expose direct Extract, Review and Jobs navigation while preserving route aliases and administrator-only configuration. Separate indexed source readiness from saved extraction/review counts using unique dataset-scoped documents. Explain model changes and accepted configuration snapshots through progressive disclosure.

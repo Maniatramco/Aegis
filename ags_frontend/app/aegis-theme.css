@@ -22,3 +22,6 @@ body .shell :is(button,a,input,select,textarea,summary,[tabindex="0"]):focus-vis
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}body .skip-workspace{transition:none}}
 /* Keep fixture identity visible even where ordinary workspace pills collapse. */
 @media(max-width:960px){body .top-actions .demo-workspace-menu>summary{display:flex}}
+/* Keep the original action order and readable primary labels on small phones. */
+@media(max-width:420px){body .shell>.topbar:has(.workspace-page-actions .action-label){flex-wrap:wrap}body .shell>.topbar:has(.workspace-page-actions .action-label) .top-actions{flex-basis:100%;flex-wrap:wrap;justify-content:flex-end}body .shell>.topbar:has(.workspace-page-actions .action-label) .workspace-page-actions{flex:1;min-width:0}body .shell>.topbar .workspace-page-actions .action-label{min-width:0;white-space:normal}}
+body .shell .workspace-region :is(.source-provider-options button.selected,.storage-provider.selected){border-color:var(--aegis-teal);background:#eaf6f6;box-shadow:0 0 0 1px var(--aegis-teal)}

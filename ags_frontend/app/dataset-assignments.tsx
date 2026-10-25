@@ -15,7 +15,7 @@ export function DatasetAssignments({api,account,onClose}:{api:(path:string,metho
   <h2>Dataset access · {account.username}</h2><p className="muted small">Choose the datasets this user can work with. Assigned users can upload documents, chat, extract, and review shared results. Only the administrator can change assignments or model configuration.</p>
   {loading&&<p role="status">Loading dataset access…</p>}
   {!loading&&loaded&&<>
-   <label className="account-search" htmlFor="assignment-search"><input id="assignment-search" value={search} placeholder="Filter datasets" onChange={e=>setSearch(e.target.value)} disabled={saving}/></label>
+   <label className="account-search" htmlFor="assignment-search"><span className="sr-only">Filter datasets</span><input id="assignment-search" value={search} placeholder="Filter datasets" onChange={e=>setSearch(e.target.value)} disabled={saving}/></label>
    <div className="assignment-list">{datasets.filter(dataset=>dataset.name.toLowerCase().includes(search.toLowerCase())).map(dataset=><label key={dataset.id} className="assignment-option"><input type="checkbox" checked={selected.includes(dataset.id)} disabled={saving} onChange={e=>{setNotice("");setSelected(previous=>e.target.checked?[...previous,dataset.id]:previous.filter(id=>id!==dataset.id));}}/><span><strong>{dataset.name}</strong>{dataset.active===false&&<small>Inactive dataset</small>}{dataset.description&&<small>{dataset.description}</small>}</span></label>)}</div>
    {!datasets.length&&<p className="muted small">Create a dataset in Datasets first, then assign it here.</p>}
    <p className="muted small">{selected.length} assigned dataset{selected.length===1?'':'s'}. With no assignments, this user sees no datasets.</p>

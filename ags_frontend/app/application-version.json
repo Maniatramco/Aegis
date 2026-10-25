@@ -1,6 +1,19 @@
 {
-  "version": "26.1.13.1",
+  "version": "26.1.13.2",
   "releases": [
+    {
+      "version": "26.1.13.2",
+      "date": "2026-10-25",
+      "title": "Complete screen review with original navigation",
+      "changes": [
+        "Restore the exact original menu and submenu sequence: Dataset, Prompt, Extract and Review remain under Onboard; Jobs remains under Manage workspace.",
+        "Review the existing workspace and nested administration, configuration, source, review and entry screens with synthetic local fixtures. Preserve working layouts and behavior rather than adding duplicate screens.",
+        "Wrap small-phone header actions so Review history and re-extraction options retain readable actions without horizontal page overflow.",
+        "Apply shared navy/teal/silver focus, primary-action and selected-provider treatments across existing screens; preserve status color meanings.",
+        "Give the dataset-access filter an accessible label and describe Files & processing independently of its local or OCI storage destination.",
+        "No authentication, authorization, storage activation, credential, retention or processing semantics changed. Local review only; published applications and Sprint 1 remain untouched."
+      ]
+    },
     {
       "version": "26.1.13.1",
       "date": "2026-10-25",

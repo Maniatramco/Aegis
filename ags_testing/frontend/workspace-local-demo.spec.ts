@@ -10,7 +10,7 @@ test('synthetic Dashboard, direct navigation, keyboard skip and responsive jobs 
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await info(page);
  await goto(page,'Dashboard');await expect(page.getByText('Local demo · synthetic data',{exact:true})).toBeVisible();
  await page.keyboard.press('Tab');await expect(page.getByRole('link',{name:'Skip to workspace',exact:true})).toBeFocused();await page.keyboard.press('Enter');await expect(page.locator('main')).toBeFocused();
- await page.getByRole('button',{name:'Open navigation',exact:true}).click();await page.getByRole('navigation',{name:'Workspace pages'}).getByRole('button',{name:'Jobs & activity',exact:true}).click();
+ await page.getByRole('button',{name:'Open navigation',exact:true}).click();const navigation=page.getByRole('navigation',{name:'Workspace pages'});await navigation.getByRole('button',{name:'Manage workspace',exact:true}).click();await navigation.getByRole('button',{name:'Jobs & activity',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Processing history'})).toBeVisible();await expect(page.locator('.job-row').first()).toBeVisible();
  for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:900});await fits(page);await expect(page.getByRole('group',{name:'Filter jobs'})).toBeVisible();}
  await page.emulateMedia({reducedMotion:'reduce'});await page.locator('.job-details summary').first().click();
@@ -54,6 +54,15 @@ test('demo refuses real account/provider configuration and arbitrary document up
  const ids=await info(page);expect((await page.request.post('/api/auth/login',{data:{username:'synthetic-probe',password:'not-a-real-password'}})).status()).toBe(403);
  expect((await page.request.patch('/api/settings',{data:{model_provider:'openai'}})).status()).toBe(403);
  expect((await page.request.post('/api/documents/upload',{multipart:{dataset_id:ids.datasets.operations,files:{name:'synthetic-rejected.txt',mimeType:'text/plain',buffer:Buffer.from('Synthetic bytes outside the allowlisted sample.')}}})).status()).toBe(403);
+});
+
+test('original navigation order, active submenu and keyboard dismissal survive mobile layouts',async({page})=>{
+ await info(page);await goto(page,'Dashboard');const menu=page.getByRole('button',{name:'Open navigation',exact:true});await menu.click();const nav=page.getByRole('navigation',{name:'Workspace pages'});
+ for(const label of ['Onboard','Manage workspace']){const toggle=nav.getByRole('button',{name:label,exact:true});if(await toggle.getAttribute('aria-expanded')==='false')await toggle.click();}
+ const expected=['Dashboard','Aegis Agent','Onboard','Dataset','Prompt','Extract','Review','Source Connections','Manage workspace','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage','Files & processing','About'];
+ for(const width of [1440,390,320]){await page.setViewportSize({width,height:900});expect(await nav.getByRole('button').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')))).toEqual(expected);await page.keyboard.press('Escape');await expect(menu).toBeFocused();await menu.click();}
+ await nav.getByRole('button',{name:'Prompt',exact:true}).click();await page.getByRole('button',{name:'Open navigation',exact:true}).click();await expect(nav.getByRole('button',{name:'Prompt',exact:true})).toHaveAttribute('aria-current','page');await page.keyboard.press('Escape');await fits(page);
+ await goto(page,'Review');await page.setViewportSize({width:320,height:900});await fits(page);await expect(page.getByRole('button',{name:'New extraction',exact:true})).toBeVisible();
 });
 
 test('failed file retry is explicit and cancellation preserves the original synthetic file',async({page})=>{

@@ -57,7 +57,7 @@ export function AdminDocuments({api,onChanged,onReview}:{api:Api;onChanged:()=>v
  }
  const row=data.items.find((item:Entity)=>item.id===selected);
  return <div className="admin-documents">
-  <section className="panel file-intro"><div><div className="eyebrow"><Shield size={15}/> ADMINISTRATION</div><h2>Files & processing</h2><p className="muted">Application source files in OCI and their pinned storage locations, with indexing, OCR and extraction status.</p></div><button className="btn" disabled={loading||busy} onClick={()=>void load()}><RefreshCw size={16}/> Refresh</button></section>
+  <section className="panel file-intro"><div><div className="eyebrow"><Shield size={15}/> ADMINISTRATION</div><h2>Files & processing</h2><p className="muted">Application source files and their saved storage locations, with indexing, OCR and extraction status.</p></div><button className="btn" disabled={loading||busy} onClick={()=>void load()}><RefreshCw size={16}/> Refresh</button></section>
   {notice&&<div className="notice" role="status">{notice}</div>}
   {error&&<div className="error" role="alert">{error}</div>}
   {data.metadata_warnings>0&&<div className="notice" role="status">Some extraction metadata could not be read. Results may be incomplete; deletion will require readable metadata.</div>}

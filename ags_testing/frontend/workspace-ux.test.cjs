@@ -8,6 +8,7 @@ const {datasetMilestones}=load(source('dataset-readiness.ts'));
 const {jobPresentation,JobsActivity}=load(source('jobs-activity.tsx'));
 const {WorkflowStepper}=load(source('workflow-stepper.tsx'));
 const {documentJourneySteps,currentUploadStep}=load(source('batch-workflow.ts'));
+const {WorkspaceNavigation}=load(source('workspace-navigation.tsx'));
 
 test('readiness separates current indexes, saved extraction and reviewed results without double counting runs',()=>{
  const docs=[{id:'a',dataset_id:'one',status:'ready'},{id:'b',dataset_id:'one',status:'ready',requires_reindex:true},{id:'c',dataset_id:'two',status:'failed'}];
@@ -38,4 +39,12 @@ test('cancelled index jobs stop their formerly running stage without claiming an
  const item={id:'cancelled',name:'sample.txt',status:'submitted',failed:true,document:{status:'processing'},job:{status:'cancelled',workflow:{current:'index',stages:{extract:{status:'completed'},index:{status:'running'}}}}};
  const steps=documentJourneySteps([item]);assert.equal(steps[1].status,'cancelled');assert.equal(steps[2].label,'Ready to ask');assert.equal(currentUploadStep(item),'Processing cancelled');
  const html=renderToStaticMarkup(React.createElement(WorkflowStepper,{steps}));assert.doesNotMatch(html,/data-active|aria-current="step"/);
+});
+
+test('original menu and submenu sequence is preserved with jobs under Manage workspace',()=>{
+ const props={view:'Extract',isAdmin:true,adminOpen:true,onNavigate(){},onAdminToggle(){},adminItems:[{name:'Users & passwords'},{name:'Jobs & activity'},{name:'Storage'},{name:'Files & processing'}].map(item=>({...item,icon:()=>null}))};
+ const html=renderToStaticMarkup(React.createElement(WorkspaceNavigation,props));
+ const labels=[...html.matchAll(/<button[^>]*aria-label="([^"]+)"/g)].map(match=>match[1].replaceAll('&amp;','&'));
+ assert.deepEqual(labels,['Dashboard','Aegis Agent','Onboard','Dataset','Prompt','Extract','Review','Source Connections','Manage workspace','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage','Files & processing','About']);
+ assert.ok(html.indexOf('id="onboard-navigation"')<html.indexOf('aria-label="Extract"'));assert.ok(html.indexOf('id="admin-navigation"')<html.indexOf('aria-label="Jobs &amp; activity"'));
 });
