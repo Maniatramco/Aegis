@@ -1,6 +1,17 @@
 {
-  "version": "26.1.13.5",
+  "version": "26.1.13.6",
   "releases": [
+    {
+      "version": "26.1.13.6",
+      "date": "2026-10-25",
+      "title": "Approved reference workspace layout",
+      "changes": [
+        "Match the user supplied visual reference with real summary cards, a dataset library and a large Knowledge Chat canvas.",
+        "Use a scoped editorial greeting, three explanatory suggestion cards and a larger composer while preserving Inter elsewhere and the Aegis brand.",
+        "Keep original navigation, source scopes, exclusions, history, keyboard actions and responsive card access. Counts derive from existing accessible records.",
+        "Local preview only. No source push, deployment or live changes."
+      ]
+    },
     {
       "version": "26.1.13.5",
       "date": "2026-10-25",

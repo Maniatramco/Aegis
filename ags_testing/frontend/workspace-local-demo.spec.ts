@@ -19,6 +19,7 @@ test('synthetic Dashboard, direct navigation, keyboard skip and responsive jobs 
   for(const suggestion of await page.locator('.notebook-chat .agent-v2-suggestions button').all())await expect(suggestion).toBeInViewport({ratio:1});
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:process.env.AEGIS_DASHBOARD_DESKTOP_SCREENSHOT,fullPage:false});
+  if(process.env.AEGIS_REFERENCE_SCREENSHOT){await page.setViewportSize({width:2048,height:1280});await page.screenshot({path:process.env.AEGIS_REFERENCE_SCREENSHOT,fullPage:false});}
   await page.setViewportSize({width:390,height:844});await fits(page);
   for(const suggestion of await page.locator('.notebook-chat .agent-v2-suggestions button').all())await expect(suggestion).toBeInViewport({ratio:1});
   if(process.env.AEGIS_DASHBOARD_MOBILE_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_DASHBOARD_MOBILE_SCREENSHOT,fullPage:false});

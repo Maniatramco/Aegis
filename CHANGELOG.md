@@ -2,6 +2,10 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.13.6 - 25 October 2026
+
+Match the directly visible user reference: compact truthful summary cards, supporting dataset cards, a clean Knowledge Chat header, scoped editorial greeting, explanatory suggestions and a larger composer. Preserve Aegis branding and original menu/submenu order, including existing mobile navigation. Counts use existing accessible dataset/document/scope records; no invented analytics or provider calls. Responsive card access, source exclusions, history and keyboard behavior remain intact. Local preview only; no push, deployment or live changes.
+
 ## v26.1.13.5 - 25 October 2026
 
 Refine Dashboard as a dataset library beside a spacious conversation. Desktop cards show the approved icon treatment, dataset name/description, real source count, readiness icon/text and explicit Selected state in a compact supporting pane. Keep inclusion separate from the card's primary selection action. Aggregate readiness is available through an optional disclosure rather than a persistent metric row.
