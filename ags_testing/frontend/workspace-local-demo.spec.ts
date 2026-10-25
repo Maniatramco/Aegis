@@ -62,7 +62,8 @@ test('original navigation order, active submenu and keyboard dismissal survive m
  const expected=['Dashboard','Aegis Agent','Onboard','Dataset','Prompt','Extract','Review','Source Connections','Manage workspace','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage','Files & processing','About'];
  for(const width of [1440,390,320]){await page.setViewportSize({width,height:900});expect(await nav.getByRole('button').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')))).toEqual(expected);await page.keyboard.press('Escape');await expect(menu).toBeFocused();await menu.click();}
  await nav.getByRole('button',{name:'Prompt',exact:true}).click();await page.getByRole('button',{name:'Open navigation',exact:true}).click();await expect(nav.getByRole('button',{name:'Prompt',exact:true})).toHaveAttribute('aria-current','page');await page.keyboard.press('Escape');await fits(page);
- await goto(page,'Review');await page.setViewportSize({width:320,height:900});await fits(page);await expect(page.getByRole('button',{name:'New extraction',exact:true})).toBeVisible();
+ await goto(page,'Review');await page.setViewportSize({width:320,height:900});await fits(page);const create=page.getByRole('button',{name:'New extraction',exact:true});await expect(create).toBeVisible();const action=await create.boundingBox(),notice=await page.getByLabel('Local demo using synthetic data. Open demo controls',{exact:true}).boundingBox();expect(action!.x+action!.width).toBeLessThanOrEqual(notice!.x);
+ for(const button of await page.locator('.extract-row-actions button').all()){const box=await button.boundingBox();expect(box!.x+box!.width).toBeLessThanOrEqual(320);}
 });
 
 test('failed file retry is explicit and cancellation preserves the original synthetic file',async({page})=>{
