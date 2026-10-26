@@ -30,3 +30,8 @@
 .manage-panel .model-mapping-screen,.manage-panel table{max-width:100%}
 .manage-panel .dataset-mapping-table,.manage-panel [class*=mapping] table{min-width:0}
 @media(max-width:600px){.manage-dataset{height:94dvh}.manage-head{padding:14px 14px 10px}.manage-tabs{padding:0 14px}.manage-body{padding:14px}.manage-actions .btn{flex:1 1 auto}}
+/* Inside Aegis Agent the same panel is a conversation card, not a pop-up. */
+.manage-dataset.manage-inline{width:100%;height:auto;max-height:none;border:1px solid #d6deef;border-radius:14px;box-shadow:0 6px 18px rgba(22,34,79,.06);overflow:visible}
+.manage-inline .manage-body{overflow:visible;padding:14px 16px 16px}.manage-inline .manage-head{padding:14px 16px 10px}.manage-inline .manage-tabs{padding:0 16px}
+.manage-inline .manage-head h2{font-size:16px}
+.agent-manage-exchange{display:grid;gap:8px}

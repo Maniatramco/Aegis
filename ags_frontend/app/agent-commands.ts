@@ -1,7 +1,9 @@
-export const agentCommands=[{operation:'onboard',label:'/Onboard',description:'Set up a dataset, models, documents and prompt'},{operation:'upload',label:'/Upload',description:'Upload and index documents'},{operation:'extract',label:'/Extract',description:'Extract fields with a prompt template'},{operation:'reextract',label:'/ReExtract',description:'Re-extract saved documents and keep earlier results'}] as const;
+export const agentCommands=[{operation:'onboard',label:'/Onboard',description:'Set up a dataset, models, documents and prompt'},{operation:'upload',label:'/Upload',description:'Upload and index documents'},{operation:'extract',label:'/Extract',description:'Extract fields with a prompt template'},{operation:'reextract',label:'/ReExtract',description:'Re-extract saved documents and keep earlier results'},{operation:'manage',label:'/Manage',description:'Edit a dataset’s details, models, documents and prompts'}] as const;
 // "/" is the command key; a leading "@" from earlier versions is still understood.
 const COMMAND=/^\s*[/@](onboard|upload|extract|reextract)(?=\s|$)/i;
-const COMMAND_LIST='/Onboard, /Upload, /Extract or /ReExtract';
+const COMMAND_LIST='/Onboard, /Upload, /Extract, /ReExtract or /Manage';
+/** /Manage opens the dataset card inside the Agent; it is never sent to the server. */
+export const isManageCommand=(text:string)=>/^\s*[/@]manage(?=\s|$)/i.test(text);
 export function agentOperation(text:string){
  const directive=COMMAND.exec(text)?.[1].toLowerCase();
  if(directive)return directive as 'onboard'|'upload'|'extract'|'reextract';
@@ -14,7 +16,7 @@ export function agentOperation(text:string){
 const commandAttempt=(value:string)=>value.startsWith('@')||/^\/[\p{L}\p{N}_]*(?=\s|$)/u.test(value);
 export function agentInputIssue(text:string){
  const value=text.trim();
- if(commandAttempt(value)&&!agentOperation(value))return `Choose ${COMMAND_LIST} from the agent menu, then add your request.`;
+ if(commandAttempt(value)&&!agentOperation(value)&&!isManageCommand(value))return `Choose ${COMMAND_LIST} from the agent menu, then add your request.`;
  if(value&&!/[\p{L}\p{N}]/u.test(value))return `Please enter a question or choose ${COMMAND_LIST}.`;
  return '';
 }

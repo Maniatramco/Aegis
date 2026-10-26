@@ -1,7 +1,6 @@
 "use client";
-import {useEffect,useId,useRef,useState} from 'react';
-import {CheckCircle2,Loader2,CircleAlert,CircleStop,X} from 'lucide-react';
-import {WorkflowStepper} from './workflow-stepper';
+import {useEffect,useId,useRef,useState,type CSSProperties} from 'react';
+import {BrainCircuit,Check,CheckCircle2,Loader2,CircleAlert,CircleStop,Layers,PenLine,Search,ShieldCheck,X,type LucideIcon} from 'lucide-react';
 import './agent-answer-workflow.css';
 
 export type AnswerWorkflow={status:string;started_at:number;steps:{id:string;label:string;status:string;started_at:number;duration_ms?:number}[]};
@@ -27,11 +26,21 @@ export function groupWorkflowSteps(steps:Step[],now:number){
   const status=statuses.includes('failed')?'failed':statuses.some(s=>s==='aborted'||s==='cancelled')?'aborted':statuses.includes('running')?'running':statuses.every(s=>s==='completed')?'completed':'pending';
   const running=members.find(step=>step.status==='running');
   const ms=members.reduce((sum,step)=>sum+stepElapsed(step,now),0);
-  return {id,label,status,detail:running?`${running.label} · ${elapsedLabel(stepElapsed(running,now))}`:`${members.length} step${members.length===1?'':'s'} · ${elapsedLabel(ms)}`};
+  return {id,label,status,detail:running?`${running.label} · ${elapsedLabel(stepElapsed(running,now))}`:status==='pending'?`${members.length} step${members.length===1?'':'s'}`:`${members.length} step${members.length===1?'':'s'} · ${elapsedLabel(ms)}`};
  }).filter(Boolean) as {id:string;label:string;status:string;detail:string}[];
 }
 const stageStatus=(status:string)=>({completed:'Completed',running:'In progress',failed:'Needs attention',aborted:'Stopped',cancelled:'Stopped'}[status]||'Pending');
 /** Answer progress as a chip that opens an inline panel under the agent header: four phases, with every actual step one click away. Nothing floats over the answer. */
+const PHASE_ICONS:Record<string,LucideIcon>={understand:BrainCircuit,evidence:Search,workflow:Layers,answer:PenLine,check:ShieldCheck};
+const phaseStatus=(status:string)=>({completed:'Done',running:'In progress',failed:'Needs attention',aborted:'Stopped'}[status]||'Waiting');
+/** The answer's phases as a track: each phase keeps its icon, name and status visible; the line fills as phases finish and flows into the live one. */
+export function PhaseTrack({phases}:{phases:{id:string;label:string;status:string;detail:string}[]}){
+ return <ol className="phase-track" aria-label="Answer workflow phases" style={{'--phase-count':phases.length} as CSSProperties}>{phases.map(phase=>{const Icon=phase.status==='completed'?Check:phase.status==='failed'?CircleAlert:PHASE_ICONS[phase.id]||BrainCircuit;
+  return <li key={phase.id} className="phase-step" data-phase={phase.id} data-status={phase.status} aria-current={phase.status==='running'?'step':undefined}>
+   <span className="phase-node" aria-hidden="true"><Icon size={15}/></span>
+   <span className="phase-text"><strong>{phase.label}</strong><small><span className="phase-state">{phaseStatus(phase.status)}</span> · {phase.detail}</small></span>
+  </li>;})}</ol>;
+}
 export function AgentAnswerWorkflow({workflow,status='completed'}:{workflow?:AnswerWorkflow;status?:string}){
  const [now,setNow]=useState(Date.now());
  const state=workflow?.status||(status==='streaming'?'running':status);
@@ -49,12 +58,13 @@ export function AgentAnswerWorkflow({workflow,status='completed'}:{workflow?:Ans
  const label=currentPhase||(active?'Waiting for agent':state==='completed'?'Response ready':state==='aborted'?'Response stopped':'Needs attention');
  const StatusIcon=active?Loader2:state==='completed'?CheckCircle2:state==='aborted'?CircleStop:CircleAlert;
  const phases=groupWorkflowSteps(workflow?.steps||[],now);
+ const done=phases.filter(p=>p.status==='completed').length;
  const count=workflow?.steps.length||0;
  return <div className="agent-answer-workflow" data-status={state} data-expanded={expanded} onKeyDown={event=>{if(event.key==='Escape'&&expanded){event.stopPropagation();close();}}}>
   <button title="Answer workflow details" type="button" className="answer-workflow-summary" aria-label="Answer workflow details" aria-expanded={expanded} aria-controls={panelId} onClick={()=>{if(expanded)close();else{dismissed.current=false;setExpanded(true);}}}><StatusIcon size={10} className="answer-workflow-state" aria-hidden="true"/><span className="answer-workflow-label" role="status">{label}</span>{workflow&&<time>{elapsedLabel(current?stepElapsed(current,now):total)}</time>}<span className="answer-workflow-toggle" aria-hidden="true"/></button>
   <div id={panelId} className="answer-workflow-expanded" role="region" aria-label="Expanded answer workflow" hidden={!expanded}>
    <button title="Close answer workflow" type="button" className="answer-workflow-close" aria-label="Close answer workflow" onClick={close}><X size={13}/></button>
-   {phases.length?<WorkflowStepper compact label="Answer workflow phases" steps={phases}/>:<p>{active?'Waiting for workflow updates.':'Step details were not saved with this earlier answer.'}</p>}
+   {phases.length?<><div className="phase-track-head"><strong>Answer workflow</strong><span>{done} of {phases.length} phases done · {elapsedLabel(total)}</span></div><PhaseTrack phases={phases}/></>:<p>{active?'Waiting for workflow updates.':'Step details were not saved with this earlier answer.'}</p>}
    {count>0&&<button type="button" className="answer-workflow-steps-toggle" aria-expanded={showSteps} aria-controls={stepsId} onClick={()=>setShowSteps(!showSteps)}>{showSteps?'Hide steps':`Show all ${count} steps`}</button>}
    {showSteps&&<div id={stepsId} className="answer-workflow-detail-scroll"><table className="answer-workflow-detail-table"><thead><tr><th>Step</th><th>Phase</th><th>Status</th><th>Time</th></tr></thead><tbody>{workflow!.steps.map(step=><tr key={step.id} data-status={step.status}><td>{step.label}</td><td>{PHASES.find(([id])=>id===phaseFor(step.label))?.[1]}</td><td>{stageStatus(step.status)}</td><td><time>{elapsedLabel(stepElapsed(step,now))}</time></td></tr>)}</tbody></table></div>}
   </div>
