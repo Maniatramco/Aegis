@@ -23,6 +23,7 @@ import {withExtractionName} from './extraction-name';
 import {AgentJobProgress,AgentResult} from './agent-v2-output';
 import {currentUploadStep, type UploadProgressItem} from './batch-workflow';
 import './agent-v2.css';
+import './agent-workspace.css';
 import {speechCapabilities,startSpeechInput,type SpeechEnvironment} from './agent-voice';
 
 type Entity=Record<string,any>;
@@ -390,10 +391,25 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
   setText(next);setCaret(position);setMentionClosed(true);setMentionIndex(0);
   requestAnimationFrame(()=>{composer.current?.focus();composer.current?.setSelectionRange(position,position);});
  };
+ // The conversation rail and context panel only read state this screen already owns.
+ const savedConversation=typeof sessionStorage==='undefined'?'':sessionStorage.getItem(key+'-conversation')||'';
+ const busyNow=Boolean(working)||onboardingBusy||plans.some(active);
+ useEffect(()=>{let live=true;void api('/conversations','GET',undefined,undefined,true).then(result=>{if(live&&Array.isArray(result))setHistory(result);}).catch(()=>{});return()=>{live=false;};},[api,plans.length,catalogRevision]);
+ const openSaved=(conversation:Entity)=>void api(`/conversations/${conversation.id}`,'GET',undefined,undefined,true).then(saved=>{restoreConversation(saved);sessionStorage.setItem(key+'-conversation',conversation.id);sessionStorage.removeItem(key);sessionStorage.removeItem(key+'-history');setHistoryOpen(false);setError('');}).catch(e=>setError(e.message));
+ const latestWorkflow=[...plans].reverse().find(plan=>plan.calls?.length);
+ const startWorkflow=(label:string)=>{const next=`${label} `;setText(next);setCaret(next.length);setMentionClosed(true);requestAnimationFrame(()=>{composer.current?.focus();composer.current?.setSelectionRange(next.length,next.length);});};
  const commandToken=/^(\s*)(@\S+)(?=\s|$)/.exec(text);
  const highlightedCommand=commandToken&&agentCommands.some(command=>command.label.toLowerCase()===commandToken[2].toLowerCase())?commandToken:null;
- return <section className={`agent-v2${dragging?' agent-v2-dragging':''}`} aria-label="Aegis Agent conversation" onDragEnter={onFileDragEnter} onDragOver={onFileDragOver} onDragLeave={onFileDragLeave} onDrop={onFileDrop}>
+ return <section className={`agent-v2 agent-workspace${dragging?' agent-v2-dragging':''}`} aria-label="Aegis Agent conversation" onDragEnter={onFileDragEnter} onDragOver={onFileDragOver} onDragLeave={onFileDragLeave} onDrop={onFileDrop}>
   {dragging&&<div className="agent-v2-drop-overlay" role="status"><UploadCloud size={36}/><strong>{attachmentsBlocked?'Finish the current workflow first':'Drop documents here'}</strong><span>{attachmentsBlocked?'You can attach files when it finishes.':`PDF, DOCX, TXT, JSON · up to 20 files · ${maxUploadMb} MB each`}</span></div>}
+  <aside className="agent-rail" aria-label="Agent conversations">
+   <button type="button" className="agent-rail-new" aria-label="Start a new conversation" disabled={busyNow||!scopeReady} onClick={clearConversation}><Plus size={17}/>New conversation</button>
+   <h2>Recent</h2>
+   <ul className="agent-rail-list">{history.slice(0,30).map(conversation=><li key={conversation.id}><button type="button" aria-current={conversation.id===savedConversation?'true':undefined} disabled={busyNow} onClick={()=>openSaved(conversation)} title={conversation.title||conversation.name}>{conversation.title||conversation.name||'Untitled chat'}</button></li>)}</ul>
+   {!history.length&&<p className="agent-rail-empty">Your saved chats appear here.</p>}
+   <p className="agent-rail-note">Chats are private to you. Answers stay within your dataset access.</p>
+  </aside>
+  <div className="agent-main">
   <header className="agent-v2-context">
    <label>Dataset<select aria-label="Agent dataset" value={dataset} disabled={attachmentsBlocked||(!catalogLoaded.current&&catalogLoading)} onChange={e=>{if(e.target.value===dataset)return;retrySubmittedPrompt.current='';retryPlanId.current='';setPromptProgress(null);setDataset(e.target.value);sessionStorage.setItem(key+'-dataset',e.target.value);setSavedPromptId('');setDocuments([]);setMentionClosed(true);cancelPrompt();setPromptAttachment(null);setPromptNotice('');}}><option value="">{!catalogLoaded.current?(catalogLoading?'Loading datasets…':catalogError?'Datasets unavailable':'General chat'):'General chat'}</option>{catalog.datasets.map((d:Entity)=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
    {dataset&&<AgentDocumentFilter key={dataset} documents={readyDocuments} selected={documents} onChange={setDocuments} disabled={Boolean(working)||onboardingBusy||plans.some(active)}/>}
@@ -405,7 +421,11 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
   <div ref={thread} className="agent-v2-thread" aria-label="Agent conversation" tabIndex={0} onScroll={event=>{const area=event.currentTarget;const bottom=area.scrollHeight-area.scrollTop-area.clientHeight<64;followBottom.current=bottom;setShowLatest(!bottom);}}>
    {onboardingOpen&&catalog.can_onboard_datasets&&<AgentOnboarding initialDocuments={documentFiles} initialPrompt={promptAttachment||undefined} onReview={onReview} api={api} models={catalog.models} defaults={datasetConfig} storageKey={key+'-onboarding'} onBusy={setOnboardingBusy} onReady={()=>{onWorkspaceChanged?.();void loadCatalog().catch(e=>setError(e.message));}} onUse={id=>{setDataset(id);setDocuments([]);setSavedPromptId('');rememberAssistantDataset(sessionStorage,username,id);setOnboardingOpen(false);sessionStorage.removeItem(key+'-onboarding');sessionStorage.removeItem(key+'-onboarding-request');}} onClose={completed=>{setOnboardingOpen(false);if(completed){sessionStorage.removeItem(key+'-onboarding');sessionStorage.removeItem(key+'-onboarding-request');}}}/>}
    {catalogError&&<div className="agent-v2-catalog-error" role="alert"><span>Could not load datasets and models. {catalogError}</span><ActionButton className="btn" disabled={catalogLoading} onClick={()=>{setError('');setCatalogAttempt(value=>value+1);}} label="Retry datasets and models" action="retry"/></div>}
-   {!plans.length&&!onboardingOpen&&<div className="agent-v2-welcome"><AgentLogo size={64} label="Aegis Agent"/>{!scopeReady?<p role="status">{catalogError?'Workspace choices are unavailable. Retry loading above.':'Preparing your workspace…'}</p>:<><h2>How can I help?</h2><p>Ask about Aegis, search indexed documents and saved results, or onboard and extract in one conversation.</p><div className="agent-v2-suggestions">{['What can you do?','Summarize the key points','Upload and extract documents'].map(s=><button key={s} className="btn" onClick={()=>setText(s)}>{s}</button>)}</div></>}</div>}
+   {!plans.length&&!onboardingOpen&&<div className="agent-v2-welcome"><AgentLogo size={64} label="Aegis Agent"/>{!scopeReady?<p role="status">{catalogError?'Workspace choices are unavailable. Retry loading above.':'Preparing your workspace…'}</p>:<><div className="agent-welcome-hero"><div><h2>How can I help?</h2><p>Ask about Aegis, search indexed documents and saved results, or onboard and extract in one conversation. Answers are retrieved, reranked and checked against cited evidence.</p></div></div>
+    <h3 className="agent-welcome-label">Start a workflow</h3>
+    <div className="agent-workflow-cards">{agentCommands.map(command=><button key={command.operation} type="button" className="agent-workflow-card" data-operation={command.operation} disabled={attachmentsBlocked} onClick={()=>startWorkflow(command.label)}><span className="agent-workflow-tag">{command.label}</span><strong>{({onboard:'Set up a dataset',upload:'Upload and index',extract:'Extract fields',reextract:'Re-extract'} as Record<string,string>)[command.operation]}</strong><span>{command.description}</span></button>)}</div>
+    <h3 className="agent-welcome-label">Or ask about your knowledge</h3>
+    <div className="agent-v2-suggestions">{['What can you do?','Summarize the key points','Upload and extract documents'].map(s=><button key={s} className="btn" onClick={()=>setText(s)}>{s}</button>)}</div></>}</div>}
    {plans.map(plan=>{
     const index=nextCall(plan);const call=index>=0?plan.calls[index]:null;
     const needInputs=call?.status==='pending'&&!plan.superseded;const uploaded=plan.calls.some((c:Entity)=>c.uploaded_document_ids?.length);
@@ -504,6 +524,30 @@ export function AgentV2({api,stream,username,onJobs,onVisibleJobs,onReview,onPro
    {promptNotice&&<p className="agent-v2-prompt-notice" role="status">{promptNotice}</p>}
    <div className="agent-v2-footer"><span>Drag & drop PDF, DOCX, TXT, JSON · up to 20 files</span><details><summary>Privacy & providers</summary><p>Chat uses your configured model and indexed knowledge directly. Onboarding, upload, extraction and re-extraction ask for external processing approval before sending files. Workflow requests and results are saved in your workspace.</p><p>Browser speech recognition may send audio to its speech service; voice is optional and text remains available.</p></details></div>
   </div>
+  </div>
+  <aside className="agent-context-panel" aria-label="Agent context">
+   <h2>Context</h2>
+   <div className="agent-context-card">
+    <span className="agent-context-label">Knowledge</span>
+    <strong>{datasetConfig?.name||'General chat'}</strong>
+    <span>{dataset?`${readyDocuments.length} indexed document${readyDocuments.length===1?'':'s'}${documents.length?` · ${documents.length} selected`:' · all used'}`:'Aegis guidance and documents you can access'}</span>
+    {documents.length>0&&<ul className="agent-context-docs">{documents.map(id=>{const doc=readyDocuments.find((d:Entity)=>d.id===id);return doc?<li key={id} title={doc.name}>{documentOptionLabel(doc,readyDocuments)}</li>:null;})}</ul>}
+    {savedPrompt&&<span>Prompt: {savedPrompt.name}</span>}
+   </div>
+   <div className="agent-context-card" data-active={Boolean(latestWorkflow&&active(latestWorkflow))}>
+    <span className="agent-context-label">Workflow</span>
+    {latestWorkflow?<>
+     <strong>{latestWorkflow.calls.map((call:Entity)=>({upload:'Upload',extract:'Extract',reextract:'Re-extract'} as Record<string,string>)[call.tool]||call.tool).join(' → ')}</strong>
+     <ol className="agent-context-steps">{latestWorkflow.calls.map((call:Entity,i:number)=><li key={i} data-status={call.status}><span>{call.status==='completed'?'Done':['running','waiting'].includes(call.status)?'Running':call.status==='failed'?'Needs attention':'Waiting'}</span>{call.title||call.tool}</li>)}</ol>
+     <a href="#Jobs%20%26%20activity">Open Jobs &amp; activity</a>
+    </>:<span>Start @Onboard, @Upload, @Extract or @ReExtract and its steps appear here.</span>}
+   </div>
+   <div className="agent-context-card">
+    <span className="agent-context-label">Model</span>
+    <strong>{chatModels.find((m:Entity)=>m.id===effectivePlanner)?.name||'Choose a model below'}</strong>
+   </div>
+   <p className="agent-context-note">Originals are preserved. External providers receive files only after you confirm.</p>
+  </aside>
   {consent.popup}
   <PromptUploadPreview prompt={promptPreview} datasetName={datasetConfig?.name||''} onConfirm={confirmPrompt} onCancel={cancelPrompt}/>
  </section>;

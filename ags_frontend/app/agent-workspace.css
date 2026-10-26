@@ -1,0 +1,84 @@
+/* Aegis Agent workspace: conversation rail, roomy chat, context panel. Scoped so Dataset Knowledge Chat keeps its own layout. */
+.agent-v2.agent-workspace{display:grid;grid-template-columns:260px minmax(0,1fr) 290px;flex-direction:initial;height:calc(100dvh - 150px);min-height:520px;border:1px solid #e1e6f1;border-radius:18px;background:#f3f5fb;color:#0e1630;box-shadow:0 10px 30px #17286410}
+.agent-workspace>.agent-main{display:flex;flex-direction:column;min-width:0;min-height:0;background:#fff;border-left:1px solid #e3e8f2;border-right:1px solid #e3e8f2}
+
+/* Conversation rail */
+.agent-rail{display:flex;flex-direction:column;gap:12px;min-height:0;padding:16px;background:#fff;overflow:auto}
+.agent-rail-new{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:0;border-radius:12px;background:#0b1226;color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.agent-rail-new:hover:not(:disabled){background:#1d2d6b}.agent-rail-new:disabled{opacity:.55;cursor:default}
+.agent-workspace .agent-rail h2{margin:6px 4px 0;font-size:11px!important;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#616b85}
+.agent-rail-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.agent-rail-list button{width:100%;min-height:40px;padding:8px 10px;border:0;border-radius:10px;background:none;color:#0e1630;font:inherit;font-size:14px;text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-rail-list button:hover:not(:disabled){background:#f3f6ff}.agent-rail-list button[aria-current=true]{background:#eaf0ff;color:#1d2d6b;font-weight:600}
+.agent-rail-empty{margin:0 4px;font-size:13px;color:#616b85}
+.agent-rail-note{margin:auto 4px 0;font-size:12px;line-height:1.5;color:#616b85}
+
+/* Header: keep controls, lighter chrome */
+.agent-workspace .agent-v2-context{padding:12px 18px;border-bottom:1px solid #eef1f7;background:#fff}
+
+/* Welcome */
+.agent-workspace .agent-v2-welcome{align-items:stretch;text-align:left;gap:14px;max-width:880px;width:100%;margin:0 auto;padding:24px 28px}
+.agent-workspace .agent-v2-welcome>.aegis-agent-logo,.agent-workspace .agent-v2-welcome>svg:first-child{display:none}
+.agent-welcome-hero{position:relative;overflow:hidden;display:flex;align-items:center;gap:18px;padding:26px;border-radius:20px;color:#fff;background:linear-gradient(125deg,#0c1533 0%,#1d2d6b 34%,#3c52a8 66%,#6f82da 90%,#8f7fe2 100%)}
+.agent-welcome-hero::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(#ffffff0d 1px,transparent 1px),linear-gradient(90deg,#ffffff0d 1px,transparent 1px);background-size:44px 44px}
+.agent-welcome-hero>*{position:relative}
+.agent-workspace .agent-welcome-hero h2{margin:0;font-size:30px!important;font-weight:700;letter-spacing:-.02em;color:#fff}
+.agent-workspace .agent-welcome-hero p{margin:6px 0 0;max-width:640px;font-size:15px;line-height:1.55;color:#dce4fa}
+.agent-workspace .agent-welcome-label{margin:8px 0 0;font-size:15px!important;font-weight:700;color:#0e1630}
+.agent-workflow-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.agent-workflow-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:124px;padding:16px;border:1px solid #e1e6f1;border-radius:16px;background:#fff;color:#0e1630;font:inherit;text-align:left;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+.agent-workflow-card:hover:not(:disabled){border-color:#9db2ee;box-shadow:0 12px 30px #17286418}.agent-workflow-card:disabled{opacity:.55;cursor:default}
+.agent-workflow-card strong{font-size:15px}.agent-workflow-card>span:last-child{font-size:13px;line-height:1.5;color:#4a5577}
+.agent-workflow-tag{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#eaf0ff;color:#1d2d6b}
+.agent-workflow-card[data-operation=upload] .agent-workflow-tag{background:#e7f6f3;color:#0f6f63}
+.agent-workflow-card[data-operation=extract] .agent-workflow-tag{background:#fff1e6;color:#8a3d00}
+.agent-workflow-card[data-operation=reextract] .agent-workflow-tag{background:#f1ebff;color:#5b2da6}
+.agent-workspace .agent-v2-welcome .agent-v2-suggestions{justify-content:flex-start}
+.agent-workspace .agent-v2-welcome .agent-v2-suggestions .btn{border-radius:999px;border-color:#c9d4f5;background:#fff;color:#1d2d6b;font-weight:600}
+
+/* Conversation */
+.agent-workspace .agent-v2-thread{padding:22px 28px;background:#fff}
+.agent-workspace .agent-v2-exchange{max-width:900px;margin-left:auto;margin-right:auto}
+.agent-workspace .agent-v2-composer{padding:10px 18px 14px;background:#fff;border-top:1px solid #eef1f7}
+.agent-workspace .agent-v2-compose-box{border-radius:18px;border-color:#c9d4f5;box-shadow:0 10px 30px #17286414}
+.agent-workspace .agent-v2-send{background:#2f5bea;border-color:#2f5bea;color:#fff}
+.agent-workspace .agent-v2-send:disabled{background:#c9d4f5;border-color:#c9d4f5}
+
+/* Context panel */
+.agent-context-panel{display:flex;flex-direction:column;gap:12px;min-height:0;padding:16px;background:#fff;overflow:auto}
+.agent-workspace .agent-context-panel h2{margin:0 2px;font-size:15px!important;font-weight:700}
+.agent-context-card{display:flex;flex-direction:column;gap:6px;padding:14px;border-radius:14px;background:#f6f8fe;font-size:13px;color:#4a5577}
+.agent-context-card strong{font-size:14px;color:#0e1630;overflow-wrap:anywhere}
+.agent-context-card[data-active=true]{background:#fff;border:1px solid #9db2ee}
+.agent-context-card a{font-weight:600;color:#2f5bea}
+.agent-context-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#616b85}
+.agent-context-docs{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.agent-context-docs li{padding:6px 8px;border-radius:8px;background:#fff;color:#1c2540;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-context-steps{list-style:none;margin:4px 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.agent-context-steps li{display:flex;align-items:center;gap:8px;color:#1c2540}
+.agent-context-steps li>span{flex:none;min-width:58px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;text-align:center;background:#eef1f7;color:#616b85}
+.agent-context-steps li[data-status=completed]>span{background:#e7f6ef;color:#17694a}
+.agent-context-steps li[data-status=running]>span,.agent-context-steps li[data-status=waiting]>span{background:#eaf0ff;color:#1d2d6b}
+.agent-context-steps li[data-status=failed]>span{background:#fff1f1;color:#b42318}
+.agent-context-note{margin:auto 2px 0;font-size:12px;line-height:1.5;color:#616b85}
+.agent-workspace button:focus-visible,.agent-workspace a:focus-visible{outline:2px solid #2f5bea;outline-offset:2px}
+
+@media(max-width:1200px){.agent-v2.agent-workspace{grid-template-columns:230px minmax(0,1fr)}.agent-context-panel{display:none}.agent-workspace>.agent-main{border-right:0}}
+@media(max-width:900px){.agent-v2.agent-workspace{grid-template-columns:minmax(0,1fr);height:calc(100dvh - 190px);border-radius:12px}.agent-rail{display:none}.agent-workspace>.agent-main{border-left:0}.agent-workspace .agent-v2-thread{padding:14px}.agent-workspace .agent-v2-welcome{padding:14px}.agent-welcome-hero{padding:18px}.agent-workspace .agent-welcome-hero h2{font-size:24px!important}}
+@media(prefers-reduced-motion:reduce){.agent-workflow-card{transition:none}}
+
+/* Answers as cards: navy question bubble, bordered answer, source chips. */
+.agent-workspace .agent-v2-user{background:#0b1226;color:#fff;border-radius:16px 16px 4px 16px;padding:12px 16px;font-size:15px;line-height:1.5;border:0}
+.agent-workspace .agent-v2-response{gap:10px}
+.agent-workspace .agent-v2-chat-answer{padding:16px 18px;border-radius:4px 16px 16px 16px;background:#fff;border:1px solid #e1e6f1;font-size:15px;line-height:1.65;color:#0e1630;box-shadow:0 4px 14px #1728640a}
+.agent-workspace .agent-citation{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;margin:0 2px;border-radius:7px;background:#eaf0ff;color:#2f5bea;font-size:12px;font-weight:700;text-decoration:none;vertical-align:1px}
+.agent-workspace .agent-citation:hover{background:#d5e0ff}
+.agent-workspace .agent-v2-sources{margin-top:8px;font-size:13px;color:#4a5577}
+.agent-workspace .agent-v2-sources summary{cursor:pointer;font-weight:600;color:#1d2d6b}
+.agent-workspace .agent-token-usage{font-size:12px;color:#616b85}
+.agent-workspace .agent-v2-speaker strong{font-size:14px;color:#0e1630}
+.agent-workspace .agent-v2-tools>li{border-radius:14px;border-color:#e1e6f1}
+.agent-workspace .agent-v2-tools>li[data-status=running],.agent-workspace .agent-v2-tools>li[data-status=waiting]{border-color:#9db2ee;background:#f6f8ff}
+.agent-workspace .agent-v2-tools>li[data-status=completed]{border-color:#bfe8d3}
+.agent-workspace .agent-v2-tools>li[data-status=failed]{border-color:#f3c6c6;background:#fff8f8}
+.agent-workspace .agent-v2-details{border-radius:16px;border:1px solid #c9d4f5;background:#f6f8ff}
