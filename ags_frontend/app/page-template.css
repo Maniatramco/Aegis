@@ -22,3 +22,43 @@
 .workspace-region.has-page-band .btn.primary:hover:not(:disabled){background:#2449c4;border-color:#2449c4}
 @media(max-width:560px){.page-band{padding:16px;border-radius:14px}.page-band-title{font-size:22px}}
 @media(prefers-reduced-motion:reduce){.workspace-region.has-page-band tbody tr{transition:none}}
+
+/* Review: summary tiles that filter, clearer status chips and row actions. */
+.review-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.review-tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:96px;padding:14px 16px;border-radius:14px;border:1px solid #e1e6f1;background:#fff;color:#0e1630;font:inherit;text-align:left;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+.review-tile:hover{border-color:#9db2ee}.review-tile[aria-pressed=true]{border-color:#2f5bea;box-shadow:0 0 0 3px #2f5bea26}
+.review-tile>span{font-size:12px;color:#4a5577}.review-tile>strong{font-size:26px;font-weight:700;line-height:1.2}.review-tile>small{margin-top:auto;font-size:11px;color:#616b85}
+.review-tile[data-tone=warn]>strong{color:#8a5200}.review-tile[data-tone=ok]>strong{color:#17694a}.review-tile[data-tone=info]>strong{color:#1d2d6b}.review-tile[data-tone=error]>strong{color:#b42318}
+.review-tile:focus-visible{outline:2px solid #2f5bea;outline-offset:2px}
+.has-page-band .extraction-status{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.has-page-band .extraction-status::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.has-page-band .extraction-status.pending-review{background:#fff4e0;color:#8a5200}
+.has-page-band .extraction-status.reviewed{background:#e7f6ef;color:#17694a}
+.has-page-band .extraction-status.failed,.has-page-band .extraction-status.cancelled{background:#fff1f1;color:#b42318}
+.has-page-band .extraction-status.processing,.has-page-band .extraction-status.queued{background:#eaf0ff;color:#1d2d6b}
+@media(max-width:760px){.review-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Jobs: status tabs and one card per job with progress, status and actions. */
+.jobs-board{display:flex;flex-direction:column;gap:12px}
+.jobs-tabs{display:flex;flex-wrap:wrap;gap:6px;padding:4px;border-radius:12px;background:#e6ebf8;align-self:flex-start}
+.jobs-tabs>button{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 14px;border:0;border-radius:9px;background:transparent;color:#4a5577;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.jobs-tabs>button>span{min-width:20px;padding:1px 7px;border-radius:999px;background:#fff;color:#1d2d6b;font-size:11px}
+.jobs-tabs>button[aria-pressed=true]{background:#fff;color:#1d2d6b;box-shadow:0 1px 4px #1728641f}.jobs-tabs>button[aria-pressed=true]>span{background:#eaf0ff}
+.jobs-tabs>button:focus-visible{outline:2px solid #2f5bea;outline-offset:2px}
+.jobs-refresh{margin:0}
+.jobs-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.jobs-card{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(160px,1fr) auto;align-items:center;gap:18px;padding:16px 18px;border-radius:16px;background:#fff;border:1px solid #e1e6f1}
+.jobs-card[data-group=failed]{border-color:#f3c6c6;background:#fffafa}.jobs-card[data-group=running]{border-color:#9db2ee}
+.jobs-card-main{min-width:0;display:flex;flex-direction:column;gap:4px}
+.jobs-card-title{display:flex;align-items:center;gap:8px;min-width:0}.jobs-card-title strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jobs-kind{flex:none;padding:2px 8px;border-radius:6px;background:#eef2fd;color:#1d2d6b;font-size:12px;font-weight:700;text-transform:capitalize}
+.jobs-meta{font-size:12px;color:#4a5577}
+.jobs-error{margin:4px 0 0;font-size:13px;line-height:1.5;color:#b42318}
+.jobs-progress{display:flex;align-items:center;gap:10px;font-size:12px;color:#4a5577}.jobs-progress>.progress{flex:1;margin:0}
+.jobs-card[data-group=failed] .jobs-progress .progress>span{background:#d64545}.jobs-card[data-group=completed] .jobs-progress .progress>span{background:#1f9d6b}
+.jobs-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.jobs-status{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;text-transform:capitalize;background:#eef1f7;color:#4a5577}
+.jobs-status::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.jobs-status[data-group=running]{background:#eaf0ff;color:#1d2d6b}.jobs-status[data-group=failed]{background:#fff1f1;color:#b42318}.jobs-status[data-group=completed]{background:#e7f6ef;color:#17694a}
+.jobs-none{padding:18px;border-radius:14px;background:#fff;border:1px dashed #c9d4f5;font-size:13px;color:#4a5577}
+@media(max-width:760px){.jobs-card{grid-template-columns:minmax(0,1fr);gap:10px}.jobs-actions{justify-content:flex-start}}

@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { AddKnowledge } from "./add-knowledge";
 import { PageBand, PAGE_INTROS } from "./page-band";
+import { JobsBoard } from "./jobs-board";
 import type { DatasetKnowledgeScope } from "./dataset-knowledge-picker";
 
 type Entity = Record<string, any>;
@@ -881,121 +882,10 @@ export default function App() {
           {view === "Extract" && reextractSource && <ReExtractionDialog key={reextractSource.id} source={reextractSource} documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id=>{changeDataset(id);navigate('Model Mapping');}} onReview={d=>openReview(d.id)} onClose={()=>setReextractSource(null)}/>}
 
           {view === "Jobs & activity" && (
-            <section className="panel flush">
-              <div className="panel-head" style={{ padding: "22px 22px 0" }}>
-                <span className="pill" title="Automatically refreshes every 6 seconds">{jobs.length} jobs</span>
-              </div>
-              {jobs.length ? (
-                <div className="table-scroll" role="region" aria-label="Scrollable data table" tabIndex={0}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Job / document</th>
-                        <th>Status</th>
-                        <th>Progress</th>
-                        <th>Attempts</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {jobs.map((j) => (
-                        <tr key={j.id}>
-                          <td>
-                            <strong>
-                              {(j.kind || j.type || "Processing").replaceAll(
-                                "_",
-                                " ",
-                              )}
-                            </strong>
-                            <div className="muted" style={{ marginTop: 5 }}>
-                              {docs.find((d) => d.id === j.document_id)?.name ||
-                                j.document_id ||
-                                j.id}
-                            </div>
-                            {j.error && (
-                              <div
-                                style={{
-                                  color: "#ae4a5b",
-                                  fontSize: "var(--text-caption)",
-                                  maxWidth: 360,
-                                  marginTop: 6,
-                                }}
-                              >
-                                {j.error}
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            <Status value={j.status} />
-                          </td>
-                          <td style={{ minWidth: 100 }}>
-                            {Math.round(j.progress || 0)}%
-                            <div className="progress">
-                              <span
-                                style={{
-                                  width: `${Math.min(100, j.progress || 0)}%`,
-                                }}
-                              />
-                            </div>
-                          </td>
-                          <td>{j.attempts || 0}</td>
-                          <td className="muted">{date(j.created_at)}</td>
-                          <td>
-                            <div className="row">
-                              {["failed", "cancelled"].includes(j.status) && (
-                                <ActionButton
-                                  className="btn"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    run(async () => {
-                                      await api(`/jobs/${j.id}/retry`, "POST");
-                                      notify("Retry requested.");
-                                      reload();
-                                    })
-                                  }
-                                 label="Retry" action="retry"/>
-                              )}
-                              {["pending", "queued", "running"].includes(
-                                j.status,
-                              ) && (
-                                <button
-                                  className="btn danger"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    setConfirm({
-                                      title: "Cancel processing job?",
-                                      body: "Cancellation is best-effort. A request already sent to a model provider may continue and incur usage charges.",
-                                      action: async () => {
-                                        await api(
-                                          `/jobs/${j.id}/cancel`,
-                                          "POST",
-                                        );
-                                        notify("Cancellation requested.");
-                                        reload();
-                                      },
-                                    })
-                                  }
-                                >
-                                  <Square size={13} />
-                                  Cancel
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <Empty
-                  icon={Activity}
-                  title="No processing jobs yet"
-                  detail="Document uploads, reindexing, and extractions will be tracked here."
-                />
-              )}
-            </section>
+            <JobsBoard jobs={jobs} documents={docs} busy={busy} formatDate={date}
+              onRetry={j=>run(async()=>{await api(`/jobs/${j.id}/retry`,"POST");notify("Retry requested.");reload();})}
+              onCancel={j=>setConfirm({title:"Cancel processing job?",body:"Cancellation is best-effort. A request already sent to a model provider may continue and incur usage charges.",action:async()=>{await api(`/jobs/${j.id}/cancel`,"POST");notify("Cancellation requested.");reload();}})}
+              empty={<Empty icon={Activity} title="No processing jobs yet" detail="Document uploads, reindexing, and extractions will be tracked here."/>}/>
           )}
           {view === "Model Registration" && <ModelRegistration models={models} settings={settings} api={api} run={run} busy={busy}
             onSaved={model => { setModels(current => current.some(m => m.id === model.id) ? current.map(m => m.id === model.id ? model : m) : [model, ...current]); notify("Model saved. New runs use the updated connection; apply embedding changes in Model Mapping."); reload(); }}

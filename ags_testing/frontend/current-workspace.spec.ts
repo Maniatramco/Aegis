@@ -58,7 +58,7 @@ test('grouped navigation, route aliases and agent drawer work on desktop and mob
  await expect(nav.getByRole('button',{name:'Model',exact:true})).toHaveCount(0);
  await nav.getByRole('button',{name:'Onboard',exact:true}).click();
  expect(await page.locator('#onboard-navigation .nav-item').allTextContents()).toEqual(['Dataset','Prompt','Extract','Review']);
- expect(await nav.locator('button:not(.nav-group-toggle):not(.nav-more)').allTextContents()).toEqual(['Dashboard','Aegis Agent','Dataset','Prompt','Extract','Review','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage','About']);
+ expect(await nav.locator('button:not(.nav-group-toggle):not(.nav-more)').allTextContents()).toEqual(['Dashboard','Aegis Agent','Dataset','Prompt','Extract','Review','Add knowledge','Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage','About']);
  expect(await nav.locator('#admin-navigation button').allTextContents()).toEqual(['Model Registration','Model Mapping','Users & passwords','Jobs & activity','Storage']);
  await nav.getByRole('button',{name:'Aegis Agent',exact:true}).click();
  await expect(page.locator('.sidebar')).not.toHaveClass(/open/);await expect(page.getByLabel('Message Aegis Agent')).toBeVisible();

@@ -63,3 +63,11 @@ test('Manage workspace model links preserve admin-only visibility',()=>{
  assert.ok(!admin.includes('aria-label="Model"'));assert.ok(!admin.includes('id="model-navigation"'));
  assert.ok(!admin.includes('aria-label="Re-extract"'));
 });
+
+test('review summary tiles count the extractions in scope by review and processing state',()=>{
+ const {reviewSummary}=compile('extraction-directory.tsx');
+ const counts=reviewSummary([{status:'ready',review_status:'reviewed'},{status:'ready'},{status:'ready',review_status:'unreviewed'},{status:'processing'},{status:'failed'},{status:'queued'}]);
+ assert.deepEqual(counts.map(t=>[t.status,t.count]),[['unreviewed',2],['reviewed',1],['processing',1],['failed',1]]);
+ const html=renderToStaticMarkup(React.createElement(ExtractionDirectory,{datasets:[{id:'dataset-a',name:'Resume QA'}],templates:[{id:'schema',name:'Profile schema'}],extractions:runs,documents:[],selectedDataset:'dataset-a',onDatasetChange(){},onOpen(){}}));
+ assert.match(html,/aria-label="Review summary"/);assert.match(html,/Pending review/);
+});
