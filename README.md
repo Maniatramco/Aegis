@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.17` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.18` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+v26.1.12.18 applies the navy phase track to every workflow stepper, including Agent onboarding. Publication is recorded separately.
 
 v26.1.12.17 adds the working-agent capsule, groups the answer workflow into four phases shown inline as a navy phase track, and lets administrators edit onboarded datasets (details, models, documents, prompts) from Datasets or with /Manage inside Aegis Agent. Publication is recorded separately.
 

@@ -1,6 +1,15 @@
 {
-  "version": "26.1.12.17",
+  "version": "26.1.12.18",
   "releases": [
+    {
+      "version": "26.1.12.18",
+      "date": "2026-10-26",
+      "title": "One workflow track everywhere",
+      "changes": [
+        "Every workflow uses the navy phase track: Agent onboarding, tool steps and prompt progress, uploads, extraction and document processing, Files & processing, and storage and connection operations.",
+        "Each step keeps its name and status visible, finished steps fill the line, dots flow into the running step and the running step carries the Aegis shield; phones show a vertical list."
+      ]
+    },
     {
       "version": "26.1.12.17",
       "date": "2026-10-26",
