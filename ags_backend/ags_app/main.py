@@ -811,7 +811,22 @@ def jobs(owner=Depends(auth),ids:str=''):
     selected=set(ids.split(',')) if ids else None
     if selected and (len(ids)>5000 or len(selected)>120 or any(not id or len(id)>100 or not all(c.isalnum() or c in '-_' for c in id) for id in selected)):
         raise HTTPException(422,'Choose up to 120 job references.')
-    return [job_repr(j) for j in access.jobs(owner) if selected is None or j.id in selected]
+    rows=[j for j in access.jobs(owner) if selected is None or j.id in selected]
+    return [job_repr(j)|fields for j,fields in zip(rows,job_monitoring(rows,owner))]
+
+def job_monitoring(rows,actor):
+    """Who started each job and where it runs. Only administrators see other users' names."""
+    if not rows:return []
+    with Session() as s:
+        admin=is_administrator(actor,s)
+        # Jobs belong to the dataset owner; the audit column records who actually started them.
+        starter=lambda j:j.created_by or j.owner
+        names={u.id:u.username for u in s.scalars(select(User).where(User.id.in_({starter(j) for j in rows})))} if admin else {}
+        parents={r.id:r.parent_id for r in s.scalars(select(Record).where(Record.id.in_({j.target_id for j in rows})))}
+    def started_by(j):
+        if starter(j)==actor:return {'id':actor,'label':'You','self':True}
+        return {'id':starter(j),'label':names.get(starter(j)) or 'Deleted user','self':False} if admin else {'id':None,'label':'Another user','self':False}
+    return [{'started_by':started_by(j),'started_via':j.created_via or 'api','updated_at':j.updated_at,'dataset_id':parents.get(j.target_id)} for j in rows]
 @app.post('/api/jobs/{id}/retry')
 @lifecycle_guard()
 def retry_job(id:str,owner=Depends(auth)):

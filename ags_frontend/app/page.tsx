@@ -887,7 +887,7 @@ export default function App() {
           {view === "Extract" && reextractSource && <ReExtractionDialog key={reextractSource.id} source={reextractSource} documents={docs} datasets={kbs} templates={templates} extractions={extractions} jobs={jobs} api={api} onRefresh={reload} onProgressVisibilityChange={setVisibleExtractionJobId} onConfigure={id=>{changeDataset(id);navigate('Model Mapping');}} onReview={d=>openReview(d.id)} onClose={()=>setReextractSource(null)}/>}
 
           {view === "Jobs & activity" && (
-            <JobsBoard jobs={jobs} documents={docs} busy={busy} formatDate={date}
+            <JobsBoard jobs={jobs} documents={docs} datasets={kbs} extractions={extractions} busy={busy} formatDate={date}
               onRetry={j=>run(async()=>{await api(`/jobs/${j.id}/retry`,"POST");notify("Retry requested.");reload();})}
               onCancel={j=>setConfirm({title:"Cancel processing job?",body:"Cancellation is best-effort. A request already sent to a model provider may continue and incur usage charges.",action:async()=>{await api(`/jobs/${j.id}/cancel`,"POST");notify("Cancellation requested.");reload();}})}
               empty={<Empty icon={Activity} title="No processing jobs yet" detail="Document uploads, reindexing, and extractions will be tracked here."/>}/>

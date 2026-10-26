@@ -140,7 +140,7 @@ NOTES = {
     'GET /api/extractions/{id}/versions': 'Read saved extraction versions, including earlier results and reviews.',
     'GET /api/extractions/{id}/export': 'Download a completed extraction in the requested format. Unsupported formats are rejected; incomplete extractions cannot be exported.',
     'GET /api/extractions/{id}/merged-file': 'Download the physical merged file for an authorized extraction that has a merged document. Original source files remain available and unchanged.',
-    'GET /api/jobs': 'List jobs for authorized dataset resources with status, completed-stage progress, and workflow details. Jobs may be queued, running, completed, failed, or cancelled; percentages describe stages, not estimated remaining time.',
+    'GET /api/jobs': 'List jobs for authorized dataset resources with status, completed-stage progress, and workflow details. Jobs may be queued, running, completed, failed, or cancelled; percentages describe stages, not estimated remaining time. Each job names who started it (`started_by`): administrators see usernames, other users see You or Another user.',
     'POST /api/jobs/{id}/retry': 'Requeue a failed or cancelled job if its target still exists, its dataset is active, and no other job is active for that target.',
     'POST /api/jobs/{id}/cancel': 'Cancel a queued or running job and invalidate its lease so late worker results cannot complete it.',
     'GET /api/index': 'Inspect authorized document chunks and index metadata, optionally scoped by document_id or dataset_id.',
@@ -184,7 +184,7 @@ EXAMPLES = {
     'POST /api/conversations/{id}/messages': {'message': {'id': '<message-id>', 'role': 'assistant', 'text': 'The invoice total is 42 [1].', 'citations': [{'index': 1, 'document_id': '<document-id>', 'text': 'Invoice total: 42', 'url': '/api/documents/<document-id>/preview'}]}, 'conversation_id': '<conversation-id>'},
     'POST /api/extractions': {'id': '<extraction-id>', 'status': 'queued', 'result': None, 'template_version': 1, 'job': {'id': '<job-id>', 'kind': 'extract', 'status': 'queued'}},
     'GET /api/extractions/{id}': {'id': '<extraction-id>', 'status': 'ready', 'version': 1, 'result': {'total': 42}, 'document_ids': ['<document-id>']},
-    'GET /api/jobs': [{'id': '<job-id>', 'kind': 'index', 'status': 'completed', 'progress': 100, 'stage': 'Ready', 'error': None, 'target_id': '<document-id>'}],
+    'GET /api/jobs': [{'id': '<job-id>', 'kind': 'index', 'status': 'completed', 'progress': 100, 'stage': 'Ready', 'error': None, 'target_id': '<document-id>', 'dataset_id': '<dataset-id>', 'started_by': {'id': '<user-id>', 'label': 'You', 'self': True}, 'started_via': 'api', 'updated_at': 1793020890.0}],
 }
 
 
