@@ -55,6 +55,7 @@ import {
   CloudUpload,
 } from "lucide-react";
 import { AddKnowledge } from "./add-knowledge";
+import { PageBand, PAGE_INTROS } from "./page-band";
 import type { DatasetKnowledgeScope } from "./dataset-knowledge-picker";
 
 type Entity = Record<string, any>;
@@ -796,7 +797,8 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main aria-label={viewLabel(view)} className={`workspace workspace-region${view==='Home'?' home-page-shell':''}${view === "Aegis agent V2" ? " agent-v2-workspace" : view === "Extract" ? " extract-page-shell" : view === "Extract Data" ? " extract-data-workspace" : ""}${view === 'Review' ? ` review-page-shell${extraction?' has-review':''}` : ''}`}>
+        <main aria-label={viewLabel(view)} className={`workspace workspace-region${view==='Home'?' home-page-shell':''}${view === "Aegis agent V2" ? " agent-v2-workspace" : view === "Extract" ? " extract-page-shell" : view === "Extract Data" ? " extract-data-workspace" : ""}${view === 'Review' ? ` review-page-shell${extraction?' has-review':''}` : ''}${PAGE_INTROS[view]?' has-page-band':''}`}>
+          {!(view === 'Review' && extraction) && <PageBand view={view}/>}
           {error && view !== "Home" && (
             <Notice tone="error">
               {error}

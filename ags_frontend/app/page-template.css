@@ -1,0 +1,24 @@
+/* Shared workspace page template: brand band, then calmer panels, filters, tables and status chips. */
+.page-band{position:relative;overflow:hidden;margin:0 0 18px;padding:20px 24px;border-radius:18px;color:#fff;background:linear-gradient(125deg,#0c1533 0%,#1d2d6b 40%,#3c52a8 78%,#6f82da 100%)}
+.page-band::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(#ffffff0d 1px,transparent 1px),linear-gradient(90deg,#ffffff0d 1px,transparent 1px);background-size:40px 40px}
+.page-band>*{position:relative}
+.page-band-copy{display:flex;flex-direction:column;gap:4px;max-width:820px}
+.page-band-eyebrow{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#9be3ff}
+.page-band-title{margin:2px 0 0;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.2;color:#fff}
+.page-band-text{margin:0;font-size:14px;line-height:1.55;color:#dce4fa}
+
+/* Calmer surfaces on template screens only (Dashboard and Aegis Agent keep their own). */
+.workspace-region.has-page-band{background:#f3f5fb}
+.workspace-region.has-page-band .panel{border-radius:16px;border-color:#e1e6f1;box-shadow:0 6px 20px #1728640a}
+.workspace-region.has-page-band table{border-collapse:collapse}
+.workspace-region.has-page-band thead th{background:#f6f8fe;color:#4a5577;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid #e6ebf5}
+.workspace-region.has-page-band tbody tr{transition:background .15s}
+.workspace-region.has-page-band tbody tr:hover{background:#f8faff}
+.workspace-region.has-page-band tbody td{border-color:#eef1f7}
+.workspace-region.has-page-band select,.workspace-region.has-page-band input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]){border-radius:10px;border-color:#d3daea}
+.workspace-region.has-page-band select:focus-visible,.workspace-region.has-page-band input:focus-visible,.workspace-region.has-page-band textarea:focus-visible{outline:2px solid #2f5bea;outline-offset:1px;border-color:#2f5bea}
+.workspace-region.has-page-band .pill{border-radius:999px;font-weight:600}
+.workspace-region.has-page-band .btn.primary{background:#2f5bea;border-color:#2f5bea;color:#fff}
+.workspace-region.has-page-band .btn.primary:hover:not(:disabled){background:#2449c4;border-color:#2449c4}
+@media(max-width:560px){.page-band{padding:16px;border-radius:14px}.page-band-title{font-size:22px}}
+@media(prefers-reduced-motion:reduce){.workspace-region.has-page-band tbody tr{transition:none}}
