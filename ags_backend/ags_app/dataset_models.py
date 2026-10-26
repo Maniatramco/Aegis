@@ -306,6 +306,9 @@ class DatasetInput(BaseModel):
     description:str=Field(default='',max_length=10000)
     active:bool=Field(default=True,strict=True)
 class DatasetStatusInput(BaseModel):active:bool=Field(strict=True)
+class DatasetDetailsInput(BaseModel):
+    name:str=Field(min_length=1,max_length=200)
+    description:str=Field(default='',max_length=10000)
 class AssignInput(BaseModel):document_ids:list[str]=Field(min_length=1,max_length=100)
 
 def validate_model(body,owner,existing=None):
@@ -395,6 +398,16 @@ def install_routes(app,auth,write_profile):
         return dataset_public(create('knowledge_base',owner,body.name,body.model_dump()|copy.deepcopy(ROUTING_DEFAULTS)|{'routing_version':1}))
     @app.get('/api/datasets/{id}')
     def dataset(id:str,owner=Depends(auth)):return dataset_public(owned(id,owner,'knowledge_base'))
+    @app.patch('/api/datasets/{id}')
+    def update_dataset(id:str,body:DatasetDetailsInput,owner=Depends(auth)):
+        """Rename or describe a dataset; models, documents, prompts and access are unchanged."""
+        access.require_admin(owner)
+        name=body.name.strip()
+        if not name:raise HTTPException(422,'Enter a dataset name.')
+        with core.document_lock('dataset-'+id):
+            r=owned(id,owner,'knowledge_base');r=write_version(r,dataset_config(r)|{'name':name,'description':body.description.strip()})
+            with core.Session.begin() as s:s.get(core.Record,id).name=name
+            r.name=name;return dataset_public(r)
     @app.patch('/api/datasets/{id}/status')
     def dataset_status(id:str,body:DatasetStatusInput,owner=Depends(auth)):
         with core.document_lock('dataset-'+id):

@@ -76,6 +76,7 @@ NOTES = {
     'GET /api/datasets': 'List the signed-in userâ€™s datasets, their model mappings, and index-generation state.',
     'POST /api/datasets': 'Create a dataset. A new dataset has no automatic model mappings; configure Embedding, Chat, and Extraction explicitly.',
     'GET /api/datasets/{id}': 'Read one authorized dataset and its configuration.',
+    'PATCH /api/datasets/{id}': 'Administrators rename a dataset or change its description. Models, documents, prompts, access and knowledge are unchanged.',
     'PATCH /api/datasets/{id}/status': 'Activate or deactivate a dataset. Inactive datasets cannot start new processing work.',
     'GET /api/datasets/{id}/models': 'Read the datasetâ€™s enabled model mappings and the selected models for its three roles.',
     'PUT /api/datasets/{id}/models': 'Save the three required roles: Embedding, Chat, and Extraction. The next operation uses these mappings. Changing embeddings creates a new index generation and requires acknowledgement when documents already exist.',

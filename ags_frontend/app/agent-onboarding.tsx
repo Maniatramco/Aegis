@@ -1,5 +1,6 @@
 "use client";
 import {ActionButton} from "./action-button";
+import {openDatasetEditor} from './manage-dataset';
 import {useEffect,useRef,useState} from 'react';
 import {Database,Loader2,X} from 'lucide-react';
 import {WorkflowStepper} from './workflow-stepper';
@@ -105,7 +106,7 @@ export function AgentOnboarding({api,models,defaults,proposal={},storageKey,plan
    {(error||workflow?.error)&&<p className="agent-onboarding-error" role="alert">{error||workflow?.error}</p>}
    {workflow?.dataset_id&&!complete&&<p className="small muted">Dataset creation is saved. Resume or retry will reuse it.</p>}
    {complete&&workflow?.vector_publication&&<p className="small" role="status">Knowledge updated · {workflow.vector_publication.provider==='oracle'?'OCI':workflow.vector_publication.provider==='qdrant'?'Local Qdrant':'Local'} · {workflow.vector_publication.verified_vectors} verified vectors{workflow.vector_publication.parquet_files?.length>0?' · JSON and Parquet results saved':''}.</p>}
-   <footer>{complete?<ActionButton className="btn primary" onClick={()=>onUse(workflow!.dataset_id)} label="Use dataset in Aegis Agent" action="chat"/>:<button className="btn primary" disabled={busy||!name.trim()||roles.some(([key])=>!selection[key])||(!frozen&&full&&(!files.length||!promptText.trim()))||(needsFiles&&!files.length)} onClick={()=>void execute()}>{busy?<><Loader2 size={15} className="animate-spin"/>Onboarding dataset…</>:workflow?.status==='failed'?'Retry onboarding workflow':workflow||confirmed?'Resume onboarding workflow':datasetOnly?'Create dataset':'Confirm dataset onboarding'}</button>}{complete&&onClose&&<ActionButton className="btn" onClick={()=>onClose(true)} label="Done" action="close"/>}</footer>
+   <footer>{complete?<><ActionButton className="btn primary" onClick={()=>onUse(workflow!.dataset_id)} label="Use dataset in Aegis Agent" action="chat"/><ActionButton className="btn" onClick={()=>openDatasetEditor(workflow!.dataset_id)} label="Edit dataset" action="edit" showLabel/></>:<button className="btn primary" disabled={busy||!name.trim()||roles.some(([key])=>!selection[key])||(!frozen&&full&&(!files.length||!promptText.trim()))||(needsFiles&&!files.length)} onClick={()=>void execute()}>{busy?<><Loader2 size={15} className="animate-spin"/>Onboarding dataset…</>:workflow?.status==='failed'?'Retry onboarding workflow':workflow||confirmed?'Resume onboarding workflow':datasetOnly?'Create dataset':'Confirm dataset onboarding'}</button>}{complete&&onClose&&<ActionButton className="btn" onClick={()=>onClose(true)} label="Done" action="close"/>}</footer>
    {workflow?.results?.length>0&&<div className="agent-onboarding-results">{workflow!.results.map((result:Entity)=><div key={result.id}><span>{result.name} · Ready for review</span>{onReview&&<ActionButton className="btn" onClick={()=>onReview(result.id)} label="Review" action="review"/>}</div>)}</div>}
   </>}
  </section>;

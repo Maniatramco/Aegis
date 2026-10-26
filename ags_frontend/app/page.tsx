@@ -58,6 +58,7 @@ import { AddKnowledge } from "./add-knowledge";
 import { PageBand, PAGE_INTROS } from "./page-band";
 import { JobsBoard } from "./jobs-board";
 import { NeedsAttentionDialog, attentionItems, onAttention, type AttentionScope } from "./needs-attention";
+import { ManageDataset, onDatasetEditor, type ManageRequest } from "./manage-dataset";
 import { MappingOverview } from "./mapping-overview";
 import type { DatasetKnowledgeScope } from "./dataset-knowledge-picker";
 
@@ -262,6 +263,8 @@ export default function App() {
   const [jobs, setJobs] = useState<Entity[]>([]);
   const [attention, setAttention] = useState<AttentionScope | null>(null);
   useEffect(() => onAttention(scope => setAttention(scope)), []);
+  const [manage, setManage] = useState<ManageRequest | null>(null);
+  useEffect(() => onDatasetEditor(request => { setAttention(null); setManage(request); }), []);
   useEffect(() => setAttention(null), [view]);
   const [agentVisibleJobIds, setAgentVisibleJobIds] = useState<string[]>([]);
   const onAgentJobs = useCallback((updates: Entity[]) => setJobs(previous => [...updates, ...previous.filter(job => !updates.some(update => update.id === job.id))]), []);
@@ -957,6 +960,11 @@ export default function App() {
             )}
           </section>
         </div>
+      )}
+      {manage && kbs.some(d => d.id === manage.datasetId) && (
+        <ManageDataset key={manage.datasetId + (manage.tab || "")} dataset={kbs.find(d => d.id === manage.datasetId)!} tab={manage.tab} models={models} documents={docs} templates={templates} isAdmin={Boolean(user.is_admin)} api={api} reload={reload} notify={notify}
+          onClose={() => setManage(null)}
+          onNavigate={v => { const id = manage.datasetId; setManage(null); changeDataset(id); navigate(v as View); }} />
       )}
       {attention && (
         <NeedsAttentionDialog items={attentionItems(docs, jobs, kbs, attention)} isAdmin={Boolean(user.is_admin)} busy={busy}
