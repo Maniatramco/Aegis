@@ -778,7 +778,6 @@ export default function App() {
                   className={loading ? "animate-spin" : ""}
                 />
               </button>
-              {(view === "Extract Data" || view === "Extract" && extractionTab !== "Create") && <ActionButton className="btn primary" onClick={()=>navigate('Extract','Create')} label="New extraction" action="add" showLabel/>}
             </div>}
             <span className="pill">
               <span className="dot" />
@@ -828,6 +827,7 @@ export default function App() {
             storageKey={`aegis-new-dataset:${user.id}`} defaults={selectedDataset} onSelect={changeDataset} onCreated={d=>{setKbs(current=>[...current.filter(item=>item.id!==d.id),d]);changeDataset(d.id);}}
             api={api} reload={reload} notify={notify} onUse={navigate}/>
           }
+          {(view === "Extract Data" || view === "Extract" && extractionTab !== "Create") && <div className="screen-actions"><ActionButton className="btn primary" onClick={()=>navigate('Extract','Create')} label="New extraction" action="add" showLabel/></div>}
           {(view === "Extract" || (view === "Review" && reviewReturn?.view === "Extract")) && <div hidden={view !== "Extract" || extractionTab !== "History"}>
             <ExtractionDirectory datasets={kbs} extractions={extractions} documents={docs} templates={templates} selectedDataset={view === 'Review'?reviewReturn?.datasetId||'':kb} busy={busy} onDatasetChange={changeDataset} onOpen={openReview} onReExtract={id=>run(async()=>{setReextractSource(await api(`/extractions/${id}`));})}/>
           </div>}
