@@ -3,6 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {FileText,RefreshCw,Search,Shield,Trash2,X} from 'lucide-react';
 import {WorkflowStepper} from './workflow-stepper';
 import './admin-documents.css';
+import {SummaryTiles} from './summary-tiles';
 
 type Entity=Record<string,any>;
 type Api=(path:string,method?:string,body?:any,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;
@@ -57,7 +58,12 @@ export function AdminDocuments({api,onChanged,onReview}:{api:Api;onChanged:()=>v
  }
  const row=data.items.find((item:Entity)=>item.id===selected);
  return <div className="admin-documents">
-  <section className="panel file-intro"><div><div className="eyebrow"><Shield size={15}/> ADMINISTRATION</div><h2>Files & processing</h2><p className="muted">Application source files in OCI and their pinned storage locations, with indexing, OCR and extraction status.</p></div><button className="btn" disabled={loading||busy} onClick={()=>void load()}><RefreshCw size={16}/> Refresh</button></section>
+  <div className="file-toolbar"><SummaryTiles label="File summary" tiles={[
+   {label:'Files',value:data.total??data.items.length,detail:'across your datasets',tone:''},
+   {label:'Indexed',value:data.items.filter((i:Entity)=>i.status==='ready'&&!i.requires_reindex).length,detail:'on this page',tone:'ok'},
+   {label:'Need attention',value:data.items.filter((i:Entity)=>['failed','cancelled'].includes(i.status)||i.requires_reindex).length,detail:'failed or reindex, on this page',tone:'error'},
+   {label:'With extractions',value:data.items.filter((i:Entity)=>i.extractions?.length>0).length,detail:'on this page',tone:'info'},
+  ]}/><button className="btn" disabled={loading||busy} onClick={()=>void load()}><RefreshCw size={16}/> Refresh</button></div>
   {notice&&<div className="notice" role="status">{notice}</div>}
   {error&&<div className="error" role="alert">{error}</div>}
   {data.metadata_warnings>0&&<div className="notice" role="status">Some extraction metadata could not be read. Results may be incomplete; deletion will require readable metadata.</div>}

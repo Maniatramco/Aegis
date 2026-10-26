@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Layers, Search, X, Pencil } from "lucide-react";
 import "./model-configuration.css";
 import { parseModelParameters, supportedModelParameters } from "./model-parameters";
+import { SummaryTiles } from "./summary-tiles";
 
 type Entity = Record<string, any>;
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
@@ -89,8 +90,14 @@ export function ModelRegistration({ models, settings, api, run, busy, onSaved, o
 
   return <div className="model-registration">
     {settings.local_only && <div className="notice"><Layers size={17} /><div>This deployment runs in local-only mode. You can register cloud connections, but testing and applying them require cloud use to be enabled by the deployment administrator.</div></div>}
+    {!open && !!models.length && <SummaryTiles label="Registered model summary" tiles={[
+      { label: "Registered", value: models.length, detail: `${models.filter(m => m.enabled).length} enabled`, tone: "" },
+      { label: "Chat & extraction", value: models.filter(m => (m.capabilities || [m.category]).some((c: string) => c === "chat" || c === "extraction")).length, detail: "answer and extract", tone: "info" },
+      { label: "Embedding", value: models.filter(m => (m.capabilities || [m.category]).includes("embedding")).length, detail: "index knowledge", tone: "ok" },
+      { label: "Disabled", value: models.filter(m => !m.enabled).length, detail: "not offered for new work", tone: "warn" },
+    ]}/>}
     {!open ? <section className="panel registration-directory">
-      <div className="panel-head"><span className="pill">{models.length} models</span><ActionButton className="btn primary" disabled={busy || !defaults} onClick={() => start()} label="Register model" action="add"/></div>
+      <div className="panel-head"><span className="pill">{models.length} models</span><ActionButton className="btn primary" disabled={busy || !defaults} onClick={() => start()} label="Register model" action="add" showLabel/></div>
       {!!models.length && <label className="registration-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search registered models" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}} placeholder="Search models or categories" />{search&&<button className="btn icon" type="button" title="Clear search" aria-label="Clear model search" onClick={()=>setSearch('')}><X size={14}/></button>}</label>}
       {!!models.length && <div className="registration-table" role="region" aria-label="Registered models table" tabIndex={0}>
         <table aria-label="Registered models"><thead><tr><th scope="col">Model</th><th scope="col">Category</th><th scope="col">Provider</th><th scope="col">Endpoint</th><th scope="col" className="registration-tokens" title="Configured input limit for embeddings; total context limit for chat and extraction">Input / context</th><th scope="col" className="registration-tokens" title="Configured maximum output tokens">Output</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>

@@ -3,7 +3,7 @@ function view(failDelete=false,holdList=null){
  let index=0,root;const hooks=[],calls=[],changed=[],effects=[];
  const react={useState(initial){const slot=index++;if(!(slot in hooks))hooks[slot]=initial;return [hooks[slot],value=>hooks[slot]=typeof value==='function'?value(hooks[slot]):value];},useRef(initial){const slot=index++;if(!(slot in hooks))hooks[slot]={current:initial};return hooks[slot];},useEffect(fn){effects.push(fn);},useCallback(fn){return fn;}};
  const filename=path.resolve(__dirname,'../../ags_frontend/app/admin-documents.tsx'),compiled=new Module(filename,module);compiled.filename=filename;compiled.paths=module.paths;const original=compiled.require.bind(compiled);
- compiled.require=id=>id==='react'?react:id.endsWith('.css')?{}:id==='lucide-react'||id==='./workflow-stepper'?new Proxy({},{get:()=>()=>null}):original(id);
+ compiled.require=id=>id==='react'?react:id.endsWith('.css')?{}:id==='lucide-react'||id==='./workflow-stepper'||id==='./summary-tiles'?new Proxy({},{get:()=>()=>null}):original(id);
  compiled._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
  const doc={id:'document',name:'synthetic.txt',version:1,status:'ready',created_at:1,size:10,dataset_name:'Synthetic',storage:{status:'present',provider:'oci',bucket:'test'},extractions:[]};
  const catalog={items:[doc],datasets:[],total:1};hooks[0]=catalog;

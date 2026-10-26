@@ -57,6 +57,7 @@ import {
 import { AddKnowledge } from "./add-knowledge";
 import { PageBand, PAGE_INTROS } from "./page-band";
 import { JobsBoard } from "./jobs-board";
+import { MappingOverview } from "./mapping-overview";
 import type { DatasetKnowledgeScope } from "./dataset-knowledge-picker";
 
 type Entity = Record<string, any>;
@@ -891,6 +892,7 @@ export default function App() {
             onSaved={model => { setModels(current => current.some(m => m.id === model.id) ? current.map(m => m.id === model.id ? model : m) : [model, ...current]); notify("Model saved. New runs use the updated connection; apply embedding changes in Model Mapping."); reload(); }}
             onMapping={() => navigate("Model Mapping")} />}
           {view === "Model Mapping" && <section className="panel model-mapping-screen">
+            <MappingOverview datasets={kbs} selected={selectedDataset?.id || ""} busy={busy} onSelect={changeDataset} />
             <div className="field mapping-dataset-select"><label htmlFor="mapping-dataset">Dataset</label><select id="mapping-dataset" value={selectedDataset?.id || ""} onChange={e => changeDataset(e.target.value)} disabled={busy}><option value="">Choose a dataset</option>{kbs.map(d => <option key={d.id} value={d.id}>{d.name}{d.active === false ? " · Inactive" : ""}</option>)}</select></div>
             {selectedDataset ? <DatasetMappings key={selectedDataset.id} dataset={selectedDataset} models={models} api={api} run={run} busy={busy} reload={reload} notify={notify} onConnections={() => navigate("Model Registration")} /> : <p className="muted">Choose a dataset to configure its Embedding, Chat, Extraction, and OCR models.</p>}
             {!kbs.length && <button className="btn" onClick={() => navigate("Datasets")}>Open Datasets to create one</button>}

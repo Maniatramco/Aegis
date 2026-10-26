@@ -82,3 +82,14 @@ body .has-page-band .prompt-library-new{width:auto!important;min-width:0;padding
 body .has-page-band .prompt-row-actions .prompt-use-action{width:auto!important;min-width:68px;padding:0 12px!important;white-space:nowrap}
 @media(max-width:760px){body .has-page-band .prompt-library-filters{grid-template-columns:minmax(0,1fr)}}
 body .has-page-band .prompt-library-filters .prompt-library-new{max-width:none!important;min-width:0!important;width:auto!important}
+/* Manage workspace */
+.file-toolbar{display:flex;align-items:flex-start;gap:12px}.file-toolbar>.screen-summary{flex:1;margin:0}.file-toolbar>.btn{flex-shrink:0;margin-top:4px}
+.admin-documents .file-catalog .file-row-actions{flex-direction:row;flex-wrap:nowrap;align-items:center}.admin-documents .file-catalog td:last-child{width:auto;white-space:nowrap}
+.mapping-picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:0 0 18px}
+.mapping-pick{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px 14px;border:1px solid #e1e6f1;border-radius:12px;background:#fff;text-align:left;cursor:pointer;min-width:0;font:inherit;color:#0e1630}
+.mapping-pick:hover{border-color:#9fb3e6}.mapping-pick[aria-pressed=true]{border-color:#1d2d6b;box-shadow:0 0 0 2px rgba(29,45,107,.15);background:#f5f8ff}
+.mapping-pick-name{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%}.mapping-pick-name strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.mapping-pick-state{display:flex;align-items:center;gap:5px;font-size:12px}.mapping-pick-state[data-state=ready]{color:#17694a}.mapping-pick-state[data-state=missing]{color:#8a5200}
+@media(max-width:600px){.file-toolbar{flex-direction:column;align-items:stretch}.file-toolbar>.btn{align-self:flex-start}}
+.admin-documents .file-filters label{white-space:nowrap}.admin-documents .file-catalog td:nth-child(3),.admin-documents .file-catalog td:nth-child(4){min-width:84px}
+@media(max-width:600px){.screen-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.screen-tile{padding:10px 12px}.screen-tile dd{font-size:22px}.screen-tile>span{white-space:normal}}

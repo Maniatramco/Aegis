@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { KeyRound, RefreshCw, Search, Users } from "lucide-react";
 import "./user-management.css";
 import { DatasetAssignments } from "./dataset-assignments";
+import { SummaryTiles } from "./summary-tiles";
 
 type Role = "user" | "administrator";
 type Account = {id:string;username:string;role:Role;is_admin:boolean;created_at:number;updated_at:number;created_by?:string;updated_by?:string};
@@ -91,8 +92,13 @@ export function UserManagement({api,user,onPasswordChanged,onRoleChanged}:Props)
    {error&&<div role="alert" className="notice error">{error}</div>}
   </form>}
   {!operation&&error&&<div role="alert" className="notice error">{error}</div>}
+  {isAdmin&&accounts.length>0&&<SummaryTiles label="User summary" tiles={[
+   {label:"People",value:accounts.length,detail:"with an Aegis account",tone:""},
+   {label:"Administrators",value:accounts.filter(a=>a.is_admin).length,detail:"access every dataset",tone:"info"},
+   {label:"Users",value:accounts.filter(a=>!a.is_admin).length,detail:"access assigned datasets",tone:"ok"},
+  ]}/>}
   {isAdmin&&<section className="card account-directory">
-   <div className="account-summary"><h2><Users size={19}/> Users</h2><div className="row"><button title="Refresh users" className="btn" disabled={loading||busy} onClick={()=>void load()} aria-label="Refresh users"><RefreshCw size={15}/></button><ActionButton className="btn primary" disabled={busy} onClick={()=>open({kind:"create"})} label="Add user" action="add"/></div></div>
+   <div className="account-summary"><h2><Users size={19}/> Users</h2><div className="row"><button title="Refresh users" className="btn" disabled={loading||busy} onClick={()=>void load()} aria-label="Refresh users"><RefreshCw size={15}/></button><ActionButton className="btn primary" disabled={busy} onClick={()=>open({kind:"create"})} label="Add user" action="add" showLabel/></div></div>
    <label className="account-search" htmlFor="account-search"><Search size={16}/><input id="account-search" placeholder="Search usernames" value={search} onChange={e=>setSearch(e.target.value)}/></label>
    <div className="account-table"><table><thead><tr><th>Username</th><th>Access</th><th>Created</th><th>Last updated</th><th>Manage</th></tr></thead><tbody>{accounts.filter(account=>account.username.toLowerCase().includes(search.toLowerCase())).map(account=><tr key={account.id}>
     <td><strong>{account.username}</strong>{account.id===user.id&&<div className="muted small">You</div>}</td>
