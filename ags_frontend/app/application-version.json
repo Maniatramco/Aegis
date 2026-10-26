@@ -1,6 +1,17 @@
 {
-  "version": "26.1.12.16",
+  "version": "26.1.12.17",
   "releases": [
+    {
+      "version": "26.1.12.17",
+      "date": "2026-10-26",
+      "title": "Agent workflow and dataset editing",
+      "changes": [
+        "While Aegis Agent works, a navy capsule shows the Aegis shield in a spinning ring with the current step, such as Searching knowledge or Writing the answer.",
+        "The answer workflow groups its steps into four phases: Understand request, Find evidence, Write answer and Check & save. It opens inline under the agent header as a navy phase track with the agent shield on the live phase; Show all steps keeps every actual step and its timing.",
+        "Edit any dataset from Datasets, or type /Manage in Aegis Agent: rename it, change its description or active state, its models, documents and prompts. In the Agent the dataset card stays in the conversation, and Upload or Extract start /Upload or /Extract there.",
+        "Administrators can rename and describe datasets without changing their models, documents, prompts or access."
+      ]
+    },
     {
       "version": "26.1.12.16",
       "date": "2026-10-26",
