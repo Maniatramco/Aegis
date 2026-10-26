@@ -9,6 +9,7 @@ import "./workspace-tools.css";
 import "./action-button.css";
 import "./review-layout.css";
 import "./sign-in.css";
+import "./buttons.css";
 export const metadata: Metadata = {
   title: "Aegis · AI Data Platform",
   description: "AI data workspace for datasets, agents, chat, extraction, and review.",

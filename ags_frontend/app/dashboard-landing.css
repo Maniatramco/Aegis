@@ -22,7 +22,7 @@
 .dashboard-ask-actions{display:flex;gap:8px;margin-left:auto}.dashboard-ask-actions .btn{min-height:42px;border-radius:11px;display:flex;align-items:center;gap:7px;font-weight:600}
 body .notebook-dashboard .dashboard-ask-actions .btn.primary{background:#2f5bea;border-color:#2f5bea;color:#fff;box-shadow:0 8px 22px #2f5bea59}body .notebook-dashboard .dashboard-ask-actions .btn.primary:hover{background:#2449c4}
 .dashboard-suggestions{display:flex;flex-wrap:wrap;gap:8px}
-.dashboard-suggestions>button{min-height:36px;padding:0 14px;border-radius:999px;border:1px solid #ffffff59;background:#ffffff1a;color:#fff;font:inherit;font-size:13px;cursor:pointer}
+.dashboard-suggestions>button{min-height:32px;padding:0 12px;border-radius:8px;font-weight:600;border:1px solid #ffffff59;background:#ffffff1a;color:#fff;font:inherit;font-size:13px;cursor:pointer}
 .dashboard-suggestions>button:hover{background:#ffffff2e}.dashboard-suggestions>button:disabled{opacity:.6;cursor:default}
 .dashboard-suggestions>.dashboard-new-knowledge{display:flex;align-items:center;gap:7px;background:#fff;color:#1d2d6b;border-color:#fff;font-weight:600}
 .dashboard-suggestions>.dashboard-new-knowledge:hover{background:#eef2fd}
@@ -63,8 +63,7 @@ body .shell .notebook-dashboard[data-mode=landing] .dashboard-datasets .notebook
  .dashboard-stats{flex-basis:100%}
 }
 @media(max-width:560px){.dashboard-ask-actions{width:100%}.dashboard-ask-actions .btn{flex:1;justify-content:center}.dashboard-scope{width:100%}.notebook-dashboard[data-mode=landing] .notebook-heading h2{font-size:11px!important}}
-.notebook-dashboard[data-mode=landing] .dashboard-datasets>.notebook-panel-heading>.notebook-add-source{width:auto;height:auto;min-height:40px;padding:0 14px;display:flex;align-items:center;gap:6px;border-radius:10px;border:0;background:#0b1226;color:#fff;font-size:13px;font-weight:600;box-shadow:none}
-.notebook-dashboard[data-mode=landing] .dashboard-datasets>.notebook-panel-heading>.notebook-add-source:hover:not(:disabled){background:#1d2d6b}
+.notebook-dashboard[data-mode=landing] .dashboard-datasets>.notebook-panel-heading>.notebook-add-source{width:auto;height:auto;display:flex;align-items:center}
 
 /* Add Dataset Knowledge picker: brand header, expandable dataset cards, clear selection summary. */
 .dataset-knowledge-picker.picker-v2{width:min(720px,calc(100vw - 32px));max-height:88dvh;padding:0;border:0;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;color:#0e1630;background:#fff;box-shadow:0 30px 90px #080e2866}
@@ -124,7 +123,7 @@ body .dataset-knowledge-picker.picker-v2 .picker-footer .btn.primary:disabled{ba
 .dashboard-quick-add{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;background:#f3f6ff;border:1px solid #dbe3fa}
 .dashboard-quick-title{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4a5577}
 .dashboard-quick-options{display:flex;flex-wrap:wrap;gap:8px}
-.dashboard-quick-options>button{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:10px;border:1px solid #c9d4f5;background:#fff;color:#0e1630;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.dashboard-quick-options>button{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:8px;border:1px solid #c9d4f5;background:#fff;color:#0e1630;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .dashboard-quick-options>button:hover:not(:disabled){border-color:#2f5bea;color:#1d2d6b}.dashboard-quick-options>button>svg{color:#2f5bea}
 .dashboard-quick-options small{font-weight:400;color:#616b85}
 .dashboard-quick-none{font-size:13px;color:#4a5577}

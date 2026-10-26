@@ -41,7 +41,7 @@
 /* Jobs: status tabs and one card per job with progress, status and actions. */
 .jobs-board{display:flex;flex-direction:column;gap:12px}
 .jobs-tabs{display:flex;flex-wrap:wrap;gap:6px;padding:4px;border-radius:12px;background:#e6ebf8;align-self:flex-start}
-.jobs-tabs>button{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 14px;border:0;border-radius:9px;background:transparent;color:#4a5577;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.jobs-tabs>button{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:#4a5577;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .jobs-tabs>button>span{min-width:20px;padding:1px 7px;border-radius:999px;background:#fff;color:#1d2d6b;font-size:11px}
 .jobs-tabs>button[aria-pressed=true]{background:#fff;color:#1d2d6b;box-shadow:0 1px 4px #1728641f}.jobs-tabs>button[aria-pressed=true]>span{background:#eaf0ff}
 .jobs-tabs>button:focus-visible{outline:2px solid #2f5bea;outline-offset:2px}
