@@ -2,7 +2,9 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.15` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.16` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+
+v26.1.12.16 turns Jobs & activity into a monitoring view showing who started each job (usernames for administrators only), its dataset, timing and progress, with activity by person and filters. Publication is recorded separately.
 
 v26.1.12.15 redesigns the workspace screens: Aegis Agent opens as a workspace with / commands and a live activity icon; every screen has a brand page band and summary counts; Need attention counts open a pop-up with the failure and its fixes; buttons follow one compact standard; About shows the golden-copy workflow. v26.1.12.14 adds the Dashboard overview and Add knowledge from cloud storage. Publication is recorded separately.
 

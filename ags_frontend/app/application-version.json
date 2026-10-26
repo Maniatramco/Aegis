@@ -1,6 +1,16 @@
 {
-  "version": "26.1.12.15",
+  "version": "26.1.12.16",
   "releases": [
+    {
+      "version": "26.1.12.16",
+      "date": "2026-10-26",
+      "title": "Jobs monitoring",
+      "changes": [
+        "Jobs & activity becomes a monitoring view: running and queued work, failures that need attention, jobs completed in the last 24 hours and the average time per completed job.",
+        "Each job shows who started it, its dataset, when it started, how long it took and its progress. Administrators see usernames; other users see You or Another user.",
+        "Activity by person shows each person's running, failed and completed jobs; select a person, job type or search text to filter the list."
+      ]
+    },
     {
       "version": "26.1.12.15",
       "date": "2026-10-26",
