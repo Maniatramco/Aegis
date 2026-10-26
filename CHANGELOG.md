@@ -2,6 +2,12 @@
 
 The application version and in-app feature history are maintained in `ags_frontend/app/application-version.json`. The About screen and footer read that same file. Entries describe included code; live deployment is confirmed separately by its deployment receipt.
 
+## v26.1.12.13 - 26 October 2026
+
+Redesign sign-in around the unchanged Aegis banner, superseding the light background from v26.1.10.3. The banner panel uses the banner's own edge navy (#01041E) so the artwork blends without a frame. Decorative dots follow the banner's ten traced connector curves (models on the left, knowledge sources on the right) into the shield. The form side blends navy into blue and violet with a slow horizontal shift, drifting cyan/violet light and a frosted card carrying the Aegis shield, name and tagline as live text. The banner's five platform pillars rotate horizontally beneath the form. All motion is horizontal and disabled under reduced motion, where the dots are hidden.
+
+The sign-in screen moves into a shared `SignInLayout` component with the form before the artwork in reading and mobile order. Labels, autocomplete, focus, password visibility, recovery and authentication behavior are unchanged. Frontend only: no backend, database, configuration or model changes. Publication is recorded separately.
+
 ## v26.1.12.12 - 24 October 2026
 
 File catalog reads could wait on live model metadata for older local mappings, while overlapping timed refreshes superseded a slow initial response. Compare saved index generations, model/profile versions and OCR selections for catalog status; retain live validation when processing is submitted. Prevent quiet polling from overlapping pending catalog reads and keep background refreshes out of the global request overlay. Add slow-response and no-provider-probe regression coverage. Preserve indexing/extraction execution and the v26.1.12.11 cleanup chain. No schema, dependency, configuration or infrastructure changes.

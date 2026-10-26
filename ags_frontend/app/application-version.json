@@ -1,6 +1,17 @@
 {
-  "version": "26.1.12.12",
+  "version": "26.1.12.13",
   "releases": [
+    {
+      "version": "26.1.12.13",
+      "date": "2026-10-26",
+      "title": "Animated sign-in",
+      "changes": [
+        "Show the unchanged Aegis banner on its own edge navy, with dots that travel along the banner's model and knowledge-source connector lines into the shield.",
+        "Blend the sign-in side from navy into blue and violet with a slow horizontal shift, drifting cyan and violet light and a frosted form card showing the Aegis shield, name and tagline.",
+        "Rotate the banner's five platform pillars beneath the form. All motion is horizontal and stops when the device requests reduced motion.",
+        "Place the sign-in form before the artwork in reading order and on mobile. Labels, autocomplete, focus, password visibility, recovery and authentication behavior are unchanged."
+      ]
+    },
     {
       "version": "26.1.12.12",
       "date": "2026-10-24",
