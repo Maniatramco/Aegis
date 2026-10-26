@@ -17,6 +17,8 @@ const MODELS=[['Embedding','indexes knowledge'],['Chat','answers questions'],['E
 
 function WorkflowDiagram(){
  return <figure className="about-diagram" aria-labelledby="about-flow-title">
+  <p className="diagram-scroll-hint">Scroll sideways to follow the flow.</p>
+  <div className="diagram-canvas" role="region" aria-label="Workflow diagram" tabIndex={0}>
   <ol className="diagram-intake" aria-label="Bring knowledge in">{INTAKE.map(({icon:Icon,title,text,items},index)=><li key={title} className="diagram-node">
    <span className="diagram-node-head"><span className="diagram-icon"><Icon size={18} aria-hidden="true"/></span><span><small>Step {index+1} · {text}</small><strong>{title}</strong></span></span>
    <ul>{items.map(item=><li key={item}>{item}</li>)}</ul>
@@ -26,6 +28,7 @@ function WorkflowDiagram(){
    <header><span className="diagram-icon"><Icon size={18} aria-hidden="true"/></span><span><small>Step {INTAKE.length+1+index} · {where}</small><strong>{title}</strong></span><em>{model}</em></header>
    <ol>{steps.map(step=><li key={step}>{step}</li>)}<li className="diagram-result"><CheckCircle2 size={14} aria-hidden="true"/>{result}</li></ol>
   </section>)}</div>
+  </div>
   <div className="diagram-models"><span className="diagram-models-title"><Cpu size={15} aria-hidden="true"/>Models mapped per dataset</span>{MODELS.map(([name,role])=><span key={name}><strong>{name}</strong>{role}</span>)}</div>
   <figcaption><span><ShieldCheck size={14} aria-hidden="true"/>Access and dataset scope are enforced before search and checked again after the answer.</span><span><Activity size={14} aria-hidden="true"/>Jobs & activity tracks every indexing and extraction run.</span><span><MessageSquareText size={14} aria-hidden="true"/>Greetings and general questions in Dashboard chat are answered by the chat model and labelled as using no knowledge lookup.</span></figcaption>
  </figure>;
