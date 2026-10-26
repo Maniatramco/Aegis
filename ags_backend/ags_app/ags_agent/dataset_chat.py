@@ -90,7 +90,7 @@ def answer(body,owner,snapshot,main,progress,on_sources=None,previous=None):
         if len(set(body.dataset_ids))==1:
             snapshot=routing.execution_snapshot(routing.owned(body.dataset_ids[0],owner,'knowledge_base'),'chat',body.model_id)
         view=WorkspaceKnowledge(owner,body.dataset_ids,body.document_ids,body.summary)
-    # The separate chat exposes no operation contracts, including @ commands.
+    # The separate chat exposes no operation contracts, including / commands.
     request=dataset_chat_general.without_salutation(body.text)
     count=re.fullmatch(r'\s*(?:how many|count|number of)\s+(?:(?:my|our|accessible|included|available|indexed|source)\s+)*(datasets?|documents?|files?)(?:\s+(?:are there|do i have|can i access))?[?.!\s]*',request,re.I)
     listing=re.fullmatch(r'\s*(?:list|show|name|enumerate)(?:\s+me)?\s+(?:(?:all|my|our|accessible|included|available|indexed|source|the)\s+)*(datasets?|documents?|files?|filenames?)(?:\s+in\s+(?:the\s+)?(?:workspace|included knowledge))?[?.!\s]*',request,re.I)

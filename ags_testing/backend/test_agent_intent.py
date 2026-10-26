@@ -7,7 +7,7 @@ from test_agent_workspace import plan
 
 def forbidden(*args,**kwargs):pytest.fail('An unclear request must not infer, retrieve or execute.')
 
-@pytest.mark.parametrize('text',['@\\','@@','@Uplaod','@Uploader','?','...'])
+@pytest.mark.parametrize('text',['@\\','@@','@Uplaod','@Uploader','/','/Uplaod','/Onboarded','?','...'])
 def test_invalid_inputs_rejected_before_plan_creation(system,monkeypatch,text):
     s=system;d=dataset(s);monkeypatch.setattr(agent_model,'classify',forbidden)
     response=s.api.post('/api/agent-v2/plans',json={'text':text,'dataset_id':d['id'],'planner_model_id':d['default_chat_model_id']})

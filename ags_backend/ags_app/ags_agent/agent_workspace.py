@@ -65,11 +65,12 @@ class PlanInput(StrictInput):
         if problem:raise ValueError(problem)
         # Only a leading directive in the CURRENT user request is actionable.
         # Filenames, retrieved text and archived messages never select agents.
-        match=re.match(r'^\s*@(onboard|upload|extract|reextract)(?=\s|$)',self.text,re.I)
+        from .agent_intent import COMMAND
+        match=re.match(COMMAND,self.text,re.I)
         operation=match[1].lower() if match else 'reextract' if re.fullmatch(r're[- ]?extract[.!]?',self.text.strip(),re.I) else None
         if operation:
             if self.agent_operation and self.agent_operation!=operation:
-                raise ValueError('The agent choice must match the leading @ command.')
+                raise ValueError('The agent choice must match the leading / command.')
             self.agent_operation=operation
         return self
 

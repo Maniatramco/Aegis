@@ -67,6 +67,11 @@ def test_only_leading_current_user_directives_select_an_agent():
     for text in ('Email upload@example.com','Summarize @Upload','"@Extract"'):
         assert agent_workspace.PlanInput(text=text,planner_model_id='model').agent_operation is None
     assert agent_workspace.PlanInput(text='  @EXTRACT file.pdf',planner_model_id='model').agent_operation=='extract'
+    assert agent_workspace.PlanInput(text='/Extract file.pdf',planner_model_id='model').agent_operation=='extract'
+    assert agent_workspace.PlanInput(text=' /onboard',planner_model_id='model').agent_operation=='onboard'
+    for text in ('Summarize /Upload','/docs/handbook.pdf what does it say'):
+        assert agent_workspace.PlanInput(text=text,planner_model_id='model').agent_operation is None
+    with pytest.raises(ValidationError):agent_workspace.PlanInput(text='/Upload',planner_model_id='model',agent_operation='extract')
     assert agent_workspace.PlanInput(text='  @onBOARD',planner_model_id='model').agent_operation=='onboard'
     assert agent_workspace.PlanInput(text='  @reEXTRACT saved documents',planner_model_id='model').agent_operation=='reextract'
     with pytest.raises(ValidationError):agent_workspace.PlanInput(text='@Upload',planner_model_id='model',agent_operation='extract')

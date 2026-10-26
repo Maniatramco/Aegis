@@ -2,16 +2,19 @@
 import re
 from difflib import SequenceMatcher
 
-COMMAND_HELP='Choose @Onboard, @Upload, @Extract or @ReExtract from the agent menu, then add your request.'
+COMMAND_HELP='Choose /Onboard, /Upload, /Extract or /ReExtract from the agent menu, then add your request.'
+# "/" is the command key; a leading "@" from earlier clients is still understood.
+COMMAND=r'^\s*[/@](onboard|upload|extract|reextract)(?=\s|$)'
 CLARIFY='What would you like me to do or look up? Please name the task or information you need.'
 
 
 def input_problem(text):
     value=text.strip()
-    if value.startswith('@') and not re.match(r'^@(onboard|upload|extract|reextract)(?=\s|$)',value,re.I):
+    attempt=value.startswith('@') or re.match(r'^/\w*(?=\s|$)',value)
+    if attempt and not re.match(COMMAND,value,re.I):
         return COMMAND_HELP
     if value and not any(c.isalnum() for c in value):
-        return 'Please enter a question or choose @Onboard, @Upload, @Extract or @ReExtract.'
+        return 'Please enter a question or choose /Onboard, /Upload, /Extract or /ReExtract.'
     return None
 
 

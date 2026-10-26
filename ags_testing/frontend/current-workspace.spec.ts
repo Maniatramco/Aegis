@@ -154,14 +154,14 @@ test('Home dataset search is optional and filters matching cards',async({page})=
 
 test('agent command picker rejects malformed commands before API calls',async({page})=>{
  const w=await setup(page);await agent(page,w.dataset.id);
- await page.getByLabel('Message Aegis Agent').fill('@');await expect(page.getByRole('listbox',{name:'Agent shortcuts'})).toBeVisible();
- for(const command of ['@Onboard','@Upload','@Extract','@ReExtract'])await expect(page.getByRole('option').filter({hasText:command})).toBeVisible();
+ await page.getByLabel('Message Aegis Agent').fill('/');await expect(page.getByRole('listbox',{name:'Agent shortcuts'})).toBeVisible();
+ for(const command of ['/Onboard','/Upload','/Extract','/ReExtract'])await expect(page.getByRole('option').filter({hasText:command})).toBeVisible();
  let plans=0;page.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith('/api/agent-v2/plans'))plans++;});
  await page.getByLabel('Message Aegis Agent').fill('@\\');await expect(page.getByLabel('Send agent request')).toBeDisabled();expect(plans).toBe(0);
 });
 
 test('onboards models, prompt and document through the Agent and publishes a saved extraction',async({page})=>{
- const w=await setup(page);await agent(page,'');await send(page,'@Onboard');
+ const w=await setup(page);await agent(page,'');await send(page,'/Onboard');
  const flow=page.getByRole('region',{name:'Dataset onboarding workflow'});await expect(flow).toBeVisible();
  await page.getByLabel('Onboarding dataset name').fill('Full onboarding '+Date.now());
  await page.getByLabel('Onboarding embedding model').selectOption(w.models.embedding.id);
@@ -185,7 +185,7 @@ test('confirmed upload and extraction save originals and Parquet; independent mo
   {name:'first.txt',mimeType:'text/plain',buffer:Buffer.from(source)},
   {name:'second.txt',mimeType:'text/plain',buffer:Buffer.from(source+' Second original.')},
  ]);
- const proposed=page.waitForResponse(r=>r.url().endsWith('/api/agent-v2/plans')&&r.request().method()==='POST');await send(page,'@Extract');const plan=await checked(await proposed);await page.getByLabel('Workflow prompt template').selectOption(w.template.id);
+ const proposed=page.waitForResponse(r=>r.url().endsWith('/api/agent-v2/plans')&&r.request().method()==='POST');await send(page,'/Extract');const plan=await checked(await proposed);await page.getByLabel('Workflow prompt template').selectOption(w.template.id);
  await expect(page.getByRole('button',{name:'Confirm upload and extraction',exact:true})).toBeDisabled();
  expect((await checked(await page.request.get('/api/documents'))).length).toBe(before.length);
  await page.getByLabel('Extraction mode').selectOption('independent');await page.getByRole('button',{name:'Confirm upload and extraction',exact:true}).click();
@@ -201,7 +201,7 @@ test('confirmed upload and extraction save originals and Parquet; independent mo
 test('ReExtract uses the chosen prompt and keeps the original saved extraction',async({page})=>{
  const w=await setup(page),doc=await uploadReady(page.request,w.headers,w.dataset,'rerun.txt',source);
  const first=await checked(await page.request.post('/api/extractions',{headers:w.headers,data:{dataset_id:w.dataset.id,document_ids:[doc.id],template_id:w.template.id}}));await extractionReady(page,first.id);
- await agent(page,w.dataset.id);const proposed=page.waitForResponse(r=>r.url().endsWith('/api/agent-v2/plans')&&r.request().method()==='POST');await send(page,'@ReExtract');const plan=await checked(await proposed);await page.getByLabel('Workflow documents').selectOption(doc.id);await page.getByLabel('Workflow prompt template').selectOption(w.template.id);
+ await agent(page,w.dataset.id);const proposed=page.waitForResponse(r=>r.url().endsWith('/api/agent-v2/plans')&&r.request().method()==='POST');await send(page,'/ReExtract');const plan=await checked(await proposed);await page.getByLabel('Workflow documents').selectOption(doc.id);await page.getByLabel('Workflow prompt template').selectOption(w.template.id);
  await page.getByRole('button',{name:'Confirm re-extraction',exact:true}).click();await expect(page.getByRole('button',{name:'Review result and evidence'})).toBeVisible({timeout:90000});
  const runs=(await checked(await page.request.get('/api/extractions'))).filter((item:any)=>(item.dataset_id||item.kb_id||item.parent_id)===w.dataset.id);expect(runs).toHaveLength(2);expect(runs.some((item:any)=>item.id===first.id)).toBe(true);
  const old=await extractionReady(page,first.id);expect(old.version).toBe(1);expect(await (await page.request.get(`/api/documents/${doc.id}/download`)).text()).toBe(source);
@@ -230,7 +230,7 @@ test('external-processing approval appears immediately and cancellation does not
  const w=await setup(page);await agent(page,w.dataset.id);
  await page.route('**/api/agent-v2/consent',route=>route.fulfill({json:{dataset_id:w.dataset.id,required:true,destinations:[{key:'synthetic-external',title:'Synthetic external destination',description:'Test-only consent notice'}]}}));
  let plans=0;page.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith('/api/agent-v2/plans'))plans++;});
- await send(page,'@Upload');const popup=page.getByRole('dialog',{name:'Allow external processing?'});await expect(popup).toBeVisible();expect(plans).toBe(0);
+ await send(page,'/Upload');const popup=page.getByRole('dialog',{name:'Allow external processing?'});await expect(popup).toBeVisible();expect(plans).toBe(0);
  await popup.getByRole('button',{name:'Cancel',exact:true}).click();await expect(popup).not.toBeVisible();expect(plans).toBe(0);
  await page.getByLabel('Send agent request').click();await popup.getByRole('button',{name:'Agree and continue',exact:true}).click();await expect(page.getByLabel('Workflow dataset')).toBeVisible();expect(plans).toBe(1);
 });
