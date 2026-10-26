@@ -238,7 +238,7 @@ test('external-processing approval appears immediately and cancellation does not
 test('composer grows with content and stays within the full chat width',async({page})=>{
  const w=await setup(page);await agent(page,w.dataset.id);const input=page.getByLabel('Message Aegis Agent'),before=(await input.boundingBox())!;
  await input.fill(Array.from({length:12},(_,i)=>'Long draft line '+i).join('\n'));await expect.poll(async()=> (await input.boundingBox())!.height).toBeGreaterThan(before.height);
- const composer=(await page.locator('.agent-v2-compose-box').boundingBox())!,area=(await page.locator('.agent-v2').boundingBox())!;expect(composer.width/area.width).toBeGreaterThan(.9);
+ const composer=(await page.locator('.agent-v2-compose-box').boundingBox())!,area=(await page.locator('.agent-main').boundingBox())!;expect(composer.width/area.width).toBeGreaterThan(.9);
  await input.fill('Short');await expect.poll(async()=> (await input.boundingBox())!.height).toBeLessThanOrEqual(before.height+2);
 });
 
@@ -257,7 +257,7 @@ test('current screens fit phone, tablet and desktop and retain shared blue progr
  const doc=await uploadReady(page.request,w.headers,w.dataset,'Responsive-'+('LongName'.repeat(8))+'.txt',source);
  const run=await checked(await page.request.post('/api/extractions',{headers:w.headers,data:{dataset_id:w.dataset.id,document_ids:[doc.id],template_id:w.template.id}}));await extractionReady(page,run.id);
  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});for(const hash of ['Home','Datasets','Model Registration','Model Mapping','Extract Data','Review','Aegis Agent','Storage','Users & passwords','Jobs & activity']){
-  await page.goto('/#'+encodeURIComponent(hash));await expect(page.getByRole('heading',{level:1})).toBeVisible();await expect(page.getByLabel('Refresh workspace')).toBeEnabled();
+  await page.goto('/#'+encodeURIComponent(hash));await expect(page.locator('h1.workspace-title')).toBeVisible();await expect(page.getByLabel('Refresh workspace')).toBeEnabled();
   if(hash==='Model Registration')await expect(page.getByRole('table',{name:'Registered models'})).toBeVisible();
   if(hash==='Model Mapping'){await page.getByRole('combobox',{name:'Dataset',exact:true}).selectOption(w.dataset.id);await expect(page.getByLabel('Chat model',{exact:true})).toBeEnabled();}
   if(hash==='Extract Data'){await page.getByLabel('Extract dataset').selectOption(w.dataset.id);await page.getByLabel('Extract prompt template').selectOption(w.template.id);await expect(page.getByRole('table')).toContainText('MOCK TEST VALUE');}

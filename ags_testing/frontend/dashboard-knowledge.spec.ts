@@ -111,7 +111,7 @@ test('picker supports multiple datasets and empty selection never broadens scope
 test('About and footer show the same version and prior feature history; mobile controls fit',async({page})=>{
  await page.setViewportSize({width:1440,height:1100});await preview(page);await page.getByRole('link',{name:`About Aegis, application version v${applicationVersion.version}`,exact:true}).click();
  await expect(page.getByRole('heading',{level:1,name:'About',exact:true})).toBeVisible();await expect(page.getByLabel(`Current application version v${applicationVersion.version}`,{exact:true})).toBeVisible();
- await expect(page.getByRole('heading',{name:'v26.1.0.0',exact:true})).toBeVisible();await expect(page.getByText('Drag dataset cards into Sources to include their accessible indexed files, preserving other selected sources.',{exact:true})).toBeVisible();
+ const history=page.getByRole('region',{name:"What's included in each version"});await expect(history.getByText('v26.1.0.0',{exact:true})).toBeVisible();await history.locator('summary').filter({hasText:'v26.1.1.0'}).click();await expect(page.getByText('Drag dataset cards into Sources to include their accessible indexed files, preserving other selected sources.',{exact:true})).toBeVisible();
  if(process.env.AEGIS_ABOUT_SCREENSHOT)await page.screenshot({path:process.env.AEGIS_ABOUT_SCREENSHOT,fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.goto('/#Dashboard');await expect(page.getByRole('button',{name:'Datasets (3)',exact:true})).toBeHidden();await page.getByRole('button',{name:'Ask Aegis about Policies',exact:true}).click();await overview(page);
  await page.getByRole('button',{name:'Datasets (3)',exact:true}).click();

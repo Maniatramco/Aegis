@@ -1,6 +1,19 @@
 {
-  "version": "26.1.12.14",
+  "version": "26.1.12.15",
   "releases": [
+    {
+      "version": "26.1.12.15",
+      "date": "2026-10-26",
+      "title": "Redesigned workspace screens",
+      "changes": [
+        "Aegis Agent opens as a workspace: a conversation rail with recent chats, a wider thread and a context panel, with workflow cards to start Onboard, Upload, Extract or Re-extract.",
+        "Agent commands now start with / (/Onboard, /Upload, /Extract, /ReExtract); a leading @ is still understood. While work runs, the agent icon shows the live step: searching, reranking, writing, checking citations, uploading, indexing or extracting.",
+        "Every workspace screen opens with a brand page band and summary counts: Dataset, Prompt, Extract, Review, Jobs (now status tabs and cards), Model Registration, Model Mapping (with a dataset quick-pick that names missing models), Users and Files & processing.",
+        "Click any Need attention count or failed status to open a pop-up listing each affected file with its processing stages, the stored error, what to do next, Retry and links to the screen that fixes it. Administrator-only fixes tell other users to ask an administrator.",
+        "Buttons follow one compact standard across the workspace: the same size and shape, a brand-blue primary action, white secondary actions and red-outlined delete. New extraction moves from the top bar into the Extract and Review pages.",
+        "About shows the current version, a worked example from predefined prompts to reviewed fields and the golden copy, and a collapsible version history."
+      ]
+    },
     {
       "version": "26.1.12.14",
       "date": "2026-10-26",

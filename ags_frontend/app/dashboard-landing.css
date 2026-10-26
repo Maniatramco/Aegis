@@ -134,3 +134,6 @@ body .dataset-knowledge-picker.picker-v2 .picker-footer .btn.primary:disabled{ba
 .dashboard-chip{overflow:visible}.dashboard-chip-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body .dashboard-quick-links .text-button{border:0;background:none;box-shadow:none;padding:0;min-height:32px;text-decoration:underline;text-underline-offset:3px}
 body .dashboard-quick-links .text-button:hover{color:#1d2d6b}
+/* Long unbroken file names must not widen the Sources panel past the screen. */
+.notebook-dashboard .notebook-sources,.notebook-dashboard .notebook-source-content,.notebook-dashboard .notebook-sources li,.notebook-dashboard .notebook-sources li>label{min-width:0;max-width:100%}
+.notebook-dashboard .notebook-source-copy{min-width:0;flex:1 1 auto}.notebook-dashboard .notebook-source-copy :is(strong,small){overflow-wrap:anywhere}
