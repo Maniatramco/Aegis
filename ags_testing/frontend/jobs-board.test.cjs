@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
 const filename=path.resolve(__dirname,'../../ags_frontend/app/jobs-board.tsx'),mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
-const original=mod.require.bind(mod);mod.require=id=>id==='./action-button'?require('./support/action-button.cjs').actionButton:id==='lucide-react'?new Proxy({},{get:()=>()=>null}):original(id);
+const original=mod.require.bind(mod);mod.require=id=>id==='./action-button'?require('./support/action-button.cjs').actionButton:id==='lucide-react'?new Proxy({},{get:()=>()=>null}):id==='./needs-attention'?{openAttention(){}}:original(id);
 mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
 const {JobsBoard,jobGroup}=mod.exports;
 

@@ -1,36 +1,36 @@
 /* One compact button standard for every workspace screen.
    Size, shape and type are enforced here so per-screen styles cannot drift;
    colour stays contextual (primary, secondary, danger, buttons on dark heroes). */
-body .shell :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge){
+body :is(.shell,.attention-dialog) :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge){
  display:inline-flex;align-items:center;justify-content:center;
  min-height:32px!important;height:auto!important;padding:5px 12px!important;
  gap:6px!important;border-radius:8px!important;
  font-family:inherit;font-size:13px!important;font-weight:600!important;line-height:1.2!important;
  cursor:pointer;transition:background-color .15s,border-color .15s,box-shadow .15s;
 }
-body .shell :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge) svg{width:15px!important;height:15px!important;flex-shrink:0}
+body :is(.shell,.attention-dialog) :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge) svg{width:15px!important;height:15px!important;flex-shrink:0}
 /* Icon-only buttons are 32px squares; buttons that carry a text label size to it. */
-body .shell :is(.btn.icon,.btn.action-icon):not(:has(>span)){
+body :is(.shell,.attention-dialog) :is(.btn.icon,.btn.action-icon):not(:has(>span)){
  width:32px!important;min-width:32px!important;max-width:32px!important;height:32px!important;min-height:32px!important;
  padding:0!important;flex:0 0 32px!important;
 }
-body .shell :is(.btn.icon,.btn.action-icon):has(>span){width:auto!important;max-width:none!important;min-width:0!important;flex:0 0 auto!important;padding:5px 12px!important}
-body .shell .btn.action-label>span{white-space:nowrap}
+body :is(.shell,.attention-dialog) :is(.btn.icon,.btn.action-icon):has(>span){width:auto!important;max-width:none!important;min-width:0!important;flex:0 0 auto!important;padding:5px 12px!important}
+body :is(.shell,.attention-dialog) .btn.action-label>span{white-space:nowrap}
 /* Variants */
 /* Secondary: one white look everywhere except on dark headers, which keep their light-on-dark style. */
-body .shell .btn:not(.primary):not(.danger):not(.account-delete):not(.dataset-delete):not(.notebook-heading *):not(.metadata-heading *):not(.section-tabs *){background:#fff!important;border:1px solid #d6deef!important;color:#1d2d6b!important;box-shadow:none!important}
-body .shell .btn:not(.primary):not(.danger):not(.account-delete):not(.dataset-delete):not(.notebook-heading *):not(.metadata-heading *):not(.section-tabs *):hover:not(:disabled){background:#f3f6fd!important;border-color:#9db2ee!important}
-body .shell .btn:not(.primary):not(.notebook-heading *):not(.metadata-heading *)[aria-pressed=true],body .shell .btn:not(.primary):not(.notebook-heading *):not(.metadata-heading *)[aria-expanded=true]{background:#e8eefc!important;border-color:#9db2ee!important}
+body :is(.shell,.attention-dialog) .btn:not(.primary):not(.danger):not(.account-delete):not(.dataset-delete):not(.notebook-heading *):not(.metadata-heading *):not(.section-tabs *){background:#fff!important;border:1px solid #d6deef!important;color:#1d2d6b!important;box-shadow:none!important}
+body :is(.shell,.attention-dialog) .btn:not(.primary):not(.danger):not(.account-delete):not(.dataset-delete):not(.notebook-heading *):not(.metadata-heading *):not(.section-tabs *):hover:not(:disabled){background:#f3f6fd!important;border-color:#9db2ee!important}
+body :is(.shell,.attention-dialog) .btn:not(.primary):not(.notebook-heading *):not(.metadata-heading *)[aria-pressed=true],body :is(.shell,.attention-dialog) .btn:not(.primary):not(.notebook-heading *):not(.metadata-heading *)[aria-expanded=true]{background:#e8eefc!important;border-color:#9db2ee!important}
 /* One primary colour (the brand blue) for every main action; tab-style "active" buttons keep their own look. */
-body .shell :is(.btn.primary,.agent-rail-new):not(.section-tabs *){background:#2f5bea!important;border:1px solid #2f5bea!important;color:#fff!important;box-shadow:none!important}
-body .shell :is(.btn.primary,.agent-rail-new):not(.section-tabs *):hover:not(:disabled){background:#2449c4!important;border-color:#2449c4!important}
-body .shell :is(.btn.primary,.agent-rail-new):not(.section-tabs *):disabled{background:#9db2ee!important;border-color:#9db2ee!important;opacity:1}
-body .shell :is(.btn.danger,.btn.account-delete,.btn.dataset-delete){background:#fff!important;color:#b42318!important;border:1px solid #f3c4c0!important;box-shadow:none!important}
-body .shell :is(.btn.danger,.btn.account-delete,.btn.dataset-delete):hover:not(:disabled){background:#fff1f0!important;border-color:#e8a19a!important}
-body .shell :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge):disabled,body .shell .btn[aria-disabled=true]{opacity:.5;cursor:not-allowed}
-body .shell :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge,.dashboard-quick-options>button,.jobs-tabs>button):focus-visible{outline:2px solid #2f5bea;outline-offset:2px}
+body :is(.shell,.attention-dialog) :is(.btn.primary,.agent-rail-new):not(.section-tabs *){background:#2f5bea!important;border:1px solid #2f5bea!important;color:#fff!important;box-shadow:none!important}
+body :is(.shell,.attention-dialog) :is(.btn.primary,.agent-rail-new):not(.section-tabs *):hover:not(:disabled){background:#2449c4!important;border-color:#2449c4!important}
+body :is(.shell,.attention-dialog) :is(.btn.primary,.agent-rail-new):not(.section-tabs *):disabled{background:#9db2ee!important;border-color:#9db2ee!important;opacity:1}
+body :is(.shell,.attention-dialog) :is(.btn.danger,.btn.account-delete,.btn.dataset-delete){background:#fff!important;color:#b42318!important;border:1px solid #f3c4c0!important;box-shadow:none!important}
+body :is(.shell,.attention-dialog) :is(.btn.danger,.btn.account-delete,.btn.dataset-delete):hover:not(:disabled){background:#fff1f0!important;border-color:#e8a19a!important}
+body :is(.shell,.attention-dialog) :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge):disabled,body :is(.shell,.attention-dialog) .btn[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+body :is(.shell,.attention-dialog) :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge,.dashboard-quick-options>button,.jobs-tabs>button):focus-visible{outline:2px solid #2f5bea;outline-offset:2px}
 /* Slightly larger touch targets on phones, same shape. */
 @media(max-width:600px){
- body .shell :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge){min-height:36px!important}
- body .shell :is(.btn.icon,.btn.action-icon):not(:has(>span)){width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;min-height:36px!important;flex-basis:36px!important}
+ body :is(.shell,.attention-dialog) :is(.btn,.agent-rail-new,.add-knowledge-back,.dashboard-new-knowledge){min-height:36px!important}
+ body :is(.shell,.attention-dialog) :is(.btn.icon,.btn.action-icon):not(:has(>span)){width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;min-height:36px!important;flex-basis:36px!important}
 }

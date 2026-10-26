@@ -57,6 +57,7 @@ import {
 import { AddKnowledge } from "./add-knowledge";
 import { PageBand, PAGE_INTROS } from "./page-band";
 import { JobsBoard } from "./jobs-board";
+import { NeedsAttentionDialog, attentionItems, onAttention, type AttentionScope } from "./needs-attention";
 import { MappingOverview } from "./mapping-overview";
 import type { DatasetKnowledgeScope } from "./dataset-knowledge-picker";
 
@@ -259,6 +260,9 @@ export default function App() {
   const [kbs, setKbs] = useState<Entity[]>([]);
   const [kb, setKb] = useState("");
   const [jobs, setJobs] = useState<Entity[]>([]);
+  const [attention, setAttention] = useState<AttentionScope | null>(null);
+  useEffect(() => onAttention(scope => setAttention(scope)), []);
+  useEffect(() => setAttention(null), [view]);
   const [agentVisibleJobIds, setAgentVisibleJobIds] = useState<string[]>([]);
   const onAgentJobs = useCallback((updates: Entity[]) => setJobs(previous => [...updates, ...previous.filter(job => !updates.some(update => update.id === job.id))]), []);
   const [settings, setSettings] = useState<Entity>({});
@@ -953,6 +957,12 @@ export default function App() {
             )}
           </section>
         </div>
+      )}
+      {attention && (
+        <NeedsAttentionDialog items={attentionItems(docs, jobs, kbs, attention)} isAdmin={Boolean(user.is_admin)} busy={busy}
+          onClose={() => setAttention(null)}
+          onRetry={j => run(async () => { await api(`/jobs/${j.id}/retry`, "POST"); notify("Retry requested. Progress appears in Jobs & activity."); setAttention(null); reload(); })}
+          onNavigate={v => { setAttention(null); navigate(v as View); }} />
       )}
       {confirm && (
         <div className="modal-bg">

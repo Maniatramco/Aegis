@@ -61,7 +61,7 @@ export function AdminDocuments({api,onChanged,onReview}:{api:Api;onChanged:()=>v
   <div className="file-toolbar"><SummaryTiles label="File summary" tiles={[
    {label:'Files',value:data.total??data.items.length,detail:'across your datasets',tone:''},
    {label:'Indexed',value:data.items.filter((i:Entity)=>i.status==='ready'&&!i.requires_reindex).length,detail:'on this page',tone:'ok'},
-   {label:'Need attention',value:data.items.filter((i:Entity)=>['failed','cancelled'].includes(i.status)||i.requires_reindex).length,detail:'failed or reindex, on this page',tone:'error'},
+   {label:'Need attention',value:data.items.filter((i:Entity)=>['failed','cancelled'].includes(i.status)||i.requires_reindex).length,detail:'failed or reindex, on this page',tone:'error',attention:{}},
    {label:'With extractions',value:data.items.filter((i:Entity)=>i.extractions?.length>0).length,detail:'on this page',tone:'info'},
   ]}/><button className="btn" disabled={loading||busy} onClick={()=>void load()}><RefreshCw size={16}/> Refresh</button></div>
   {notice&&<div className="notice" role="status">{notice}</div>}

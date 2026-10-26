@@ -2,6 +2,7 @@
 import {useState,type ReactNode} from 'react';
 import {Square} from 'lucide-react';
 import {ActionButton} from './action-button';
+import {openAttention} from './needs-attention';
 
 type Entity=Record<string,any>;
 const RUNNING=['pending','queued','running','processing'],FAILED=['failed','cancelled'];
@@ -28,7 +29,7 @@ export function JobsBoard({jobs,documents,busy,formatDate,onRetry,onCancel,empty
     </div>
     <div className="jobs-progress" aria-label={`Progress ${progress} percent`}><div className="progress"><span style={{width:`${progress}%`}}/></div><span>{progress}%</span></div>
     <div className="jobs-actions">
-     <span className="jobs-status" data-group={group}>{job.status}</span>
+     {group==='failed'?<button type="button" className="jobs-status attention-trigger" data-group={group} title="See what failed and how to fix it" onClick={()=>openAttention({jobId:job.id})}>{job.status} · details</button>:<span className="jobs-status" data-group={group}>{job.status}</span>}
      {FAILED.includes(job.status)&&<ActionButton className="btn primary" disabled={busy} onClick={()=>onRetry(job)} label="Retry" action="retry" showLabel/>}
      {['pending','queued','running'].includes(job.status)&&<button className="btn danger" disabled={busy} onClick={()=>onCancel(job)}><Square size={13}/>Cancel</button>}
     </div>

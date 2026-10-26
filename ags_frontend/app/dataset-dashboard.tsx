@@ -9,6 +9,7 @@ import {availableKnowledge,boundedKnowledge,addDatasetKnowledge,removeDatasetKno
 import './dataset-dashboard.css';
 import './dashboard-landing.css';
 import './metadata-relationships.css';
+import {openAttention} from './needs-attention';
 
 type Entity=Record<string,any>;
 const MetadataRelationships=dynamic(()=>import('./metadata-relationships').then(module=>module.MetadataRelationships),{ssr:false});
@@ -123,7 +124,7 @@ export function DatasetDashboard({username,datasets,documents,loading,search,onC
    <dl className="dashboard-stats" aria-label="Knowledge summary">
     <div><dt>Datasets</dt><dd>{summary.datasets}</dd><span>{summary.empty?`${summary.empty} without documents`:'authorized'}</span></div>
     <div><dt>Indexed sources</dt><dd>{summary.indexed}</dd><span>ready to ask</span></div>
-    <div data-tone={summary.attention?'warn':undefined}><dt>Need attention</dt><dd>{summary.attention}</dd><span>failed or need reindex</span></div>
+    <div data-tone={summary.attention?'warn':undefined} className={summary.attention?'screen-tile-actionable':undefined}><dt>Need attention</dt><dd>{summary.attention}</dd><span>failed or need reindex</span>{summary.attention>0&&<button type="button" className="screen-tile-cta attention-trigger dashboard-attention-cta" onClick={()=>openAttention()}>Review and fix</button>}</div>
     <div><dt>Processing</dt><dd>{summary.processing}</dd><span>{summary.processing?'indexing now':'nothing running'}</span></div>
    </dl>
   </div>}
