@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useId,useRef,useState,type CSSProperties} from 'react';
+import {AgentLogo} from './agent-logo';
 import {BrainCircuit,Check,CheckCircle2,Loader2,CircleAlert,CircleStop,Layers,PenLine,Search,ShieldCheck,X,type LucideIcon} from 'lucide-react';
 import './agent-answer-workflow.css';
 
@@ -37,7 +38,7 @@ const phaseStatus=(status:string)=>({completed:'Done',running:'In progress',fail
 export function PhaseTrack({phases}:{phases:{id:string;label:string;status:string;detail:string}[]}){
  return <ol className="phase-track" aria-label="Answer workflow phases" style={{'--phase-count':phases.length} as CSSProperties}>{phases.map(phase=>{const Icon=phase.status==='completed'?Check:phase.status==='failed'?CircleAlert:PHASE_ICONS[phase.id]||BrainCircuit;
   return <li key={phase.id} className="phase-step" data-phase={phase.id} data-status={phase.status} aria-current={phase.status==='running'?'step':undefined}>
-   <span className="phase-node" aria-hidden="true"><Icon size={15}/></span>
+   <span className="phase-node" aria-hidden="true">{phase.status==='running'?<><span className="phase-ring"/><AgentLogo size={20}/><span className="phase-badge"><Icon size={9}/></span></>:<Icon size={15}/>}</span>
    <span className="phase-text"><strong>{phase.label}</strong><small><span className="phase-state">{phaseStatus(phase.status)}</span> · {phase.detail}</small></span>
   </li>;})}</ol>;
 }

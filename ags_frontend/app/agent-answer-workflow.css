@@ -66,3 +66,40 @@
  .phase-step[data-status=running]:not(:last-child)::after{background:#2f5bea;animation:none}
 }
 @media(prefers-reduced-motion:reduce){.phase-step::after,.phase-node::before{animation:none!important}}
+/* Brand look: the workflow panel is a navy band like the page headers; the live phase carries the Aegis shield. */
+.agent-workspace .answer-workflow-expanded{position:relative;overflow:hidden;border:0;color:#fff;
+ background:linear-gradient(115deg,#0b1226 0%,#16224f 55%,#2b2a78 100%);box-shadow:0 10px 26px rgba(22,34,79,.22),inset 0 0 0 1px rgba(255,255,255,.08)}
+.agent-workspace .answer-workflow-expanded::before{content:"";position:absolute;inset:0;pointer-events:none;
+ background:radial-gradient(520px 140px at 85% -20%,rgba(127,147,255,.28),transparent 70%),radial-gradient(360px 120px at 0% 120%,rgba(63,182,216,.18),transparent 70%)}
+.agent-workspace .answer-workflow-expanded>*:not(.answer-workflow-close){position:relative}
+.agent-workspace .answer-workflow-expanded>.answer-workflow-close{z-index:2}
+.agent-workspace .answer-workflow-expanded .answer-workflow-close{color:#c9d4f5}
+.agent-workspace .answer-workflow-expanded .phase-track-head strong{color:#fff}.answer-workflow-expanded .phase-track-head span{color:#9fb3e6}
+.agent-workspace .answer-workflow-expanded .phase-text strong{color:#fff}.answer-workflow-expanded .phase-text small{color:#b7c3df}
+.agent-workspace .answer-workflow-expanded .phase-step[data-status=pending] .phase-text strong{color:#9fb3e6}
+.answer-workflow-expanded .phase-step[data-status=running] .phase-state{color:#8fe3ff}
+.answer-workflow-expanded .phase-step[data-status=completed] .phase-state{color:#7fe0cc}
+.answer-workflow-expanded .phase-step[data-status=failed] .phase-state{color:#ffb4ab}
+/* connectors */
+.answer-workflow-expanded .phase-step:not(:last-child)::after{background:rgba(255,255,255,.14)}
+.answer-workflow-expanded .phase-step[data-status=completed]:not(:last-child)::after{background:linear-gradient(90deg,#4f7dff,#9b7bff,#4f7dff) 0 0/200% 100%;box-shadow:0 0 8px rgba(127,147,255,.55);animation:phase-shimmer 3s linear infinite}
+.answer-workflow-expanded .phase-step[data-status=running]:not(:last-child)::after{background:radial-gradient(circle,#8fe3ff 0 2px,transparent 2.5px) 0 50%/12px 6px repeat-x,rgba(255,255,255,.14);height:4px;animation:phase-flow-dots .7s linear infinite}
+/* nodes */
+.answer-workflow-expanded .phase-node{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.28);color:#c9d4f5}
+.answer-workflow-expanded .phase-step[data-status=completed] .phase-node{background:linear-gradient(140deg,#4f7dff,#9b7bff);border:0;color:#fff;box-shadow:0 0 0 3px rgba(127,147,255,.18),0 6px 14px rgba(79,125,255,.35);animation:phase-pop .35s ease-out}
+.answer-workflow-expanded .phase-step[data-status=running] .phase-node{width:38px;height:38px;margin-top:-2px;background:radial-gradient(circle,#2b3a8f 0%,#0b1226 75%);border:0;box-shadow:0 0 0 4px rgba(143,227,255,.12),0 0 22px rgba(79,125,255,.55);animation:phase-glow 1.8s ease-in-out infinite}
+.answer-workflow-expanded .phase-step[data-status=running] .phase-node::before{display:none}
+.phase-ring{position:absolute;inset:-4px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 30%,#4f7dff 62%,#8fe3ff 85%,transparent);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2.5px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2.5px));animation:aa-spin 1.1s linear infinite}
+.phase-node .aegis-agent-logo{position:relative;z-index:1;filter:drop-shadow(0 0 5px rgba(143,227,255,.7))}
+.phase-badge{position:absolute;right:-5px;bottom:-4px;z-index:2;display:grid;place-items:center;width:16px;height:16px;border-radius:5px;color:#fff;background:linear-gradient(140deg,#22b8e6,#4f7dff);box-shadow:0 0 0 2px #16224f}
+.answer-workflow-expanded .phase-step[data-status=failed] .phase-node{background:rgba(180,35,24,.25);border:1.5px solid #ff8a7a;color:#ffd1cb}
+.answer-workflow-expanded .answer-workflow-steps-toggle{color:#8fe3ff}
+.answer-workflow-expanded>.answer-workflow-detail-scroll{border:0;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
+@keyframes phase-shimmer{to{background-position:-200% 0}}
+@keyframes phase-flow-dots{to{background-position:12px 50%,0 0}}
+@keyframes phase-glow{0%,100%{box-shadow:0 0 0 4px rgba(143,227,255,.10),0 0 16px rgba(79,125,255,.45)}50%{box-shadow:0 0 0 7px rgba(143,227,255,.16),0 0 28px rgba(79,125,255,.7)}}
+@keyframes phase-pop{from{transform:scale(.7);opacity:.4}to{transform:scale(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){.answer-workflow-expanded .phase-step::after,.answer-workflow-expanded .phase-node,.phase-ring{animation:none!important}}
+/* Win over the Agent header's dark text colour inside the navy card. */
+.agent-workspace .agent-v2-speaker .answer-workflow-expanded :is(.phase-track-head strong,.phase-text strong){color:#fff}
+.agent-workspace .agent-v2-speaker .answer-workflow-expanded .phase-step[data-status=pending] .phase-text strong{color:#9fb3e6}

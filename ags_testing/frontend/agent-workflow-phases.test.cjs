@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const file=path.resolve(__dirname,'../../ags_frontend/app/agent-answer-workflow.tsx'),mod=new Module(file,module);mod.filename=file;mod.paths=module.paths;
-const base=mod.require.bind(mod);mod.require=id=>id.endsWith('.css')?{}:id==='./workflow-stepper'?{WorkflowStepper:()=>null}:base(id);
+const base=mod.require.bind(mod);mod.require=id=>id.endsWith('.css')?{}:id==='./workflow-stepper'?{WorkflowStepper:()=>null}:id==='./agent-logo'?{AgentLogo:()=>null}:base(id);
 mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,file);
 const {phaseFor,groupWorkflowSteps}=mod.exports;
 

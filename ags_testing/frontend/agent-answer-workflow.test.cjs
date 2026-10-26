@@ -6,7 +6,7 @@ function view(workflow){
  const effect=(fn,deps)=>{const i=cursor++,old=hooks[i];if(!old||deps.some((v,n)=>!Object.is(v,old.deps[n]))){hooks[i]={deps,cleanup:old?.cleanup};effects.push(()=>{hooks[i].cleanup?.();hooks[i].cleanup=fn();});}};
  const react={useState(value){const i=cursor++;hooks[i]??={value:typeof value==='function'?value():value};return[hooks[i].value,v=>{hooks[i].value=typeof v==='function'?v(hooks[i].value):v;}];},useRef(value){const i=cursor++;return hooks[i]??={current:value};},useId(){const i=cursor++;return 'workflow-'+i;},useEffect:effect,useLayoutEffect:effect};
  const file=path.resolve(__dirname,'../../ags_frontend/app/agent-answer-workflow.tsx'),mod=new Module(file,module);mod.filename=file;mod.paths=module.paths;
- const base=mod.require.bind(mod);mod.require=id=>id==='react'?react:id.endsWith('.css')?{}:id==='./workflow-stepper'?{WorkflowStepper:()=>null}:base(id);
+ const base=mod.require.bind(mod);mod.require=id=>id==='react'?react:id.endsWith('.css')?{}:id==='./workflow-stepper'?{WorkflowStepper:()=>null}:id==='./agent-logo'?{AgentLogo:()=>null}:base(id);
  mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,file);
  const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)];
  const render=()=>{cursor=0;root=mod.exports.AgentAnswerWorkflow({workflow});while(effects.length)effects.shift()();cursor=0;root=mod.exports.AgentAnswerWorkflow({workflow});return root;};
