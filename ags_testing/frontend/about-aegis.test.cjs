@@ -8,3 +8,9 @@ test('About presents the current version and complete prior feature history from
  for(const entry of release.releases){assert.ok(html.includes('v'+entry.version));for(const change of entry.changes)assert.ok(html.includes(escaped(change)),change);}
  const changelog=fs.readFileSync(path.resolve(__dirname,'../../CHANGELOG.md'),'utf8');for(const entry of release.releases)assert.ok(changelog.includes(entry.version));assert.match(html,/Current version/);
 });
+test('About explains the workflow as a diagram with intake, both lanes and mapped models',()=>{
+ const html=renderToStaticMarkup(React.createElement(mod.exports.AboutAegis));
+ for(const text of ['Sources','Dataset','Unified knowledge','Ask with evidence','Extract and review','Hybrid search','Rerank evidence','Validate citations','Review and correct','Models mapped per dataset'])assert.ok(html.includes(text),text);
+ assert.ok(html.indexOf('Hybrid search')<html.indexOf('Rerank evidence')&&html.indexOf('Rerank evidence')<html.indexOf('Generate answer')&&html.indexOf('Generate answer')<html.indexOf('Validate citations'));
+ assert.match(html,/<figure class="about-diagram" aria-labelledby="about-flow-title">/);
+});
