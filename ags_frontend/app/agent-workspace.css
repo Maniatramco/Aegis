@@ -82,3 +82,6 @@
 .agent-workspace .agent-v2-tools>li[data-status=completed]{border-color:#bfe8d3}
 .agent-workspace .agent-v2-tools>li[data-status=failed]{border-color:#f3c6c6;background:#fff8f8}
 .agent-workspace .agent-v2-details{border-radius:16px;border:1px solid #c9d4f5;background:#f6f8ff}
+/* An opened answer workflow takes its own line under the agent header instead of squeezing it. */
+.agent-workspace .agent-v2-speaker{row-gap:8px}
+.agent-workspace .agent-v2-speaker .agent-answer-workflow[data-expanded=true]{flex:1 0 100%;max-width:100%;order:5}

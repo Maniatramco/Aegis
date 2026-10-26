@@ -1,5 +1,6 @@
 "use client";
 import {BrainCircuit,ClipboardList,CloudUpload,Database,FileScan,Layers,ListOrdered,PenLine,Save,Search,ShieldCheck,type LucideIcon} from 'lucide-react';
+import type {CSSProperties} from 'react';
 import {AgentLogo} from './agent-logo';
 import './agent-activity.css';
 
@@ -51,13 +52,17 @@ export function planActivity(plan:Entity,workflow?:{status?:string;steps?:Entity
  return null;
 }
 
-/** The agent shield "on the move" toward the task it is carrying out. */
+/** A glowing capsule while the agent works: a gradient ring spins around the Aegis shield, sparks orbit it,
+ the current step shimmers, and dots carry the work to the step's icon. Compact keeps just the ringed shield and icon. */
 export function AgentActivity({task,size=24,compact=false}:{task:AgentTask;size?:number;compact?:boolean}){
  const {icon:Icon,label}=TASKS[task];
- return <span className={`agent-activity${compact?' agent-activity-compact':''}`} data-task={task} role="img" aria-label={`Aegis Agent · ${label}`} title={label}>
-  <span className="agent-activity-avatar"><span className="agent-activity-orbit" aria-hidden="true"/><AgentLogo size={size}/></span>
-  {!compact&&<span className="agent-activity-track" aria-hidden="true"><i/><i/><i/></span>}
-  <span className="agent-activity-task" aria-hidden="true"><Icon size={compact?9:13}/></span>
+ const orb=<span className="aa-orb" aria-hidden="true"><span className="aa-glow"/><span className="aa-ring"/><span className="aa-spark"/><span className="aa-spark aa-spark-alt"/><AgentLogo size={compact?size:Math.min(size,22)}/></span>;
+ if(compact)return <span className="agent-activity agent-activity-compact" data-task={task} role="img" aria-label={`Aegis Agent · ${label}`} title={label} style={{'--aa-size':`${size}px`} as CSSProperties}>{orb}<span className="aa-task" aria-hidden="true"><Icon size={9}/></span></span>;
+ return <span className="agent-activity agent-activity-capsule" data-task={task} role="img" aria-label={`Aegis Agent · ${label}`} title={label}>
+  {orb}
+  <span className="aa-text" aria-hidden="true"><span className="aa-name">Aegis Agent</span><span className="aa-label">{label}</span></span>
+  <span className="aa-flow agent-activity-track" aria-hidden="true"><i/><i/><i/><i/><i/></span>
+  <span className="aa-task" aria-hidden="true"><Icon size={14}/></span>
  </span>;
 }
 
