@@ -15,6 +15,9 @@ def test_catalog_covers_every_live_operation_and_has_no_stale_notes():
             assert operation['tags']
     assert metadata['POST /api/extractions']['csrf_required']
     assert not metadata['GET /api/documents']['csrf_required']
+    assert metadata['POST /api/source-connections/{identifier}/import']['csrf_required']
+    assert spec['paths']['/api/source-connections']['get']['tags'] == ['Source connections']
+    assert 'secret values' in spec['paths']['/api/source-connections']['get']['description']
     assert metadata['POST /api/auth/recovery/reset']['authentication'] == 'Local recovery challenge'
     recovery = spec['paths']['/api/auth/recovery/reset']['post']['requestBody']['content']['application/json']['schema']
     assert set(recovery['required']) == {'password', 'confirmation'}

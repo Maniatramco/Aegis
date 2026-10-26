@@ -126,7 +126,7 @@ def test_guidance_only_publication_keeps_document_entries(system,monkeypatch):
     monkeypatch.setattr(knowledge,'GUIDE',dict(knowledge.GUIDE,datasets=knowledge.GUIDE['datasets']+' Updated guidance.'))
     _,result=knowledge.sync(s.owner,d['id'],application_only=True)
     after=core.local_store.json(knowledge._manifest_ref(snapshot))
-    assert result['removed']==0 and result['upserted']==8
+    assert result['removed']==0 and result['upserted']==len(knowledge.GUIDE)
     assert {k:v for k,v in before['points'].items() if v['source_type']!='application'}=={k:v for k,v in after['points'].items() if v['source_type']!='application'}
     assert 'onboarding alone does not upload' in knowledge.GUIDE['datasets'].lower()
 

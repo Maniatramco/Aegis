@@ -21,3 +21,12 @@ test('unavailable and unassigned files cannot be selected, and empty scope canno
 test('search preserves selections and cancelling makes no inclusion change',()=>{
  const v=mount();find(v,'Search available dataset knowledge').props.onChange({target:{value:'Policies'}});v.render();assert.equal(find(v,'Include available file invoice.txt'),undefined);button(v,'Cancel').props.onClick();assert.deepEqual(v.included,[]);assert.deepEqual(v.closed,[true]);
 });
+test('partial selections show a count, unready datasets are summarised and the footer explains the scope',()=>{
+ const v=mount({datasets:[{id:'a',name:'Invoices'},{id:'b',name:'Policies'},{id:'c',name:'Empty research'}],documents:[{id:'one',dataset_id:'a',name:'invoice.txt',status:'ready'},{id:'two',dataset_id:'a',name:'credit.txt',status:'ready'},{id:'three',parent_id:'b',name:'policy.txt',status:'ready'}],initial:{datasetIds:['a'],documentIds:['one']}});
+ const text=node=>!node?'':typeof node==='string'||typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(''):text(node.props?.children);
+ assert.ok(v.nodes.some(n=>n.props?.className==='picker-count'&&text(n)==='1 of 2'));
+ assert.equal(v.nodes.find(n=>n.props?.id==='picker-files-b').props.hidden,true);assert.equal(v.nodes.find(n=>n.props?.id==='picker-files-a').props.hidden,false);
+ assert.match(text(v.nodes.find(n=>n.props?.className==='picker-waiting')),/Not ready yet Empty research · no indexed files/);
+ assert.equal(text(v.nodes.find(n=>n.type==='footer').props.children[0]),'1 file from 1 dataset');
+ find(v,'Show files in Policies').props.onClick();v.render();assert.equal(v.nodes.find(n=>n.props?.id==='picker-files-b').props.hidden,false);
+});

@@ -52,7 +52,10 @@ import {
   CheckCircle2,
   KeyRound,
   Server,
+  CloudUpload,
 } from "lucide-react";
+import { AddKnowledge } from "./add-knowledge";
+import type { DatasetKnowledgeScope } from "./dataset-knowledge-picker";
 
 type Entity = Record<string, any>;
 type View =
@@ -71,7 +74,8 @@ type View =
   | "Files & processing"
   | "Model Registration"
   | "Model Mapping"
-  | "Users & passwords";
+  | "Users & passwords"
+  | "Add knowledge";
 const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "About", icon: BookOpen },
   { name: "Home", icon: Database, group: "WORKSPACE" },
@@ -89,6 +93,7 @@ const sections: { name: View; icon: typeof Shield; group?: string }[] = [
   { name: "Files & processing", icon: FileText },
   { name: "Model Registration", icon: Layers },
   { name: "Model Mapping", icon: BookOpen },
+  { name: "Add knowledge", icon: CloudUpload },
 ];
 // Keep saved route identifiers compatible while presenting the product names.
 const viewLabel = (name: View) => name === "Home" ? "Dashboard" : name === "Aegis agent V2" ? "Aegis Agent" : name === "Extract" ? "Review" : name === "Extract Data" ? "Extract" : name;
@@ -172,6 +177,8 @@ export default function App() {
   const [view, setView] = useState<View>("Home");
   const [homeSearch,setHomeSearch]=useState('');
   const [dashboardDatasetId,setDashboardDatasetId]=useState('');
+  // Newly vectorized documents handed from Add knowledge to the Dashboard chat.
+  const [dashboardHandoff,setDashboardHandoff]=useState<(DatasetKnowledgeScope&{key:number})|null>(null);
   const agentWorkspace=view==='Aegis agent V2';
   const [directorySearch,setDirectorySearch]=useState('');
   const [datasetDirectoryVisible,setDatasetDirectoryVisible]=useState(true);
@@ -461,7 +468,8 @@ export default function App() {
     if(destination==="Review")setReviewRouteId(reviewId);
     window.location.hash = encodeURIComponent(destination==="Review"&&reviewId?`Review/${reviewId}`:destination==="Extract"&&reviewSection==="Create"?"Review/create":viewRoute(destination));
     setView(destination);
-    if (!["About", "Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extract Data", "Review", "Extraction Review", "Re-extract", "Prompt templates"].includes(name)) setAdminNavigation(true);
+    if (destination !== "Home") setDashboardHandoff(null);
+    if (!["About", "Home", "Datasets", "Aegis Agent", "Aegis agent V2", "Extract", "Extract Data", "Review", "Extraction Review", "Re-extract", "Prompt templates", "Add knowledge"].includes(name)) setAdminNavigation(true);
     setError("");
     setMobile(false);
     return true;
@@ -720,7 +728,7 @@ export default function App() {
           <span className="brand-name">Aegis</span>
         </div>
         <div className="brand-sub">AI Data Platform</div>
-        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["About","Home","Datasets","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity"].includes(s.name)))}/>
+        <WorkspaceNavigation view={view} isAdmin={Boolean(user.is_admin)} onNavigate={navigate} adminOpen={adminNavigation} onAdminToggle={()=>setAdminNavigation(!adminNavigation)} adminItems={sections.filter(s=>!["About","Home","Datasets","Add knowledge","Aegis Agent","Aegis agent V2","Extract","Extract Data","Review","Extraction Review","Re-extract","Prompt templates","Model Registration","Model Mapping"].includes(s.name)&&(user.is_admin||["Users & passwords","Jobs & activity"].includes(s.name)))}/>
 
         <div className="nav-footer">
           <div className="row" style={{ marginBottom: 9 }}>
@@ -802,8 +810,9 @@ export default function App() {
               </button>
             </Notice>
           )}
-          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard metadataApi={api} onMetadataReview={openReview} username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onBrowse={()=>navigate("Datasets")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview}/>;}}/></div>}
+          {(view === "Home" || (view === 'Review' && reviewReturn?.view === 'Home')) && <div hidden={view!=='Home'}><DatasetDashboard key={dashboardHandoff?.key||0} startScope={dashboardHandoff} metadataApi={api} onMetadataReview={openReview} username={user.username} selectedId={dashboardDatasetId} onSelect={id=>{setDashboardDatasetId(id);changeDataset(id);}} datasets={kbs} documents={docs} loading={loading} search={homeSearch} onClearSearch={()=>setHomeSearch('')} canManage={Boolean(user.is_admin)} onBrowse={()=>navigate("Datasets")} onAddNew={()=>navigate("Add knowledge")} guide={<WorkflowOverview isAdmin={Boolean(user.is_admin)} onNavigate={navigate}/>} renderAgent={(id,onBusy,sourceScope,_onSourceChange,knowledgeScope,options)=>{const scope=knowledgeScope||{datasetIds:[id],documentIds:sourceScope};return <DatasetKnowledgeChat key={knowledgeScopeKey(scope)} scope={scope} onOpenAgent={()=>navigate('Aegis agent V2')} onBusy={onBusy} catalogRevision={refresh} api={api} stream={agentStream} username={user.username} onReview={openReview} {...options}/>;}}/></div>}
           {view === "About" && <AboutAegis/>}
+          {view === "Add knowledge" && <AddKnowledge api={api} datasets={kbs} documents={docs} selectedDataset={kb} onChanged={reload} onBack={()=>navigate("Home")} onExtract={()=>navigate("Extract Data")} onAsk={scope=>{if(navigate("Home")){setDashboardDatasetId('');setDashboardHandoff({...scope,key:Date.now()});}}}/>}
           {view === "Files & processing" && (user.is_admin?<AdminDocuments api={api} onChanged={reload} onReview={openReview}/>:<div className="panel" role="alert">Administrator access is required to manage files and processing.</div>)}
           {view === "Users & passwords" && <UserManagement api={api} user={user as {id:string;username:string;is_admin?:boolean}} onPasswordChanged={()=>{setUser(null);setCsrf("");setPassword("");setPasswordChangedNotice(true);}} onRoleChanged={()=>{setUser(null);setCsrf("");setPassword("");setRoleChangedNotice(true);setPasswordChangedNotice(false);}} />}
           {(view === "Aegis agent V2" || (view === 'Review' && reviewReturn?.view === 'Aegis agent V2')) && <div className="agent-v2-view" hidden={view !== 'Aegis agent V2'}><AgentV2 catalogRevision={refresh} onWorkspaceChanged={reload} api={api} stream={agentStream} username={user.username} onDatasetChange={view === 'Aegis agent V2' ? changeDataset : undefined} maxUploadMb={Number(settings.max_upload_mb || 25)} onJobs={onAgentJobs} onVisibleJobs={setAgentVisibleJobIds} onPromptSaved={d => setTemplates(previous=>[d,...previous.filter(t=>t.id!==d.id)])} onReview={openReview} /></div>}

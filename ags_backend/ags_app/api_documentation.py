@@ -5,6 +5,13 @@ from fastapi.routing import APIRoute
 
 # Keyed by method and path so similar operations cannot share misleading notes.
 NOTES = {
+    'GET /api/source-connections': 'Signed-in users with dataset access (own connections; administrators see all): list authorized dataset source connections and credential-configured flags without returning secret values. Imported copies follow Aegis dataset access; source permissions are not mirrored.',
+    'POST /api/source-connections/test': 'Signed-in users with dataset access (own connections; administrators see all): test read access to a proposed scoped S3, SharePoint, Google Drive, Azure Blob or OCI Object Storage location without saving configuration, importing files or writing to the cloud source.',
+    'POST /api/source-connections': 'Signed-in users with dataset access (own connections; administrators see all): save a dataset source connection with encrypted versioned credentials. Saving does not import files or synchronize source permissions, updates or deletions.',
+    'PUT /api/source-connections/{identifier}': 'Signed-in users with dataset access (own connections; administrators see all): update an authorized source connection and its credential version. Changed locations require credentials again; disabling a connection preserves previously imported copies.',
+    'GET /api/source-connections/{identifier}/files': 'Signed-in users with dataset access (own connections; administrators see all): browse an enabled scoped source location with expiring actor/dataset/connection-bound selection and pagination capabilities. No files are imported.',
+    'POST /api/source-connections/{identifier}/import': 'Signed-in users with dataset access (own connections; administrators see all): explicitly publish selected source copies to an authorized dataset through the existing upload/index pipeline, with dataset-sharing acknowledgement and any required external-processing consent. Preserve provenance and completed duplicate submissions; inspect per-file failures. Remote files and permissions are not changed or synchronized.',
+    'POST /api/source-connections/{identifier}/publish': 'Signed-in users with dataset access (own connections; administrators see all): publish the unified knowledge of the connection dataset after imported copies finish indexing, with any required external-processing consent, and report which selected documents are now available to chat. No cloud access or new imports.',
     'GET /api/dataset-chat/catalog': 'Read the authorized dataset, document, prompt and model catalog for Dashboard Dataset Knowledge Chat without starting a conversation or inference.',
     'GET /api/dataset-chat/conversations': 'List the signed-in user\'s separate Dashboard chat history, omitting conversations whose saved dataset/document scope is no longer accessible.',
     'GET /api/dataset-chat/conversations/{id}': 'Read an owned Dashboard conversation and its saved messages after rechecking access to its dataset and document scope.',
@@ -153,6 +160,7 @@ NOTES = {
 }
 
 GROUPS = {
+    'source-connections': 'Source connections',
     'auth': 'Authentication', 'datasets': 'Datasets', 'knowledge-bases': 'Datasets',
     'models': 'Models', 'model-registrations': 'Models', 'model-providers': 'Models', 'local-models': 'Models',
     'documents': 'Documents', 'conversations': 'Chat', 'messages': 'Chat',

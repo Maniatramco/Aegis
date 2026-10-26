@@ -1,6 +1,18 @@
 {
-  "version": "26.1.12.13",
+  "version": "26.1.12.14",
   "releases": [
+    {
+      "version": "26.1.12.14",
+      "date": "2026-10-26",
+      "title": "Dashboard landing and Add knowledge",
+      "changes": [
+        "Open Dashboard on a brand overview: greeting, an Ask box, summary counts from loaded accessible records, dataset cards and Sources. Asking gives the chat the full page; Back to overview keeps the conversation.",
+        "Quickly add or remove datasets from the Ask box, and choose individual files in a redesigned Add Dataset Knowledge picker. New knowledge in chat is announced with suggested questions; nothing runs until you ask.",
+        "Add new knowledge: any signed-in user can connect Amazon S3, Azure Blob Storage, OCI Object Storage, SharePoint or Google Drive to a dataset they can access, test it, browse and Vectorize up to 20 files. Connections are private to their owner; administrators see all.",
+        "Vectorize indexes copies with the dataset embedding model and publishes them to chat before showing Ready to ask. Extraction and review stay separate. Credentials are encrypted and never shown again; wrong details get specific guidance.",
+        "Read-only snapshots: cloud files are never changed, and later remote changes, deletions and permissions are not synchronized."
+      ]
+    },
     {
       "version": "26.1.12.13",
       "date": "2026-10-26",

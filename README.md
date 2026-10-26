@@ -2,7 +2,7 @@
 
 Aegis turns documents into searchable knowledge and structured, reviewable results. It uses a Next.js/React interface, FastAPI, LangGraph agents and a durable Python worker.
 
-**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.13` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
+**Handover branch: `ags_sprint1`. Current working version: `v26.1.12.14` (base: `v26.1.0.0`).** The original source freeze remains tagged `aegis-freeze-2026-10-15`; use the handover branch for subsequent updates.
 
 v26.1.12.12 completes the administrator Files & processing screen with source storage, indexing, OCR and extraction status, current-model recovery, and confirmed end-to-end document cleanup. Listing compares saved index/model mapping metadata without contacting model services; timed refreshes wait for an existing read to finish. Processing submissions still validate current models. Cleanup removes related results and affected chats/workflows while preserving other originals and shared prompts/models. Partial failures remain quarantined and can resume. Content-free terminal queue audit rows remain for delayed notification acknowledgement. Includes visible Save and New extraction buttons. Publication is recorded separately.
 
