@@ -25,7 +25,7 @@
 .answer-workflow-detail-table{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:11px;line-height:1.45}
 .answer-workflow-detail-table :is(th,td){padding:7px 9px;white-space:normal;overflow-wrap:anywhere;text-align:left;border-bottom:1px solid #edf2fa}
 .answer-workflow-detail-table th{position:sticky;top:0;background:#edf4ff;color:#27456f;font-size:10px;z-index:1}
-.answer-workflow-detail-table :is(th,td):first-child{width:62%}.answer-workflow-detail-table :is(th,td):nth-child(2){width:23%}.answer-workflow-detail-table :is(th,td):last-child{width:15%;text-align:right}
+.answer-workflow-detail-table :is(th,td):first-child{width:44%}.answer-workflow-detail-table :is(th,td):nth-child(2){width:24%}.answer-workflow-detail-table :is(th,td):nth-child(3){width:19%}.answer-workflow-detail-table :is(th,td):last-child{width:13%;text-align:right}
 .answer-workflow-detail-table tr[data-status=running]{background:#edf4ff;color:#0b316f;font-weight:600}.answer-workflow-detail-table tr[data-status=failed]{color:#bc1733;background:#fff4f5}
 .answer-workflow-detail-table time{font-size:11px;color:inherit}.answer-workflow-detail-table tr:last-child td{border-bottom:0}
 .agent-v2-speaker .answer-workflow-state{color:inherit;flex-shrink:0}.agent-answer-workflow[data-status=running] .answer-workflow-state{animation:answer-status-spin 1.2s linear infinite}.agent-answer-workflow[data-status=failed]{color:#bc1733}
