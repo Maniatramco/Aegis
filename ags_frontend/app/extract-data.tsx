@@ -2,6 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {ChevronDown,ChevronLeft,ChevronRight,Download,Table2,Database,FileJson,FileSpreadsheet,FileText,FileSearch,Loader2} from 'lucide-react';
 import './extract-data.css';
+import {SummaryTiles} from './summary-tiles';
 type Entity=Record<string,any>;
 type Api=(path:string,method?:string,body?:unknown,signal?:AbortSignal,quiet?:boolean)=>Promise<any>;
 type Column={key:string;label:string;kind:string};
@@ -35,11 +36,17 @@ export function ExtractData({datasets,templates,selectedDataset,onDatasetChange,
   }catch(err){setError((err as Error).message);}finally{setExporting('');}
  };
  const columns=data?.columns.filter(c=>c.kind==='field')||[];
+ const promptName=promptOptions.find(t=>t.id===selectedTemplate)?.name||'No prompt selected';
  return <section className="extract-data" aria-label="Extract results">
+  {data&&<SummaryTiles label="Extract summary" tiles={[
+   {label:'Records',value:data.total,detail:'matching these filters',tone:''},
+   {label:'Extractions',value:data.extraction_count,detail:'saved runs included',tone:'ok'},
+   {label:'Fields',value:columns.length,detail:promptName,tone:'info'},
+  ]}/>}
   <div className="extract-data-toolbar">
    <label><span><Database size={14} aria-hidden="true"/>Dataset</span><select aria-label="Extract dataset" value={selectedDataset} onChange={event=>{if(event.target.value===selectedDataset)return;setTemplate('');setPage(0);setData(null);onDatasetChange(event.target.value);}}><option value="">All datasets</option>{datasets.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
    <label><span><FileJson size={14} aria-hidden="true"/>Prompt template</span><select aria-label="Extract prompt template" value={selectedTemplate} disabled={!promptOptions.length} onChange={event=>{if(event.target.value===selectedTemplate)return;setTemplate(event.target.value);setPage(0);setData(null);}}>{!promptOptions.length&&<option value="">No prompt templates available</option>}{promptOptions.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-   <details ref={exportMenu} className="extract-data-export"><summary className="btn extract-export-icon" role="button" aria-label="Export Extract results" title={exporting?'Exporting results…':'Export results'} aria-disabled={loading||!data?.total||!!exporting} onClick={event=>{if(loading||!data?.total||exporting)event.preventDefault();}}>{exporting?<Loader2 size={18} className="animate-spin" aria-hidden="true"/>:<Download size={18} aria-hidden="true"/>}<ChevronDown size={12} aria-hidden="true"/></summary><div>{[['xlsx','Excel (.xlsx)'],['csv','CSV (.csv)'],['json','JSON (.json)']].map(([format,label])=>{const Icon=format==='xlsx'?FileSpreadsheet:format==='csv'?FileText:FileJson;return <button key={format} title={`Export ${label}`} onClick={()=>{if(exportMenu.current)exportMenu.current.open=false;void download(format);}} disabled={loading||!data?.total||!!exporting}><Icon size={16} aria-hidden="true"/>{label}</button>;})}<small>All rows matching these filters. Latest saved values.</small></div></details>
+   <details ref={exportMenu} className="extract-data-export"><summary className="btn extract-export-icon" role="button" aria-label="Export Extract results" title={exporting?'Exporting results…':'Export results'} aria-disabled={loading||!data?.total||!!exporting} onClick={event=>{if(loading||!data?.total||exporting)event.preventDefault();}}>{exporting?<Loader2 size={18} className="animate-spin" aria-hidden="true"/>:<Download size={18} aria-hidden="true"/>}<span className="extract-export-label">Export</span><ChevronDown size={12} aria-hidden="true"/></summary><div>{[['xlsx','Excel (.xlsx)'],['csv','CSV (.csv)'],['json','JSON (.json)']].map(([format,label])=>{const Icon=format==='xlsx'?FileSpreadsheet:format==='csv'?FileText:FileJson;return <button key={format} title={`Export ${label}`} onClick={()=>{if(exportMenu.current)exportMenu.current.open=false;void download(format);}} disabled={loading||!data?.total||!!exporting}><Icon size={16} aria-hidden="true"/>{label}</button>;})}<small>All rows matching these filters. Latest saved values.</small></div></details>
   </div>
   {loading&&<div className="extract-data-state" role="status"><Loader2 size={18} className="animate-spin" aria-hidden="true"/>Loading saved results…</div>}
   {!loading&&!selectedTemplate&&<div className="extract-data-empty"><FileJson size={26} aria-hidden="true"/><p>Add a prompt template to view its extracted results.</p></div>}

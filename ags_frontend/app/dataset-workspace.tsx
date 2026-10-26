@@ -5,7 +5,8 @@ import { CheckCircle2, Database, Layers, Settings2, X } from "lucide-react";
 import "./dataset-focus.css";
 import "./model-configuration.css";
 import {useDatasetLifecycle} from "./dataset-lifecycle";
-import {DirectoryRows} from "./dataset-directory";
+import {DirectoryRows,directorySummary} from "./dataset-directory";
+import {SummaryTiles} from "./summary-tiles";
 import {AgentOnboarding} from "./agent-onboarding";
 import {selectMappingDefault,setMappingEnabled,type MappingDraft} from './dataset-mapping-draft';
 
@@ -48,7 +49,8 @@ export function DatasetWorkspace({datasets,models,documents,onSelect,onCreated,a
   };
   return <div className="dataset-focus">
     {!creating&&lifecycle.controls}
-    {!creating&&<div className="dataset-intro dataset-navigation"><span className="pill">{datasets.length} dataset{datasets.length===1?'':'s'}</span>{canManage&&<ActionButton className="btn primary" onClick={()=>setCreating(true)} label="New dataset" action="add"/>}</div>}
+    {!creating&&datasets.length>0&&<SummaryTiles label="Dataset readiness" tiles={directorySummary(datasets,documents)}/>}
+    {!creating&&<div className="dataset-intro dataset-navigation"><span className="pill">{datasets.length} dataset{datasets.length===1?'':'s'}</span>{canManage&&<ActionButton className="btn primary" onClick={()=>setCreating(true)} label="New dataset" action="add" showLabel/>}</div>}
     {creating?<AgentOnboarding datasetOnly api={api} models={models} defaults={defaults} storageKey={storageKey} onBusy={setOnboardingBusy} onReady={()=>{}} onCompleted={completed} onUse={()=>{}} onClose={()=>{if(!onboardingBusy)setCreating(false);}}/>:<>
       {datasets.length>0&&<DirectoryRows onDelete={canManage?lifecycle.requestDelete:undefined} datasets={datasets} documents={documents} search={directorySearch} onClearSearch={onClearDirectorySearch} onChat={id=>{onSelect(id);onUse('Aegis agent V2');}}/>}
       {!datasets.length&&<div className="panel dataset-empty"><Database size={30}/><h3>{canManage?'Your first dataset starts here':'No datasets assigned'}</h3><p>{canManage?'Create a dataset and choose its models.':'Ask your administrator to assign a dataset to your account.'}</p>{canManage&&<ActionButton className="btn primary" onClick={()=>setCreating(true)} label="New dataset" action="add"/>}</div>}

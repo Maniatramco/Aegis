@@ -3,6 +3,7 @@ import {ActionButton} from "./action-button";
 import {useEffect,useRef,useState} from "react";
 import {ArrowRight,Check,Download,History,Pencil,Trash2,X} from "lucide-react";
 import {filterPromptTemplates,promptTemplateDownload} from "./prompt-template-data";
+import {SummaryTiles} from "./summary-tiles";
 import "./prompt-templates.css";
 type Entity=Record<string,any>;
 type Api=(path:string,method?:string,body?:unknown)=>Promise<any>;
@@ -39,9 +40,15 @@ export function PromptTemplates({templates,datasets,selectedDataset,api,onSaved,
  useEffect(()=>{if(versions)dialog.current?.showModal();},[versions]);
  const load=(t?:Entity)=>{if(dirty&&!window.confirm('Discard unsaved prompt template changes?'))return;const value=t?.schema||t?.schema_json||empty(),nextDataset=t?t.dataset_id||'':datasets.some(d=>d.id===datasetFilter)?datasetFilter:selectedDataset||'';setId(t?.id||'');setName(t?.name||'');setDatasetId(nextDataset);setSchema(structuredClone(value));setBaseline(JSON.stringify({name:t?.name||'',schema:value,datasetId:nextDataset}));setError('');setEditorOpen(true);requestAnimationFrame(()=>editor.current?.scrollIntoView({behavior:'smooth',block:'start'}));};
  const save=async(event:React.FormEvent)=>{event.preventDefault();if(saving)return;setSaving(true);setError('');try{if(!id&&!datasets.some(d=>d.id===datasetId))throw new Error('Choose a dataset for this prompt template.');if(!name.trim())throw new Error('Give your prompt template a name.');if(!Object.keys(schema.properties||{}).length)throw new Error('Add at least one field to extract.');const errors=schemaErrors(schema);if(errors.length)throw new Error(errors[0]);const d=await api(`/templates${id?'/'+id:''}`,id?'PUT':'POST',{name:name.trim(),schema,dataset_id:datasetId||null});setId(d.id);setName(d.name);setDatasetId(d.dataset_id||'');setSchema(d.schema);setBaseline(JSON.stringify({name:d.name,schema:d.schema,datasetId:d.dataset_id||''}));if(d.dataset_id)setDatasetFilter(d.dataset_id);onDirty(false);setEditorOpen(false);onSaved(d);}catch(e){setError((e as Error).message);}finally{setSaving(false);}};
+ const promptTiles=[
+  {label:'Templates',value:filtered.length,detail:datasetFilter==='all'?'across all datasets':'in this selection',tone:''},
+  {label:'Datasets covered',value:new Set(templates.map(t=>t.dataset_id).filter(Boolean)).size,detail:`of ${datasets.length} dataset${datasets.length===1?'':'s'}`,tone:'ok'},
+  {label:'Fields defined',value:filtered.reduce((sum,t)=>sum+Object.keys((t.schema||t.schema_json||{}).properties||{}).length,0),detail:'in the templates shown',tone:'info'},
+ ];
  return <div className="prompt-template-layout dataset-prompt-layout">
+  <SummaryTiles label="Prompt template summary" tiles={promptTiles}/>
   <section className="panel prompt-library">
-   <div className="prompt-library-filters"><label>Dataset<select aria-label="Filter templates by dataset" value={datasetFilter} onChange={e=>setDatasetFilter(e.target.value)}><option value="all">All datasets</option>{datasets.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}<option value="shared">Shared templates (legacy)</option></select></label><label className="prompt-library-search">Search prompt templates<input aria-label="Search prompt templates" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or filename."/></label><ActionButton className="btn prompt-library-new" disabled={saving||!datasets.length} onClick={()=>load()} label="New prompt template" action="add"/></div>
+   <div className="prompt-library-filters"><label>Dataset<select aria-label="Filter templates by dataset" value={datasetFilter} onChange={e=>setDatasetFilter(e.target.value)}><option value="all">All datasets</option>{datasets.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}<option value="shared">Shared templates (legacy)</option></select></label><label className="prompt-library-search">Search prompt templates<input aria-label="Search prompt templates" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or filename."/></label><ActionButton className="btn prompt-library-new" disabled={saving||!datasets.length} onClick={()=>load()} label="New prompt template" action="add" showLabel/></div>
    <p className="small muted prompt-library-count" role="status">{filtered.length} {filtered.length===1?'template':'templates'}{datasetFilter==='all'?' across all datasets':''}</p>
    <div className="prompt-directory-scroll" role="region" aria-label="Prompt template table" tabIndex={0}>
     <table className="prompt-directory-table" aria-label="Prompt templates">
@@ -57,7 +64,7 @@ export function PromptTemplates({templates,datasets,selectedDataset,api,onSaved,
         <button className="btn" aria-label={`Edit ${t.name}`} title="Edit template" disabled={saving} onClick={()=>load(t)}><Pencil size={17} aria-hidden="true"/></button>
         <button className="btn" aria-label={`Versions of ${t.name}`} title="View versions" disabled={saving} onClick={async()=>{try{setError('');setVersions(await api(`/templates/${t.id}/versions`));setVersionTemplateId(t.id);}catch(e){setError((e as Error).message);}}}><History size={17} aria-hidden="true"/></button>
         <DownloadPrompt template={t} label={`Download ${t.name}`} iconOnly/>
-        <button className="btn prompt-use-action" aria-label={`Use template ${t.name}`} title="Use template" disabled={dirty||saving} onClick={()=>onUse(t.id)}><ArrowRight size={17} aria-hidden="true"/></button>
+        <button className="btn prompt-use-action" aria-label={`Use template ${t.name}`} title="Use template" disabled={dirty||saving} onClick={()=>onUse(t.id)}><span className="prompt-use-label">Use</span><ArrowRight size={17} aria-hidden="true"/></button>
        </div></td>
       </tr>;
      })}{!filtered.length&&<tr><td colSpan={5} className="prompt-empty muted">{!datasets.length?'Create a dataset before adding a prompt template.':search?'No matching prompt templates.':'No prompt templates for this selection. Choose a dataset and create one.'}</td></tr>}</tbody>

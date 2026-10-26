@@ -62,3 +62,23 @@
 .jobs-status[data-group=running]{background:#eaf0ff;color:#1d2d6b}.jobs-status[data-group=failed]{background:#fff1f1;color:#b42318}.jobs-status[data-group=completed]{background:#e7f6ef;color:#17694a}
 .jobs-none{padding:18px;border-radius:14px;background:#fff;border:1px dashed #c9d4f5;font-size:13px;color:#4a5577}
 @media(max-width:760px){.jobs-card{grid-template-columns:minmax(0,1fr);gap:10px}.jobs-actions{justify-content:flex-start}}
+
+/* Shared read-only summary tiles for Dataset, Prompt and Extract. */
+.screen-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:0 0 16px}
+.screen-tile{display:flex;flex-direction:column;gap:2px;padding:14px 16px;border-radius:14px;border:1px solid #e1e6f1;background:#fff;min-width:0}
+.screen-tile dt{font-size:12px;color:#4a5577}.screen-tile dd{margin:0;font-size:26px;font-weight:700;line-height:1.25;color:#0e1630}
+.screen-tile>span{font-size:11px;color:#616b85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.screen-tile[data-tone=ok] dd{color:#17694a}.screen-tile[data-tone=warn] dd{color:#8a5200}.screen-tile[data-tone=error] dd{color:#b42318}.screen-tile[data-tone=info] dd{color:#1d2d6b}
+.prompt-template-layout>.screen-summary{grid-column:1/-1}
+/* Visible labels on primary row actions. */
+.has-page-band .dataset-directory-chat{width:auto!important;min-width:0;padding:0 12px;gap:6px;display:inline-flex;align-items:center}
+.dataset-action-label,.prompt-use-label,.extract-export-label{font-size:13px;font-weight:600}
+.has-page-band .prompt-use-action{width:auto!important;display:inline-flex;align-items:center;gap:6px;padding:0 12px;background:#2f5bea;border-color:#2f5bea;color:#fff}
+.has-page-band .prompt-use-action:disabled{background:#c9d4f5;border-color:#c9d4f5}
+.has-page-band .extract-export-icon{width:auto!important;display:inline-flex;align-items:center;gap:6px;padding:0 12px}
+.has-page-band .dataset-directory-status{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+body .has-page-band .prompt-library-filters{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto}
+body .has-page-band .prompt-library-new{width:auto!important;min-width:0;padding:0 16px!important;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;background:#2f5bea;border-color:#2f5bea;color:#fff}
+body .has-page-band .prompt-row-actions .prompt-use-action{width:auto!important;min-width:68px;padding:0 12px!important;white-space:nowrap}
+@media(max-width:760px){body .has-page-band .prompt-library-filters{grid-template-columns:minmax(0,1fr)}}
+body .has-page-band .prompt-library-filters .prompt-library-new{max-width:none!important;min-width:0!important;width:auto!important}

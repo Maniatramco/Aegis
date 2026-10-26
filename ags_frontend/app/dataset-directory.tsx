@@ -6,6 +6,16 @@ import "./workspace-flow.css";
 import "./home-cards.css";
 import "./dataset-directory.css";
 type Entity=Record<string,any>;
+/** Readiness across the datasets this user can see, from loaded documents only. */
+export function directorySummary(datasets:Entity[],documents:Entity[]){
+ const per=datasets.map(d=>{const docs=documents.filter(doc=>(doc.dataset_id||doc.kb_id)===d.id);return {docs,ready:docs.filter(doc=>doc.status==="ready"&&!doc.requires_reindex).length,failed:docs.filter(doc=>["failed","cancelled"].includes(doc.status)).length};});
+ return [
+  {label:'Datasets',value:datasets.length,detail:`${datasets.filter(d=>d.active===false).length} inactive`,tone:''},
+  {label:'Ready to ask',value:per.filter(p=>p.ready>0).length,detail:'with indexed documents',tone:'ok'},
+  {label:'Need attention',value:per.filter(p=>p.failed>0).length,detail:'have failed documents',tone:'error'},
+  {label:'No documents',value:per.filter(p=>!p.docs.length).length,detail:'waiting for uploads',tone:'warn'},
+ ];
+}
 export function DirectoryRows({datasets,documents,onChat,search,onClearSearch,onDelete}:{datasets:Entity[];documents:Entity[];onChat:(id:string)=>void;search:string;onClearSearch:()=>void;onDelete?:(dataset:Entity)=>void}) {
  const visible=datasets.filter(d=>`${d.name} ${d.description||""}`.toLowerCase().includes(search.trim().toLowerCase()));
  return <div className="dataset-directory-list">
@@ -21,7 +31,7 @@ export function DirectoryRows({datasets,documents,onChat,search,onClearSearch,on
       <td><span className="dataset-directory-description" title={d.description||undefined}>{d.description||'—'}</span></td>
       <td className="dataset-count">{docs.length}</td><td className="dataset-count">{ready}</td>
       <td><span className="dataset-directory-status" data-state={state}>{status}</span></td>
-      <td><div className="dataset-row-actions"><button type="button" className="btn icon dataset-directory-chat" aria-label={`Open chat for ${d.name}`} title={`Open chat for ${d.name}`} onClick={()=>onChat(d.id)}><MessageSquare size={17}/></button>{onDelete&&<button type="button" className="btn icon dataset-delete" aria-label={`Delete dataset ${d.name}`} title={`Delete dataset ${d.name}`} onClick={()=>onDelete(d)}><Trash2 size={16}/></button>}</div></td>
+      <td><div className="dataset-row-actions"><button type="button" className="btn icon dataset-directory-chat" aria-label={`Open chat for ${d.name}`} title={`Open chat for ${d.name}`} onClick={()=>onChat(d.id)}><MessageSquare size={17}/><span className="dataset-action-label">Ask</span></button>{onDelete&&<button type="button" className="btn icon dataset-delete" aria-label={`Delete dataset ${d.name}`} title={`Delete dataset ${d.name}`} onClick={()=>onDelete(d)}><Trash2 size={16}/></button>}</div></td>
      </tr>;
     })}{!visible.length&&<tr><td colSpan={6}><div className="directory-empty"><h3>No matching datasets</h3><p>Try another name or description.</p><ActionButton type="button" className="btn" onClick={onClearSearch} label="Clear search" action="close"/></div></td></tr>}</tbody>
    </table>
