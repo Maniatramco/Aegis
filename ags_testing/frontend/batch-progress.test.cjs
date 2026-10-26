@@ -216,7 +216,7 @@ test('Home does not add another loading announcement or flash an empty dataset m
 test('extraction uses the shared horizontal workflow and real completed-stage progress',()=>{
  const stages={prepare:{status:'completed'},generate:{status:'running'},validate:{status:'blocked'},ready:{status:'blocked'}};
  const html=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'running',progress:80,workflow:{current:'generate',stages}}}));
- assert.match(html,/aria-label="Extraction workflow"/);assert.match(html,/workflow-stages batch-stages/);assert.match(html,/aria-valuenow="25"/);assert.match(html,/stage-running/);assert.match(html,/Prepare sources/);assert.match(html,/Validate fields/);assert.doesNotMatch(html,/job-stage-list/);
+ assert.match(html,/aria-label="Extraction workflow"/);assert.match(html,/workflow-frame brand-track/);assert.match(html,/aria-valuenow="25"/);assert.match(html,/stage-running/);assert.match(html,/Prepare sources/);assert.match(html,/Validate fields/);assert.doesNotMatch(html,/job-stage-list/);
  const failed=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'failed',error:'Model unavailable',workflow:{current:'generate',stages:{...stages,generate:{status:'failed'}}}}}));
  assert.match(failed,/Needs attention/);assert.match(failed,/stage-failed/);assert.match(failed,/Model unavailable/);assert.match(failed,/aria-valuenow="25"/);
  const done=renderToStaticMarkup(React.createElement(JobProgress,{job:{kind:'extract',status:'completed',workflow:{stages:Object.fromEntries(Object.keys(stages).map(name=>[name,{status:'completed'}]))}}}));
