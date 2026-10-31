@@ -1,8 +1,8 @@
 # One-off pod for SKILL.md section 7 (seed state + copy reranker). Delete it afterwards.
 # Replace __BACKEND_IMAGE__ with the same digest-pinned backend image as the Deployment.
-# Create the temporary password Secret first, from private files without trailing newline:
-#   kubectl -n aegis-oci create secret generic aegis-seed \
-#     --from-file=AEGIS_SEED_DB_PASSWORD=<private>/db.pw --from-file=AEGIS_SEED_WALLET_PASSWORD=<private>/wallet.pw
+# Create it with the commands in SKILL.md section 7 step 4 (always with --kubeconfig for the NEW
+# cluster; the live pilot also uses namespace aegis-oci). Temporary Secret aegis-seed holds
+# AEGIS_SEED_DB_PASSWORD and AEGIS_SEED_WALLET_PASSWORD; delete both afterwards.
 # The aegis-api-worker Deployment must not be running (application-state is ReadWriteOnce).
 apiVersion: v1
 kind: Pod

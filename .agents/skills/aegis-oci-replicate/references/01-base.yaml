@@ -1,0 +1,29 @@
+# Stage 1: namespace and persistent volume claims (no placeholders).
+# Part of the aegis-oci-replicate first install (SKILL.md section 7). Apply only with
+# kubectl --kubeconfig <NEW destination kubeconfig>; the live pilot also uses namespace aegis-oci.
+# Fill placeholders with the PowerShell replace shown in SKILL.md section 7, then
+# kubectl --kubeconfig $kc apply --dry-run=server -f <file> before the real apply.
+apiVersion: v1
+kind: List
+items:
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: aegis-oci
+
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata: {name: application-state, namespace: aegis-oci}
+  spec:
+    accessModes: [ReadWriteOnce]
+    storageClassName: oci-bv
+    resources: {requests: {storage: 50Gi}}
+
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata: {name: https-state, namespace: aegis-oci}
+  spec:
+    accessModes: [ReadWriteOnce]
+    storageClassName: oci-bv
+    resources: {requests: {storage: 50Gi}}
+

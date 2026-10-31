@@ -1,0 +1,134 @@
+# Stage 4: workloads and internal service. Placeholders: __BACKEND_IMAGE__, __WEB_IMAGE__, __CADDY_IMAGE__ (all digest-pinned). Requires Secrets ocir-pull, aegis-app, oci-credentials, database-wallet and ConfigMap aegis-runtime-config, plus seeded /data (section 7).
+# Part of the aegis-oci-replicate first install (SKILL.md section 7). Apply only with
+# kubectl --kubeconfig <NEW destination kubeconfig>; the live pilot also uses namespace aegis-oci.
+# Fill placeholders with the PowerShell replace shown in SKILL.md section 7, then
+# kubectl --kubeconfig $kc apply --dry-run=server -f <file> before the real apply.
+apiVersion: v1
+kind: List
+items:
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata: {name: aegis-api-worker, namespace: aegis-oci}
+  spec:
+    replicas: 1                       # single replica: api + worker share /data (RWO)
+    strategy: {type: Recreate}
+    selector: {matchLabels: {app: aegis-api-worker}}
+    template:
+      metadata:
+        labels: {app: aegis-api-worker}
+      spec:
+        automountServiceAccountToken: false
+        securityContext: {fsGroup: 10001}
+        imagePullSecrets: [{name: ocir-pull}]
+        volumes:
+        - {name: state, persistentVolumeClaim: {claimName: application-state}}
+        - {name: oci, secret: {secretName: oci-credentials, defaultMode: 288}}      # 0440
+        - {name: wallet, secret: {secretName: database-wallet, defaultMode: 288}}   # 0440
+        - {name: runtime-config, configMap: {name: aegis-runtime-config}}
+        initContainers:
+        - name: verify-existing-oci-state
+          image: __BACKEND_IMAGE__
+          command:
+          - python
+          - -c
+          - >-
+            import json,pathlib; p=pathlib.Path('/data');
+            d=json.loads((p/'configuration/database.json').read_text());
+            assert d.get('active_provider')=='oci', 'Seed the existing OCI configuration before starting';
+            assert (p/d['active_connection']['secret_ref']).is_file(), 'Database secret reference missing';
+            s=json.loads((p/'configuration/settings.json').read_text());
+            assert s.get('storage_provider')=='oci', 'Expected existing OCI object storage';
+            assert (p/'models/reranker').is_dir(), 'Existing reranker files missing'
+          securityContext: {runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false}
+          volumeMounts: [{name: state, mountPath: /data}]
+        containers:
+        - name: api
+          image: __BACKEND_IMAGE__
+          envFrom:
+          - configMapRef: {name: aegis-config}
+          - secretRef: {name: aegis-app}
+          env:
+          - {name: AEGIS_CONFIG_FILE, value: /etc/aegis/runtime.toml}
+          - {name: AEGIS_CONFIG_PROFILE, value: oci}
+          ports: [{containerPort: 8000}]
+          volumeMounts:
+          - {name: runtime-config, mountPath: /etc/aegis, readOnly: true}
+          - {name: state, mountPath: /data}
+          - {name: oci, mountPath: /run/oci, readOnly: true}
+          - {name: wallet, mountPath: /run/aegis-db/wallet, readOnly: true}
+          resources:
+            requests: {cpu: 250m, memory: 768Mi}
+            limits: {cpu: 1000m, memory: 2Gi}
+          securityContext: {runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false}
+          startupProbe: {httpGet: {path: /ready, port: 8000}, periodSeconds: 10, failureThreshold: 60}
+          readinessProbe: {httpGet: {path: /ready, port: 8000}, periodSeconds: 20, timeoutSeconds: 10}
+          livenessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 30, timeoutSeconds: 10}
+        - name: worker
+          image: __BACKEND_IMAGE__
+          command: [python, -m, ags_app.worker]
+          envFrom:
+          - configMapRef: {name: aegis-config}
+          - secretRef: {name: aegis-app}
+          env:
+          - {name: AEGIS_CONFIG_FILE, value: /etc/aegis/runtime.toml}
+          - {name: AEGIS_CONFIG_PROFILE, value: oci}
+          volumeMounts:
+          - {name: runtime-config, mountPath: /etc/aegis, readOnly: true}
+          - {name: state, mountPath: /data}
+          - {name: oci, mountPath: /run/oci, readOnly: true}
+          - {name: wallet, mountPath: /run/aegis-db/wallet, readOnly: true}
+          resources:
+            requests: {cpu: 500m, memory: 2Gi}
+            limits: {cpu: 1500m, memory: 4Gi}
+          securityContext: {runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false}
+
+- apiVersion: v1
+  kind: Service
+  metadata: {name: api, namespace: aegis-oci}
+  spec:
+    type: ClusterIP
+    selector: {app: aegis-api-worker}
+    ports: [{port: 8000, targetPort: 8000}]
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata: {name: aegis-web, namespace: aegis-oci}
+  spec:
+    replicas: 1
+    strategy: {type: Recreate}
+    selector: {matchLabels: {app: aegis-web}}
+    template:
+      metadata:
+        labels: {app: aegis-web}
+      spec:
+        automountServiceAccountToken: false
+        imagePullSecrets: [{name: ocir-pull}]
+        volumes:
+        - {name: https-state, persistentVolumeClaim: {claimName: https-state}}
+        - {name: https-config, configMap: {name: https-config}}
+        containers:
+        - name: web
+          image: __WEB_IMAGE__
+          env:
+          - {name: API_INTERNAL_URL, value: "http://api:8000"}
+          - {name: AEGIS_DEPLOYMENT_TARGET, value: oci}
+          - {name: AEGIS_API_LOCATION, value: oci}
+          - {name: AEGIS_WORKER_LOCATION, value: oci}
+          # Display label only. Pilot shows "local" because it keeps a laptop relay.
+          - {name: AEGIS_MODEL_LOCATION, value: gcp}
+          ports: [{containerPort: 3000}]
+          resources:
+            requests: {cpu: 150m, memory: 512Mi}
+            limits: {cpu: 1000m, memory: 1536Mi}
+          securityContext: {runAsUser: 1001, allowPrivilegeEscalation: false}
+          readinessProbe: {httpGet: {path: /, port: 3000}, periodSeconds: 15}
+        - name: https
+          image: __CADDY_IMAGE__
+          ports: [{containerPort: 80}, {containerPort: 443}]
+          volumeMounts:
+          - {name: https-state, mountPath: /data}
+          - {name: https-config, mountPath: /etc/caddy, readOnly: true}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+

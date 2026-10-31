@@ -1,0 +1,43 @@
+# Stage 3: non-secret configuration. Placeholder: __APP_HOST__ (needed by ALLOWED_ORIGINS and the Caddyfile).
+# Part of the aegis-oci-replicate first install (SKILL.md section 7). Apply only with
+# kubectl --kubeconfig <NEW destination kubeconfig>; the live pilot also uses namespace aegis-oci.
+# Fill placeholders with the PowerShell replace shown in SKILL.md section 7, then
+# kubectl --kubeconfig $kc apply --dry-run=server -f <file> before the real apply.
+apiVersion: v1
+kind: List
+items:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata: {name: aegis-config, namespace: aegis-oci}
+  data:
+    AEGIS_STORAGE_ROOT: /data
+    DATABASE_PROVIDER: oracle
+    # Bootstrap engine only; the active engine uses the seeded wallet connection.
+    DATABASE_URL: "oracle+oracledb://"
+    QUEUE_PROVIDER: database
+    SEARCH_PROVIDER: oracle
+    # Global fallbacks only. No ollama Service exists in the Gemini design, so map every
+    # dataset (and its OCR) to the registered Gemini models in the app (SKILL.md section 8).
+    MODEL_PROVIDER: ollama
+    EMBEDDING_PROVIDER: ollama
+    AEGIS_MODEL: "qwen3:4b"
+    EMBEDDING_MODEL: nomic-embed-text
+    AEGIS_OLLAMA_URL: "http://ollama:11434"
+    AEGIS_OLLAMA_ENDPOINT_HOSTS: ollama
+    AEGIS_ALLOW_MOCK: "false"
+    LANGSMITH_TRACING: "false"
+    COOKIE_SECURE: "true"
+    ALLOWED_ORIGINS: "https://__APP_HOST__"
+
+- apiVersion: v1
+  kind: ConfigMap
+  metadata: {name: https-config, namespace: aegis-oci}
+  data:
+    Caddyfile: |
+      __APP_HOST__ {
+        header Strict-Transport-Security "max-age=31536000"
+        reverse_proxy 127.0.0.1:3000 {
+          flush_interval -1
+        }
+      }
+

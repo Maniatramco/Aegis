@@ -38,6 +38,10 @@ def main():
                if not os.getenv(key)]
     if missing:
         fail('missing environment values: ' + ', '.join(missing))
+    for key in ('AEGIS_SEED_DB_PASSWORD', 'AEGIS_SEED_WALLET_PASSWORD', 'AEGIS_MASTER_KEY'):
+        value = os.environ[key]
+        if value != value.strip() or '\ufeff' in value or '\x00' in value:
+            fail(key + ' has a BOM, NUL or surrounding whitespace/newline; recreate its file without them (SKILL.md section 6)')
     # The backend image keeps the package at /app/ags_app (WORKDIR /app).
     for candidate in (os.getcwd(), '/app'):
         if (Path(candidate) / 'ags_app').is_dir() and candidate not in sys.path:
