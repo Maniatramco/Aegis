@@ -60,7 +60,7 @@ Internet ──80/443──> OCI flexible LB (10 Mbps)  [Service aegis-public]
 | App service identity | API-key user whose config is in Secret `oci-credentials` | Separate low-privilege user `aegis-app` + API key (section 3) |
 | Budget/limits | Free-tier-sized pilot | Check service limits: A1 OCPUs, LB, block volume, ADB ECPU |
 | Node architecture | `linux/arm64` | Same, unless you choose an x86 shape (then build `linux/amd64`) |
-| Model provider | Google Gemini API (`generativelanguage.googleapis.com`) | Own Gemini API key, quota and allowed model IDs |
+| Model provider | Google Gemini API (`generativelanguage.googleapis.com`) | Registered after deployment (section 8); no key needed to deploy. Nodes only need outbound HTTPS to it |
 | Public hostname | `aegis.<LB-IP>.sslip.io` | sslip.io from the LB IP, or a real DNS name you control |
 | Operator machine | Windows, PowerShell 5.1+, Docker Desktop, Python 3.12, kubectl, OCI CLI, Git | Same. `Setup-Aegis.ps1` installs what is missing. OCI Cloud Shell (Podman) is an alternative |
 
@@ -77,7 +77,7 @@ An agent following this skill cannot invent these. Collect them up front:
 - ADB sizing and owner quota; owner name and TNS alias. ADMIN, wallet and owner passwords are typed by the human at hidden prompts only.
 - Bucket name, prefix, versioning; where OCIR repos live (tenancy root or compartment); registry user, identity domain, auth tokens.
 - The `aegis-app` API key (and passphrase if any) for Secret `oci-credentials`.
-- Gemini API key, quota owner, model IDs and embedding dimensions.
+- Not needed during deployment: the Gemini API key and model choices. The administrator registers models in the browser after the install (section 8). Do not ask for them earlier.
 - Offline backup location for `AEGIS_MASTER_KEY`.
 - A truthful `ValidationReference`; typing `CONNECT` and `PUBLISH` at every release gate.
 - Authorization for acceptance tests that write data or call model providers.
