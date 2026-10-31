@@ -1,0 +1,227 @@
+# Aegis first-install manifest for a NEW OKE destination (Gemini/cloud-model design,
+# no laptop model relay). Derived from the retired pilot renderer
+# (git history: ags_deploy/ags_oke/ags_render.py) and the live release-guard contract
+# (ags_deploy/scripts/check-code-release.py). Review every value before applying.
+#
+# Replace these placeholders (sed or by hand), then:
+#   kubectl --kubeconfig <file> apply --dry-run=server -f aegis-oci-first-install.yaml
+#   kubectl --kubeconfig <file> apply -f aegis-oci-first-install.yaml
+#
+#   __APP_HOST__         Public hostname Caddy serves, e.g. aegis.<LB-IP>.sslip.io or a real DNS name
+#   __LB_SUBNET_OCID__   OCID of the public load-balancer subnet
+#   __WEB_IMAGE__        <region>.ocir.io/<tenancy-ns>/ags-aegis-web@sha256:<digest>
+#   __BACKEND_IMAGE__    <region>.ocir.io/<tenancy-ns>/ags-aegis-backend@sha256:<digest>
+#   __CADDY_IMAGE__      caddy:2.10.2-alpine pinned by digest (pilot tag; arm64 variant)
+#
+# NOT in this file (create separately, never commit them):
+#   Secrets ocir-pull, aegis-app, oci-credentials, database-wallet
+#   ConfigMap aegis-runtime-config (from ags_backend/ags_app/ags_config/runtime.toml)
+# See SKILL.md section 6.
+#
+# Names below are a contract: deploy.ps1 later requires Deployments aegis-web (container
+# "web") and aegis-api-worker (containers "api" and "worker") in namespace aegis-oci.
+apiVersion: v1
+kind: List
+items:
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: aegis-oci
+
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata: {name: application-state, namespace: aegis-oci}
+  spec:
+    accessModes: [ReadWriteOnce]
+    storageClassName: oci-bv
+    resources: {requests: {storage: 50Gi}}
+
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata: {name: https-state, namespace: aegis-oci}
+  spec:
+    accessModes: [ReadWriteOnce]
+    storageClassName: oci-bv
+    resources: {requests: {storage: 50Gi}}
+
+- apiVersion: v1
+  kind: ConfigMap
+  metadata: {name: aegis-config, namespace: aegis-oci}
+  data:
+    AEGIS_STORAGE_ROOT: /data
+    DATABASE_PROVIDER: oracle
+    # Bootstrap engine only; the active engine uses the seeded wallet connection.
+    DATABASE_URL: "oracle+oracledb://"
+    QUEUE_PROVIDER: database
+    SEARCH_PROVIDER: oracle
+    # Global fallbacks. Datasets map to registered Gemini models in the app.
+    MODEL_PROVIDER: ollama
+    EMBEDDING_PROVIDER: ollama
+    AEGIS_MODEL: "qwen3:4b"
+    EMBEDDING_MODEL: nomic-embed-text
+    AEGIS_OLLAMA_URL: "http://ollama:11434"
+    AEGIS_OLLAMA_ENDPOINT_HOSTS: ollama
+    AEGIS_ALLOW_MOCK: "false"
+    LANGSMITH_TRACING: "false"
+    COOKIE_SECURE: "true"
+    ALLOWED_ORIGINS: "https://__APP_HOST__"
+
+- apiVersion: v1
+  kind: ConfigMap
+  metadata: {name: https-config, namespace: aegis-oci}
+  data:
+    Caddyfile: |
+      __APP_HOST__ {
+        header Strict-Transport-Security "max-age=31536000"
+        reverse_proxy 127.0.0.1:3000 {
+          flush_interval -1
+        }
+      }
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata: {name: aegis-api-worker, namespace: aegis-oci}
+  spec:
+    replicas: 1                       # single replica: api + worker share /data (RWO)
+    strategy: {type: Recreate}
+    selector: {matchLabels: {app: aegis-api-worker}}
+    template:
+      metadata:
+        labels: {app: aegis-api-worker}
+      spec:
+        automountServiceAccountToken: false
+        securityContext: {fsGroup: 10001}
+        imagePullSecrets: [{name: ocir-pull}]
+        volumes:
+        - {name: state, persistentVolumeClaim: {claimName: application-state}}
+        - {name: oci, secret: {secretName: oci-credentials, defaultMode: 288}}      # 0440
+        - {name: wallet, secret: {secretName: database-wallet, defaultMode: 288}}   # 0440
+        - {name: runtime-config, configMap: {name: aegis-runtime-config}}
+        initContainers:
+        - name: verify-existing-oci-state
+          image: __BACKEND_IMAGE__
+          command:
+          - python
+          - -c
+          - >-
+            import json,pathlib; p=pathlib.Path('/data');
+            d=json.loads((p/'configuration/database.json').read_text());
+            assert d.get('active_provider')=='oci', 'Seed the existing OCI configuration before starting';
+            assert (p/d['active_connection']['secret_ref']).is_file(), 'Database secret reference missing';
+            s=json.loads((p/'configuration/settings.json').read_text());
+            assert s.get('storage_provider')=='oci', 'Expected existing OCI object storage';
+            assert (p/'models/reranker').is_dir(), 'Existing reranker files missing'
+          securityContext: {runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false}
+          volumeMounts: [{name: state, mountPath: /data}]
+        containers:
+        - name: api
+          image: __BACKEND_IMAGE__
+          envFrom:
+          - configMapRef: {name: aegis-config}
+          - secretRef: {name: aegis-app}
+          env:
+          - {name: AEGIS_CONFIG_FILE, value: /etc/aegis/runtime.toml}
+          - {name: AEGIS_CONFIG_PROFILE, value: oci}
+          ports: [{containerPort: 8000}]
+          volumeMounts:
+          - {name: runtime-config, mountPath: /etc/aegis, readOnly: true}
+          - {name: state, mountPath: /data}
+          - {name: oci, mountPath: /run/oci, readOnly: true}
+          - {name: wallet, mountPath: /run/aegis-db/wallet, readOnly: true}
+          resources:
+            requests: {cpu: 250m, memory: 768Mi}
+            limits: {cpu: 1000m, memory: 2Gi}
+          securityContext: {runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false}
+          startupProbe: {httpGet: {path: /ready, port: 8000}, periodSeconds: 10, failureThreshold: 60}
+          readinessProbe: {httpGet: {path: /ready, port: 8000}, periodSeconds: 20, timeoutSeconds: 10}
+          livenessProbe: {httpGet: {path: /health, port: 8000}, periodSeconds: 30, timeoutSeconds: 10}
+        - name: worker
+          image: __BACKEND_IMAGE__
+          command: [python, -m, ags_app.worker]
+          envFrom:
+          - configMapRef: {name: aegis-config}
+          - secretRef: {name: aegis-app}
+          env:
+          - {name: AEGIS_CONFIG_FILE, value: /etc/aegis/runtime.toml}
+          - {name: AEGIS_CONFIG_PROFILE, value: oci}
+          volumeMounts:
+          - {name: runtime-config, mountPath: /etc/aegis, readOnly: true}
+          - {name: state, mountPath: /data}
+          - {name: oci, mountPath: /run/oci, readOnly: true}
+          - {name: wallet, mountPath: /run/aegis-db/wallet, readOnly: true}
+          resources:
+            requests: {cpu: 500m, memory: 2Gi}
+            limits: {cpu: 1500m, memory: 4Gi}
+          securityContext: {runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false}
+
+- apiVersion: v1
+  kind: Service
+  metadata: {name: api, namespace: aegis-oci}
+  spec:
+    type: ClusterIP
+    selector: {app: aegis-api-worker}
+    ports: [{port: 8000, targetPort: 8000}]
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata: {name: aegis-web, namespace: aegis-oci}
+  spec:
+    replicas: 1
+    strategy: {type: Recreate}
+    selector: {matchLabels: {app: aegis-web}}
+    template:
+      metadata:
+        labels: {app: aegis-web}
+      spec:
+        automountServiceAccountToken: false
+        imagePullSecrets: [{name: ocir-pull}]
+        volumes:
+        - {name: https-state, persistentVolumeClaim: {claimName: https-state}}
+        - {name: https-config, configMap: {name: https-config}}
+        containers:
+        - name: web
+          image: __WEB_IMAGE__
+          env:
+          - {name: API_INTERNAL_URL, value: "http://api:8000"}
+          - {name: AEGIS_DEPLOYMENT_TARGET, value: oci}
+          - {name: AEGIS_API_LOCATION, value: oci}
+          - {name: AEGIS_WORKER_LOCATION, value: oci}
+          # Display label only. Pilot shows "local" because it keeps a laptop relay.
+          - {name: AEGIS_MODEL_LOCATION, value: gcp}
+          ports: [{containerPort: 3000}]
+          resources:
+            requests: {cpu: 150m, memory: 512Mi}
+            limits: {cpu: 1000m, memory: 1536Mi}
+          securityContext: {runAsUser: 1001, allowPrivilegeEscalation: false}
+          readinessProbe: {httpGet: {path: /, port: 3000}, periodSeconds: 15}
+        - name: https
+          image: __CADDY_IMAGE__
+          ports: [{containerPort: 80}, {containerPort: 443}]
+          volumeMounts:
+          - {name: https-state, mountPath: /data}
+          - {name: https-config, mountPath: /etc/caddy, readOnly: true}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: aegis-public
+    namespace: aegis-oci
+    annotations:
+      oci.oraclecloud.com/load-balancer-type: lb
+      service.beta.kubernetes.io/oci-load-balancer-shape: flexible
+      service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+      service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
+      service.beta.kubernetes.io/oci-load-balancer-subnet1: __LB_SUBNET_OCID__
+      service.beta.kubernetes.io/oci-load-balancer-backend-protocol: TCP
+      service.beta.kubernetes.io/oci-load-balancer-connection-idle-timeout: "1800"
+      # Pilot manages LB/worker security lists itself (see SKILL.md section 2).
+      service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: None
+  spec:
+    type: LoadBalancer
+    selector: {app: aegis-web}
+    ports:
+    - {name: http, port: 80, targetPort: 80}
+    - {name: https, port: 443, targetPort: 443}

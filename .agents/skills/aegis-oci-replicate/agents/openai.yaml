@@ -1,0 +1,4 @@
+interface:
+  display_name: "Aegis OCI Tenancy Replication"
+  short_description: "Provision and first-install Aegis on a new OCI tenancy"
+  default_prompt: "Use $aegis-oci-replicate to provision networking, OKE, database, storage, registry, IAM, secrets and the first Aegis install on my OCI tenancy, confirming each paid step with me first."

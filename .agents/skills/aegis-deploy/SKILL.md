@@ -13,7 +13,7 @@ Find the user's Aegis Git checkout. Read its `AGENTS.md`, root `README.md`, `ags
 
 Confirm the requested scope: prerequisite setup, checks only, or build and release. Resolve the intended source checkout, destination JSON and component selections from existing trusted records before asking for missing information. Bundle unresolved source/target questions together. Do not infer a colleague's destination from the current laptop's defaults or assume a pilot namespace or architecture applies elsewhere.
 
-For each prepared OCI environment, use its own private non-secret destination JSON and its own authorized authentication, kubeconfig, registry login and wallet as applicable. A new empty cluster is not a prepared Aegis installation. Report missing initial resources and consult the provisioning section of the deployment guide; do not run provisioning as part of this release workflow.
+For each prepared OCI environment, use its own private non-secret destination JSON and its own authorized authentication, kubeconfig, registry login and wallet as applicable. A new empty cluster is not a prepared Aegis installation. Report missing initial resources and consult the provisioning section of the deployment guide; do not run provisioning as part of this release workflow. For a new tenancy, the separate [aegis-oci-replicate](../aegis-oci-replicate/SKILL.md) skill covers provisioning and first install.
 
 ## Prerequisites and private inputs
 
