@@ -39,7 +39,7 @@ output "deployment_inputs" {
 }
 
 output "seed_values" {
-  description = "Non-secret values for scripts/seed_oci_state.py (skill section 7)."
+  description = "Non-secret values for scripts/seed_oci_state.py (skill Phase 5)."
   value = {
     AEGIS_SEED_DB_ALIAS         = "${lower(var.adb_db_name)}_low"
     AEGIS_SEED_DB_NAME          = var.adb_db_name

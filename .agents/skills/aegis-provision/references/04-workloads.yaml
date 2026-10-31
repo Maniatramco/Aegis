@@ -1,7 +1,7 @@
-# Stage 4: workloads and internal service. Placeholders: __BACKEND_IMAGE__, __WEB_IMAGE__, __CADDY_IMAGE__ (all digest-pinned). Requires Secrets ocir-pull, aegis-app, oci-credentials, database-wallet and ConfigMap aegis-runtime-config, plus seeded /data (section 7).
-# Part of the aegis-oci-replicate first install (SKILL.md section 7). Apply only with
+# Stage 4: workloads and internal service. Placeholders: __BACKEND_IMAGE__, __WEB_IMAGE__, __CADDY_IMAGE__ (all digest-pinned). Requires Secrets ocir-pull, aegis-app, oci-credentials, database-wallet and ConfigMap aegis-runtime-config, plus seeded /data (Phase 5).
+# Part of the aegis-provision first install (SKILL.md Phase 5). Apply only with
 # kubectl --kubeconfig <NEW destination kubeconfig>; the live pilot also uses namespace aegis-oci.
-# Fill placeholders with the PowerShell replace shown in SKILL.md section 7, then
+# Fill placeholders with the PowerShell replace shown in SKILL.md Phase 5, then
 # kubectl --kubeconfig $kc apply --dry-run=server -f <file> before the real apply.
 apiVersion: v1
 kind: List

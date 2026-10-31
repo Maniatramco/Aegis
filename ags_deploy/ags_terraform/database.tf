@@ -1,6 +1,6 @@
 # Autonomous AI Database 26ai (native VECTOR/BOOLEAN), mTLS wallet access as in the pilot.
 # The app user and 13 tables are NOT created here: run Deploy-Aegis.ps1 with DB_Object=Y
-# (see the aegis-oci-replicate skill, section 4). The wallet is downloaded with the
+# (see the aegis-provision skill, Phase 2). The wallet is downloaded with the
 # OCI CLI command in the outputs so its password never enters Terraform state.
 resource "oci_database_autonomous_database" "aegis" {
   compartment_id              = local.compartment_id

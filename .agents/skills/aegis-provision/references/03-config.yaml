@@ -1,7 +1,7 @@
 # Stage 3: non-secret configuration. Placeholder: __APP_HOST__ (needed by ALLOWED_ORIGINS and the Caddyfile).
-# Part of the aegis-oci-replicate first install (SKILL.md section 7). Apply only with
+# Part of the aegis-provision first install (SKILL.md Phase 5). Apply only with
 # kubectl --kubeconfig <NEW destination kubeconfig>; the live pilot also uses namespace aegis-oci.
-# Fill placeholders with the PowerShell replace shown in SKILL.md section 7, then
+# Fill placeholders with the PowerShell replace shown in SKILL.md Phase 5, then
 # kubectl --kubeconfig $kc apply --dry-run=server -f <file> before the real apply.
 apiVersion: v1
 kind: List
@@ -17,7 +17,7 @@ items:
     QUEUE_PROVIDER: database
     SEARCH_PROVIDER: oracle
     # Global fallbacks only. No ollama Service exists in the Gemini design, so map every
-    # dataset (and its OCR) to the registered Gemini models in the app (SKILL.md section 8).
+    # dataset (and its OCR) to the registered Gemini models in the app (SKILL.md Phase 6).
     MODEL_PROVIDER: ollama
     EMBEDDING_PROVIDER: ollama
     AEGIS_MODEL: "qwen3:4b"

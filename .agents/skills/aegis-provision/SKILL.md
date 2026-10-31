@@ -1,22 +1,30 @@
 ---
-name: aegis-oci-replicate
-description: Replicate the complete Aegis OCI infrastructure (networking, OKE, Autonomous AI Database, Object Storage, OCIR, IAM, Kubernetes Secrets/ConfigMaps, HTTPS, reranker, models) on a new or colleague's OCI tenancy, then hand over to the normal aegis-deploy release workflow. Use when someone asks to set up, onboard, clone or rebuild Aegis in another tenancy/region from scratch.
+name: aegis-provision
+description: The single Aegis provisioning skill. Provision a new OCI tenancy for Aegis with Terraform (network, OKE, Autonomous AI Database, bucket, OCIR, optional IAM), create the schema, install the application (Kubernetes secrets, load balancer, HTTPS, seeded state, reranker) and hand over to aegis-deploy for code releases. Every step that creates or changes resources requires explicit human approval. Use when someone asks to provision, set up, onboard, clone or rebuild Aegis on a new or colleague's OCI tenancy.
 ---
 
-# Replicate Aegis on a new OCI tenancy
+# Aegis provisioning (new OCI tenancy)
 
-This skill covers the one-time **provisioning and first install** of a new destination.
-It fills the gap that [aegis-deploy](../aegis-deploy/SKILL.md) explicitly does not
-cover: aegis-deploy only updates an *already prepared* installation. Once this skill has
-finished and the handover checklist (section 10) passes, use aegis-deploy for every later release.
+One skill from an empty tenancy to a running Aegis. The flow is seven phases; each phase that
+creates or changes anything has an approval gate. After Phase 7, use
+[aegis-deploy](../aegis-deploy/SKILL.md) for every code release.
 
-Reference values come from the live Mumbai pilot (`ap-mumbai-1`, v26.1.12.18, branch
-`ags_sprint1`, verified 26 Oct 2026). They describe that installation; they are not defaults
-for the new tenancy. Use new names, CIDRs, OCIDs, credentials and keys for the new
-destination. Sources: `ags_docs/Aegis_OCI_Deployment_Guide.pdf` pp. 2-7, the
-`ags_docs/Aegis_Architecture_Handover.pdf`, the retired pilot helpers in git history
-(`ags_deploy/ags_oke/ags_provision.py`, `ags_render.py`, `ags_registry.py`, deleted in
-commit `ff49e35`) and the current release guard (`ags_deploy/scripts/check-code-release.py`).
+| Phase | What happens | Gate | Who runs it |
+| --- | --- | --- | --- |
+| 1 | Terraform creates the infrastructure | G0, G1 (`PROVISION`) | Human runs `Provision-Aegis.ps1`; agent explains the plan |
+| 2 | Database app user and 13 tables | G2 (`CONNECT`, `PUBLISH`) | Human runs `Deploy-Aegis.ps1`; agent prepares the JSON |
+| 3 | Build and push the first images | G3 | Agent, after approval |
+| 4 | Kubernetes secrets, config, volumes | G4 | Agent, after approval; passwords typed by the human |
+| 5 | Load balancer, hostname, seed state, start app | G5, G6, G7 | Agent, after approval |
+| 6 | Admin account, storage test, models | none (browser) | Human |
+| 7 | Handover inventory, later releases | G8 (`CONNECT`, `PUBLISH`) | Human with aegis-deploy |
+
+Reference values come from the live Mumbai pilot (`ap-mumbai-1`, v26.1.12.18, branch `ags_sprint1`, verified
+26 Oct 2026). They describe that installation; use new names, OCIDs, credentials and keys for the new tenancy.
+Sources: `ags_docs/Aegis_OCI_Deployment_Guide.pdf` pp. 2-7, `ags_docs/Aegis_Architecture_Handover.pdf`, the retired
+pilot helpers in git history (`ags_deploy/ags_oke/ags_provision.py`, `ags_render.py`, `ags_registry.py`, deleted in
+commit `ff49e35`) and the release guard `ags_deploy/scripts/check-code-release.py`. Manual/Console equivalents of
+everything Terraform creates are in [references/manual-provisioning.md](references/manual-provisioning.md).
 
 ## Ground rules
 
@@ -27,7 +35,7 @@ commit `ff49e35`) and the current release guard (`ags_deploy/scripts/check-code-
   successful previous step are **not** approval for the next gate. If anything in the plan changes, explain the
   change and ask again. Never type, pipe, prefill or auto-answer `PROVISION`, `DESTROY`, `CONNECT` or `PUBLISH`;
   the human types them. If the human declines, stop and report what was (not) done. Record every OCID created
-  (template in section 10).
+  (see Handover inventory).
 - **Secrets.** Never copy the pilot's kubeconfig, OCI API key, auth token, wallet,
   `AEGIS_MASTER_KEY`, bootstrap token or `/data` volume to the new tenancy. Generate new ones.
   Keep all secrets out of Git, images, JSON inputs, command arguments, chat and logs. Use
@@ -42,12 +50,12 @@ commit `ff49e35`) and the current release guard (`ags_deploy/scripts/check-code-
 | Gate | Before you run | Tell the human | They approve by |
 | --- | --- | --- | --- |
 | G0 Read-only discovery | `oci` / `terraform plan` / `kubectl get` against their tenancy | Which account/profile/region you will inspect; nothing is created | Saying yes |
-| G1 Provision infrastructure | `Provision-Aegis.ps1` (Terraform apply) or any Console/CLI create in sections 2-5 | The full plan list it prints: every resource, node size, DB size, bucket, IAM, cost, region/compartment | Typing `PROVISION` (and `DESTROY` if the plan removes anything) |
-| G2 Database schema | `Deploy-Aegis.ps1` with `DB_Object=Y` (section 4) | Owner user to be created, 13 tables, quota, target DB/service | Typing `CONNECT`, then `PUBLISH` after reviewing the printed plan |
-| G3 Push images | first `docker buildx ... --push` (section 5) | Registry/repositories, tags, architecture, source commit | Saying yes |
-| G4 Kubernetes secrets & base | section 6 `k create secret/configmap`, `01-base.yaml` | Cluster context (must be the NEW one), namespace, which Secrets (names only, never values), two 50 GB volumes | Saying yes |
+| G1 Provision infrastructure | `Provision-Aegis.ps1` (Terraform apply) or any Console/CLI create in Phase 1 | The full plan list it prints: every resource, node size, DB size, bucket, IAM, cost, region/compartment | Typing `PROVISION` (and `DESTROY` if the plan removes anything) |
+| G2 Database schema | `Deploy-Aegis.ps1` with `DB_Object=Y` (Phase 2) | Owner user to be created, 13 tables, quota, target DB/service | Typing `CONNECT`, then `PUBLISH` after reviewing the printed plan |
+| G3 Push images | first `docker buildx ... --push` (Phase 3) | Registry/repositories, tags, architecture, source commit | Saying yes |
+| G4 Kubernetes secrets & base | Phase 4 `k create secret/configmap`, `01-base.yaml` | Cluster context (must be the NEW one), namespace, which Secrets (names only, never values), two 50 GB volumes | Saying yes |
 | G5 Public load balancer | `02-public-service.yaml` | A billable public LB with ports 80/443 open to the internet | Saying yes |
-| G6 Seed state | seed pod + `seed_oci_state.py` + reranker copy (section 7.4) | What files are written to `/data`, temporary password Secret created and deleted | Saying yes |
+| G6 Seed state | seed pod + `seed_oci_state.py` + reranker copy (Phase 5 step 4) | What files are written to `/data`, temporary password Secret created and deleted | Saying yes |
 | G7 Start the application | `03-config.yaml`, `04-workloads.yaml` | Images/digests, hostname, that the app becomes publicly reachable | Saying yes |
 | G8 Every later release | `Deploy-Aegis.ps1` (aegis-deploy skill) | The printed release plan | Typing `CONNECT`, then `PUBLISH` |
 
@@ -58,7 +66,7 @@ Use this message shape before each gate:
 > The database and bucket are protected from deletion. Nothing has been created yet. Do you approve? If yes,
 > type `PROVISION` at the prompt yourself.
 
-## 0. What you are building
+## What you are building
 
 ```
 Internet ──80/443──> OCI flexible LB (10 Mbps)  [Service aegis-public]
@@ -76,17 +84,17 @@ Internet ──80/443──> OCI flexible LB (10 Mbps)  [Service aegis-public]
                   CPU reranker (ONNX MiniLM) runs inside api/worker from /data/models/reranker
 ```
 
-## 1. Prerequisites and decisions (collect before starting)
+## Prerequisites and inputs
 
 | Item | Pilot value | New tenancy: decide/collect |
 | --- | --- | --- |
 | Tenancy, home region, target region | `ap-mumbai-1` | Region with A1 (or chosen shape) capacity |
 | Compartment | (pilot compartment) | New dedicated compartment, e.g. `aegis` |
 | Operator identity | OCI user + API key profile | Operator user in an admin group for the compartment, OCI CLI profile on the operator machine |
-| App service identity | API-key user whose config is in Secret `oci-credentials` | Separate low-privilege user `aegis-app` + API key (section 3) |
+| App service identity | API-key user whose config is in Secret `oci-credentials` | Separate low-privilege user `aegis-app` + API key (IAM) |
 | Budget/limits | Free-tier-sized pilot | Check service limits: A1 OCPUs, LB, block volume, ADB ECPU |
 | Node architecture | `linux/arm64` | Same, unless you choose an x86 shape (then build `linux/amd64`) |
-| Model provider | Google Gemini API (`generativelanguage.googleapis.com`) | Registered after deployment (section 8); no key needed to deploy. Nodes only need outbound HTTPS to it |
+| Model provider | Google Gemini API (`generativelanguage.googleapis.com`) | Registered after deployment (Phase 6); no key needed to deploy. Nodes only need outbound HTTPS to it |
 | Public hostname | `aegis.<LB-IP>.sslip.io` | sslip.io from the LB IP, or a real DNS name you control |
 | Operator machine | Windows, PowerShell 5.1+, Docker Desktop, Python 3.12, kubectl, OCI CLI, Git | Same. `Setup-Aegis.ps1` installs what is missing. OCI Cloud Shell (Podman) is an alternative |
 
@@ -103,140 +111,70 @@ An agent following this skill cannot invent these. Collect them up front:
 - ADB sizing and owner quota; owner name and TNS alias. ADMIN, wallet and owner passwords are typed by the human at hidden prompts only.
 - Bucket name, prefix, versioning; where OCIR repos live (tenancy root or compartment); registry user, identity domain, auth tokens.
 - The `aegis-app` API key (and passphrase if any) for Secret `oci-credentials`.
-- Not needed during deployment: the Gemini API key and model choices. The administrator registers models in the browser after the install (section 8). Do not ask for them earlier.
+- Not needed during deployment: the Gemini API key and model choices. The administrator registers models in the browser after the install (Phase 6). Do not ask for them earlier.
 - Offline backup location for `AEGIS_MASTER_KEY`.
 - A truthful `ValidationReference`; typing `CONNECT` and `PUBLISH` at every release gate.
 - Authorization for acceptance tests that write data or call model providers.
 
-## Fast path: Terraform (recommended)
+## Phase 1 - Provision the infrastructure with Terraform (gates G0, G1)
 
-`ags_deploy/ags_terraform/` provisions everything in sections 2-5 that does not involve a secret: compartment, VCN,
-subnets, security lists, OKE cluster and node pool, Autonomous AI Database, bucket, OCIR repositories and (optionally) IAM.
-It needs three inputs (`tenancy_ocid`, `region`, `operator_cidr`) plus the ADMIN password at a prompt.
-Read its [README](../../../ags_deploy/ags_terraform/README.md). Pass gate G0, run
-`.\Provision-Aegis.ps1 -PlanOnly`, show the human the printed list, then pass gate G1: the human runs
-`.\Provision-Aegis.ps1` and types `PROVISION` themselves (never run `terraform apply` directly or with `-auto-approve`).
-Then use `terraform output` for the kubeconfig and wallet commands,
-the LB subnet OCID, the deployment JSON values and the seed values, and continue at **section 4 step 4** (schema), the
-first image build in section 5, then sections 6-9. Sections 2-5 below describe the same resources for manual/Console
-creation and review.
+`ags_deploy/ags_terraform/` creates everything that does not involve a secret: compartment (optional), VCN, three
+subnets and security lists, OKE Basic cluster and A1 node pool, Autonomous AI Database 26ai, private bucket, OCIR
+repositories `ags-aegis-web` / `ags-aegis-backend`, and optionally IAM groups, users and policy (`create_iam = true`).
+Read its [README](../../../ags_deploy/ags_terraform/README.md).
 
-## 2. Networking and OKE cluster
-
-Use OCI Console (Networking, then Developer Services > Kubernetes Clusters > **Custom create**),
-Terraform, or the OCI CLI. The retired pilot SDK helper did exactly this:
-
-| Resource | Pilot setting |
-| --- | --- |
-| VCN | `ags-aegis-vcn`, `10.42.0.0/16`, DNS label `agsaegis` |
-| Internet gateway + route table | `ags-aegis-ig`; route `0.0.0.0/0` -> IGW (all three subnets are public) |
-| Subnet `api` (K8s API endpoint) | `10.42.0.0/24`, security list `ags-aegis-api-security` |
-| Subnet `worker` (nodes) | `10.42.1.0/24`, security list `ags-aegis-worker-security` |
-| Subnet `lb` (load balancers) | `10.42.2.0/24`, security list `ags-aegis-lb-security` |
-| Egress (all lists) | all protocols to `0.0.0.0/0` |
-| Ingress api | TCP 6443 and 12250 from `10.42.1.0/24`; TCP 6443 from operator `/32` |
-| Ingress worker | all from `10.42.0.0/24`, `10.42.1.0/24`, `10.42.2.0/24`; TCP 22 from operator `/32` (32022 only for the optional relay) |
-| Ingress lb | TCP 80 and 443 from `0.0.0.0/0` |
-| Cluster | `BASIC_CLUSTER`, public API endpoint in `api` subnet, **Flannel overlay**, pods `10.244.0.0/16`, services `10.96.0.0/16`, service LB subnet = `lb`, dashboard off |
-| Node pool | `ags-aegis-a1-node-pool`: 1 node, `VM.Standard.A1.Flex`, 2 OCPU, 12 GB, 50 GB boot, Oracle Linux 9 aarch64 OKE image matching the K8s version, node cycling off, operator SSH public key |
-| Kubernetes version | `v1.36.4` observed. Pick a currently supported version |
-
-Notes:
-- Never expose the database or Ollama port 11434 publicly. Keep 6443 and 22 restricted to the operator `/32` (or use a private endpoint plus Bastion).
-- The LB Service sets `security-list-management-mode: None`, so the worker list rule "all from lb subnet" is what lets LB health checks and NodePort traffic through. Keep it.
-- For private worker nodes instead, add a NAT gateway and a Service gateway (OCIR, Object Storage). Nodes must reach OCIR, Object Storage, the ADB endpoint and `generativelanguage.googleapis.com:443`.
-
-Kubeconfig for the new cluster (operator machine, new file, never overwrite the pilot's):
-
-```powershell
-oci ce cluster create-kubeconfig --cluster-id <cluster-ocid> --file C:\aegis-target\kubeconfig.yaml `
-  --region <region> --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT --profile <operator-profile>
-kubectl --kubeconfig C:\aegis-target\kubeconfig.yaml get nodes -o wide      # 1 node Ready, arm64
-kubectl --kubeconfig C:\aegis-target\kubeconfig.yaml get storageclass        # oci-bv present
-```
-
-The pilot kubeconfig uses a private helper (`ags_deploy/ags_oke/ags_kubeconfig.py` together with a local `ags_runtime/ags_oke/provision-state.json`). That setup is not portable. Use the standard `oci ce` exec plugin above.
-
-## 3. IAM: groups, users and policies
-
-Create in the tenancy (Identity domain > Groups/Users/Policies). Adjust names:
-
-| Principal | Purpose | Credentials |
-| --- | --- | --- |
-| Group `aegis-operators` (people deploying) | Provision + release | Personal API key in OCI CLI profile, personal OCIR auth token for `docker login` |
-| User `aegis-app` in group `aegis-app-runtime` | Backend access to Object Storage at runtime | API key pair whose `config` + PEM go into Secret `oci-credentials` |
-| User `aegis-registry` in group `aegis-registry-pull` (or reuse operator) | OKE image pulls | Auth token in Secret `ocir-pull` |
-
-Policies (compartment `aegis`; replace names). Pilot repositories were created at the
-**tenancy root**, so if you do the same, write the repos statements `in tenancy`:
-
-```
-Allow group aegis-operators to manage virtual-network-family in compartment aegis
-Allow group aegis-operators to manage cluster-family in compartment aegis
-Allow group aegis-operators to manage instance-family in compartment aegis
-Allow group aegis-operators to manage volume-family in compartment aegis
-Allow group aegis-operators to manage load-balancers in compartment aegis
-Allow group aegis-operators to manage autonomous-database-family in compartment aegis
-Allow group aegis-operators to manage object-family in compartment aegis
-Allow group aegis-operators to manage repos in compartment aegis
-Allow group aegis-operators to use cloud-shell in tenancy
-Allow group aegis-app-runtime to read buckets in compartment aegis
-Allow group aegis-app-runtime to manage objects in compartment aegis where target.bucket.name='<bucket>'
-Allow group aegis-registry-pull to read repos in compartment aegis
-```
-
-Add the OKE service policy if Console asks for it during cluster creation. Kubernetes
-RBAC: the operator who generated the kubeconfig is cluster-admin. Add other operators with a
-`ClusterRoleBinding` to their OCI user OCID.
-
-## 4. Autonomous AI Database, schema and wallet
-
-1. Create the **Autonomous AI Database** in the compartment: Oracle AI Database **26ai**
-   (native `VECTOR`/`BOOLEAN` required), workload Transaction Processing. Pilot: `ags_ora_db`
-   / DB name `agsora`, 1 ECPU, 20 GB, mTLS required. Size for real use. Set a private `ADMIN` password.
-2. Network access: secure access from everywhere with mTLS (pilot), or an ACL/private endpoint
-   that allows both the operator machine and the OKE worker subnet/NAT egress IP.
-3. Download the **instance wallet** ZIP into `C:\aegis-target\wallet\` with a new wallet
-   password. Record the TNS alias you will use (pilot `agsora_low`) and the full
-   `SERVICE_NAME` from `tnsnames.ora`.
-4. Create the application owner and the 13 tables with the maintained release tool. This is a
-   database-only run, so it needs no Docker and no Kubernetes; it can run before the cluster exists.
-   Copy the template to a private file (`Copy-Item ags_deploy\templates\deployment-inputs.example.json C:\aegis-target\new-tenancy.json`)
-   and set:
-   - `DB_Object=Y`, `DeployFrontend=N`, `DeployBackend=N`, `DB_ReleaseFile=ags_database/release.json`
-   - `WalletPath` = the **wallet `.zip` file itself** (for example `C:\aegis-target\Wallet_agsnew.zip`), not a folder
-   - `DatabaseOwner` (e.g. `AGS_OWNER`), `DBAdminUser=ADMIN`
-   - `ServiceAlias` (e.g. `agsnew_low`) and `ExpectedService` (the full `SERVICE_NAME` of that alias in `tnsnames.ora`)
-   - `ValidationReference` (truthful test/CI evidence for the source; otherwise you are prompted)
-
-   **Use the same alias everywhere:** `ServiceAlias` here, `AEGIS_SEED_DB_ALIAS` in section 7 and the JSON in
-   section 9 must be identical. Later releases compare the saved connection against these values.
+1. **G0:** ask before any read-only call against the tenancy (`oci`, `terraform plan`).
+2. Help the human fill `terraform.tfvars` from `terraform.tfvars.example`: `tenancy_ocid`, `region`, `operator_cidr`
+   (their public IP `/32`). Optional overrides are listed in the example.
+3. Run `.\Provision-Aegis.ps1 -PlanOnly` (Terraform prompts the human for the ADMIN password). Show the printed list:
+   every resource, node size, database size, bucket, region/compartment and the cost note.
+4. **G1:** explain the plan in the message shape above and wait. The **human** runs `.\Provision-Aegis.ps1` and types
+   `PROVISION` (and `DESTROY` if shown). Never run `terraform apply` yourself, never with `-auto-approve`.
+5. After apply, collect the outputs (no secrets in them):
    ```powershell
-   Set-Location <checkout>\ags_deploy
-   .\Setup-Aegis.ps1  -Inputs C:\aegis-target\new-tenancy.json   # until AEGIS_PREREQUISITES_READY
-   .\Deploy-Aegis.ps1 -Inputs C:\aegis-target\new-tenancy.json   # CONNECT, review plan, PUBLISH
-   Set-Location ..                                                 # back to the repository root for sections 5-7
+   terraform output -raw kubeconfig_command | Invoke-Expression   # new C:\aegis-target\kubeconfig.yaml
+   terraform output -raw wallet_command     | Invoke-Expression   # human types a NEW wallet password
+   terraform output deployment_inputs      # Registry, RegistryNamespace, Platform, WalletPath, ServiceAlias
+   terraform output seed_values            # values for Phase 5 step 4
+   terraform output lb_subnet_id           # for 02-public-service.yaml
+   kubectl --kubeconfig C:\aegis-target\kubeconfig.yaml get nodes -o wide   # 1 node Ready, expected arch
    ```
-   `release.json` has `CreateSchemaIfMissing: Y`, so the tool creates the user (`DEFAULT TABLESPACE DATA QUOTA 256M`,
-   `GRANT CREATE SESSION, CREATE TABLE`) and the 13 tables (165 columns, 49 FKs, 20 indexes,
-   `aegis_knowledge_vectors` with native VECTOR). The ADMIN password and the new owner password are entered
-   at private prompts only. 256 MB is small for vectors, so ask the DBA to raise the quota
-   (`ALTER USER ... QUOTA ... ON DATA`) to the size you need. Setup also creates the repository `.venv`
-   used below. Read-only check: `ags_database/ags_schema/verify_live_schema.sql`.
-   Do not use the legacy `ags_database/deploy-oci-database.ps1` installer.
+   If IAM was not created by Terraform, the tenancy admin creates the users/groups/policies in
+   [references/manual-provisioning.md](references/manual-provisioning.md) section IAM. API private keys and auth tokens are
+   always created by the human outside Terraform.
 
-## 5. Object Storage bucket and OCIR repositories
+## Phase 2 - Database app user and tables (gate G2)
 
-All commands from here on run from the **repository root** in the same PowerShell window.
+Create the application owner and the 13 tables with the maintained release tool. This is a
+database-only run, so it needs no Docker and no Kubernetes; it can run before the cluster exists.
+Copy the template to a private file (`Copy-Item ags_deploy\templates\deployment-inputs.example.json C:\aegis-target\new-tenancy.json`)
+and set:
+- `DB_Object=Y`, `DeployFrontend=N`, `DeployBackend=N`, `DB_ReleaseFile=ags_database/release.json`
+- `WalletPath` = the **wallet `.zip` file itself** (for example `C:\aegis-target\Wallet_agsnew.zip`), not a folder
+- `DatabaseOwner` (e.g. `AGS_OWNER`), `DBAdminUser=ADMIN`
+- `ServiceAlias` (e.g. `agsnew_low`) and `ExpectedService` (the full `SERVICE_NAME` of that alias in `tnsnames.ora`)
+- `ValidationReference` (truthful test/CI evidence for the source; otherwise you are prompted)
 
-- **Bucket:** Standard tier, private (the pilot's `ObjectRead` public access is an observation only, not a requirement), versioning
-  as you choose. Pilot bucket `mk-aegis`, prefix `aegis`. Record namespace
-  (`oci os ns get`), bucket and region.
-- **OCIR:** create **private** repositories `ags-aegis-web` and `ags-aegis-backend`
-  (pilot also has `ags-aegis-ssh`, which only the optional relay needs). Registry host is `<region-key>.ocir.io`
-  (pilot `bom.ocir.io`, namespace `bmyljaecivrj`). Login username is
-  `<tenancy-namespace>/<username>` (for a non-default identity domain: `<tenancy-namespace>/<domain>/<username>`).
-  The password is an auth token.
+**Use the same alias everywhere:** `ServiceAlias` here, `AEGIS_SEED_DB_ALIAS` in Phase 5 and the JSON in
+Phase 7 must be identical. Later releases compare the saved connection against these values.
+```powershell
+Set-Location <checkout>\ags_deploy
+.\Setup-Aegis.ps1  -Inputs C:\aegis-target\new-tenancy.json   # until AEGIS_PREREQUISITES_READY
+.\Deploy-Aegis.ps1 -Inputs C:\aegis-target\new-tenancy.json   # CONNECT, review plan, PUBLISH
+Set-Location ..                                                 # back to the repository root for Phases 3-5
+```
+`release.json` has `CreateSchemaIfMissing: Y`, so the tool creates the user (`DEFAULT TABLESPACE DATA QUOTA 256M`,
+`GRANT CREATE SESSION, CREATE TABLE`) and the 13 tables (165 columns, 49 FKs, 20 indexes,
+`aegis_knowledge_vectors` with native VECTOR). The ADMIN password and the new owner password are entered
+at private prompts only. 256 MB is small for vectors, so ask the DBA to raise the quota
+(`ALTER USER ... QUOTA ... ON DATA`) to the size you need. Setup also creates the repository `.venv`
+used below. Read-only check: `ags_database/ags_schema/verify_live_schema.sql`.
+Do not use the legacy `ags_database/deploy-oci-database.ps1` installer.
+
+## Phase 3 - Build and push the first images (gate G3)
+
+All commands from here on run from the **repository root** in the same PowerShell window. Registry host and namespace come from `terraform output deployment_inputs`.
+
 - **First images** (later releases are built by `deploy.ps1`). Use the same build args as the release tool:
   ```powershell
   $reg = '<region-key>.ocir.io/<tenancy-namespace>'; $tag = 'init-' + (git rev-parse --short HEAD)
@@ -255,7 +193,7 @@ All commands from here on run from the **repository root** in the same PowerShel
 - **Keep the first backend image.** Later releases update only the `api` and `worker` images. The init container
   `verify-existing-oci-state` stays on this first digest, so exclude it from any OCIR retention/cleanup policy.
 
-## 6. Kubernetes Secrets and runtime ConfigMap (namespace `aegis-oci`)
+## Phase 4 - Kubernetes secrets and base (gate G4)
 
 **Safety first.** The live pilot also uses namespace `aegis-oci`, so every kubectl command must name the new kubeconfig.
 Define these once in the window and use `k` for every command:
@@ -277,7 +215,7 @@ New-Item -ItemType Directory -Force C:\aegis-target\secrets | Out-Null
 ```
 
 Then apply stage 1 (namespace and PVCs; no placeholders):
-`k apply -f .agents\skills\aegis-oci-replicate\references\01-base.yaml`.
+`k apply -f .agents\skills\aegis-provision\references\01-base.yaml`.
 
 | Secret / ConfigMap | Keys | How to create |
 | --- | --- | --- |
@@ -306,7 +244,7 @@ k create secret generic ocir-pull --type=kubernetes.io/dockerconfigjson `
 
 Check that no file starts with a BOM: `Format-Hex C:\aegis-target\secrets\master.key | Select-Object -First 1` must not begin with `FF FE` or `EF BB BF`.
 
-## 7. Load balancer, hostname, seed state, workloads
+## Phase 5 - Load balancer, hostname, seed state, start the app (gates G5, G6, G7)
 
 The backend init container refuses to start unless `/data` already contains
 `configuration/database.json` (active OCI connection + encrypted secret),
@@ -322,7 +260,7 @@ these. Do the steps in this order:
    Expect `onnx\model.onnx`, `tokenizer.json` and `aegis-model.json` in that folder.
 2. **Create the load balancer first** so its IP is known before choosing the hostname:
    ```powershell
-   $ref = (Resolve-Path .agents\skills\aegis-oci-replicate\references).Path
+   $ref = (Resolve-Path .agents\skills\aegis-provision\references).Path
    $out = 'C:\aegis-target\manifests'; New-Item -ItemType Directory -Force $out | Out-Null
    function Fill([string]$Name, [hashtable]$Values) {
      $t = [IO.File]::ReadAllText("$ref\$Name")
@@ -354,8 +292,8 @@ these. Do the steps in this order:
      --from-file=AEGIS_SEED_WALLET_PASSWORD=C:\aegis-target\secrets\wallet.pw
    Fill 'seed-pod.yaml' @{ '__BACKEND_IMAGE__' = $backend }
    k apply -f "$out\seed-pod.yaml"; k wait --for=condition=Ready pod/aegis-seed --timeout=600s
-   k cp .agents/skills/aegis-oci-replicate/scripts/seed_oci_state.py aegis-seed:/tmp/seed.py
-   k exec aegis-seed -- env AEGIS_SEED_DB_USER=AGS_OWNER AEGIS_SEED_DB_ALIAS=<same alias as section 4> `
+   k cp .agents/skills/aegis-provision/scripts/seed_oci_state.py aegis-seed:/tmp/seed.py
+   k exec aegis-seed -- env AEGIS_SEED_DB_USER=AGS_OWNER AEGIS_SEED_DB_ALIAS=<same alias as Phase 2> `
      AEGIS_SEED_DB_NAME=<dbname> AEGIS_SEED_REGION=<region> `
      AEGIS_SEED_BUCKET_NAMESPACE=<namespace> AEGIS_SEED_BUCKET=<bucket> python /tmp/seed.py
    Push-Location C:\aegis-target                     # relative path avoids kubectl misreading "C:" as a pod name
@@ -368,7 +306,7 @@ these. Do the steps in this order:
    [scripts/seed_oci_state.py](scripts/seed_oci_state.py) uses the app's own `database_control.save_draft()`
    to write the same encrypted format as the Settings > Database screen. It refuses to overwrite existing
    state, checks that the alias exists in the wallet, decrypts its own result, and does not connect to the database.
-   The schema must already exist (section 4). The pilot instead configured these settings in a local container
+   The schema must already exist (Phase 2). The pilot instead configured these settings in a local container
    and moved `/data` to the cluster; that path was never written down.
 5. **Install the workloads:**
    ```powershell
@@ -384,7 +322,7 @@ these. Do the steps in this order:
    `k logs deploy/aegis-api-worker -c api --tail=50` shows no errors. `/ready` checks the DB connection,
    the vector table and the reranker. Keep `C:\aegis-target\manifests` privately as the install record.
 
-## 8. First application setup (in the browser)
+## Phase 6 - First application setup in the browser (human)
 
 1. Open `https://<host>`. The first run asks for setup. Create the administrator with the `AEGIS_BOOTSTRAP_TOKEN`
    (password at least 12 characters). Afterwards you may rotate or remove the token from `aegis-app`.
@@ -398,19 +336,19 @@ these. Do the steps in this order:
 4. Create users and colleagues, datasets and access assignments.
 5. Acceptance (needs authorization for writes and provider calls): upload a harmless test document, index it, extract, and ask a cited chat question. Record what passed.
 
-## 9. Ongoing releases: hand over to aegis-deploy
+## Phase 7 - Hand over: later code releases (gate G8)
 
 Copy `ags_deploy/templates/deployment-inputs.example.json` to a private file and fill in:
 `Kubeconfig` (new file), `Context`, `Namespace=aegis-oci`, `Registry=<region-key>.ocir.io`,
 `RegistryNamespace=<tenancy-ns>`, `Platform=linux/arm64`, `AppUrl=https://<host>`, the DB fields from
-section 4 (same alias and service), `DeployFrontend`/`DeployBackend`, and `ValidationReference`.
+Phase 2 (same alias and service), `DeployFrontend`/`DeployBackend`, and `ValidationReference`.
 Use **`DB_Object=N` for routine code releases.** With `Y` the tool connects as ADMIN and prompts for its password every time;
 use `Y` only when `ags_database/release.json` adds tables. Then follow
 [aegis-deploy](../aegis-deploy/SKILL.md): `Setup-Aegis.ps1 -Inputs ...` until `AEGIS_PREREQUISITES_READY`,
 then `Deploy-Aegis.ps1 -Inputs ...` (CONNECT, review plan, PUBLISH). It updates only images and approved DB objects
 and preserves everything above.
 
-## 10. Handover inventory (fill in and keep privately, no secrets)
+## Handover inventory (fill in and keep privately, no secrets)
 
 ```
 Tenancy / region / compartment OCID:
@@ -446,7 +384,7 @@ from git history (`ags_deploy/ags_oke/ags_ssh/`) only if this design is explicit
 
 | Symptom | Likely cause |
 | --- | --- |
-| Init container fails: "Seed the existing OCI configuration" / "secret reference missing" / "reranker files missing" | Section 7 not completed on this PVC |
+| Init container fails: "Seed the existing OCI configuration" / "secret reference missing" / "reranker files missing" | Phase 5 not completed on this PVC |
 | `ImagePullBackOff` | `ocir-pull` wrong username format/token, repo in another compartment without policy, or image arch not arm64 |
 | PVC `Pending` | `oci-bv` binds on first consumer; check the pod is scheduled and block volume limits |
 | `/ready` fails, DB errors | Wallet Secret incomplete, wrong alias/password (re-seed with overwrite only on a fresh install), ADB ACL blocks node egress IP, schema missing |

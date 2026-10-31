@@ -1,7 +1,7 @@
 # Stage 2: public load balancer. Placeholder: __LB_SUBNET_OCID__. Apply before choosing the hostname so the LB IP exists.
-# Part of the aegis-oci-replicate first install (SKILL.md section 7). Apply only with
+# Part of the aegis-provision first install (SKILL.md Phase 5). Apply only with
 # kubectl --kubeconfig <NEW destination kubeconfig>; the live pilot also uses namespace aegis-oci.
-# Fill placeholders with the PowerShell replace shown in SKILL.md section 7, then
+# Fill placeholders with the PowerShell replace shown in SKILL.md Phase 5, then
 # kubectl --kubeconfig $kc apply --dry-run=server -f <file> before the real apply.
 apiVersion: v1
 kind: List
@@ -19,7 +19,7 @@ items:
       service.beta.kubernetes.io/oci-load-balancer-subnet1: __LB_SUBNET_OCID__
       service.beta.kubernetes.io/oci-load-balancer-backend-protocol: TCP
       service.beta.kubernetes.io/oci-load-balancer-connection-idle-timeout: "1800"
-      # Pilot manages LB/worker security lists itself (see SKILL.md section 2).
+      # Pilot manages LB/worker security lists itself (see references/manual-provisioning.md, Networking).
       service.beta.kubernetes.io/oci-load-balancer-security-list-management-mode: None
   spec:
     type: LoadBalancer

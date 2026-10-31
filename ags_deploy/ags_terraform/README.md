@@ -2,8 +2,8 @@
 
 Creates the OCI infrastructure for a new Aegis destination, using the same layout as the live
 Mumbai pilot. It provisions the infrastructure only. The first install (Kubernetes Secrets, seeding,
-workloads) and later code releases follow `.agents/skills/aegis-oci-replicate/SKILL.md`
-sections 6-9 and `Deploy-Aegis.ps1`.
+workloads) and later code releases follow `.agents/skills/aegis-provision/SKILL.md`
+Phases 2-7 and `Deploy-Aegis.ps1`.
 
 ## What it creates
 
@@ -56,7 +56,7 @@ terraform output seed_values                                    # values for the
 terraform output lb_subnet_id                                   # for 02-public-service.yaml
 ```
 
-Then continue with the skill: section 4 step 4 (create the schema), then sections 6-9.
+Then continue with the skill: Phase 2 (create the schema), then Phases 3-7.
 
 ## Notes
 

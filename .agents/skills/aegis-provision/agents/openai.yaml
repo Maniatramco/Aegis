@@ -1,0 +1,4 @@
+interface:
+  display_name: "Aegis OCI Provisioning"
+  short_description: "Provision a new OCI tenancy and install Aegis, with approval at every step"
+  default_prompt: "Use $aegis-provision to provision my OCI tenancy with Terraform and install Aegis. Before every gate, tell me exactly what you will create and wait for my approval. Never type approval words for me."
