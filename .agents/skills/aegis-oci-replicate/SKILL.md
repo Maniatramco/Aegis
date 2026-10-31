@@ -82,6 +82,17 @@ An agent following this skill cannot invent these. Collect them up front:
 - A truthful `ValidationReference`; typing `CONNECT` and `PUBLISH` at every release gate.
 - Authorization for acceptance tests that write data or call model providers.
 
+## Fast path: Terraform (recommended)
+
+`ags_deploy/ags_terraform/` provisions everything in sections 2-5 that does not involve a secret: compartment, VCN,
+subnets, security lists, OKE cluster and node pool, Autonomous AI Database, bucket, OCIR repositories and (optionally) IAM.
+It needs three inputs (`tenancy_ocid`, `region`, `operator_cidr`) plus the ADMIN password at a prompt.
+Read its [README](../../../ags_deploy/ags_terraform/README.md), run `terraform plan`, show the plan to the human,
+and run `terraform apply` only after they approve. Then use `terraform output` for the kubeconfig and wallet commands,
+the LB subnet OCID, the deployment JSON values and the seed values, and continue at **section 4 step 4** (schema), the
+first image build in section 5, then sections 6-9. Sections 2-5 below describe the same resources for manual/Console
+creation and review.
+
 ## 2. Networking and OKE cluster
 
 Use OCI Console (Networking, then Developer Services > Kubernetes Clusters > **Custom create**),

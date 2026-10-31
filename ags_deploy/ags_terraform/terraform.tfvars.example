@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (git-ignored) and fill the first three lines.
+# The ADMIN password is NOT put here: Terraform prompts for it, or set $env:TF_VAR_adb_admin_password.
+tenancy_ocid  = "ocid1.tenancy.oc1..xxxx"
+region        = "ap-hyderabad-1"
+operator_cidr = "203.0.113.10/32"   # your public IP: (Invoke-RestMethod https://ifconfig.me/ip) + "/32"
+
+# Optional (defaults match the live pilot):
+# compartment_ocid   = ""            # empty = create compartment "aegis"
+# kubernetes_version = ""            # empty = newest offered
+# adb_is_free_tier   = true          # Always Free ADB if available
+# bucket_name        = "aegis-documents"
+# create_iam         = true          # needs tenancy admin
+# app_user_public_key_pem = "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
