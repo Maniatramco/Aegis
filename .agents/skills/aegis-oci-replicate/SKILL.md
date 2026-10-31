@@ -20,9 +20,14 @@ commit `ff49e35`) and the current release guard (`ags_deploy/scripts/check-code-
 
 ## Ground rules
 
-- **Approval.** Every create step costs money or changes a tenancy. Confirm the target
-  tenancy, compartment, region, sizing and estimated cost with the tenancy owner before
-  creating anything. Record every OCID you create (template in section 10).
+- **Approval is MANDATORY at every gate below. No exceptions.** Before each gate, tell the human in plain
+  words *what you are going to do*: the exact resources/commands, the target (tenancy, region, compartment,
+  kubeconfig context), sizing, cost impact and what cannot be undone. Then **stop and wait** for their explicit
+  approval of that gate. Silence, an earlier approval, a general "go ahead", shared credentials or a
+  successful previous step are **not** approval for the next gate. If anything in the plan changes, explain the
+  change and ask again. Never type, pipe, prefill or auto-answer `PROVISION`, `DESTROY`, `CONNECT` or `PUBLISH`;
+  the human types them. If the human declines, stop and report what was (not) done. Record every OCID created
+  (template in section 10).
 - **Secrets.** Never copy the pilot's kubeconfig, OCI API key, auth token, wallet,
   `AEGIS_MASTER_KEY`, bootstrap token or `/data` volume to the new tenancy. Generate new ones.
   Keep all secrets out of Git, images, JSON inputs, command arguments, chat and logs. Use
@@ -31,6 +36,27 @@ commit `ff49e35`) and the current release guard (`ags_deploy/scripts/check-code-
   `kubectl config current-context` before every `apply`.
 - Do not use local Compose files, `container_prepare` or `ags_local_use/ags_kubernetes/`
   as the OCI installer. They are a separate design that uses Oracle Free, Qdrant and Ollama.
+
+## Mandatory approval gates
+
+| Gate | Before you run | Tell the human | They approve by |
+| --- | --- | --- | --- |
+| G0 Read-only discovery | `oci` / `terraform plan` / `kubectl get` against their tenancy | Which account/profile/region you will inspect; nothing is created | Saying yes |
+| G1 Provision infrastructure | `Provision-Aegis.ps1` (Terraform apply) or any Console/CLI create in sections 2-5 | The full plan list it prints: every resource, node size, DB size, bucket, IAM, cost, region/compartment | Typing `PROVISION` (and `DESTROY` if the plan removes anything) |
+| G2 Database schema | `Deploy-Aegis.ps1` with `DB_Object=Y` (section 4) | Owner user to be created, 13 tables, quota, target DB/service | Typing `CONNECT`, then `PUBLISH` after reviewing the printed plan |
+| G3 Push images | first `docker buildx ... --push` (section 5) | Registry/repositories, tags, architecture, source commit | Saying yes |
+| G4 Kubernetes secrets & base | section 6 `k create secret/configmap`, `01-base.yaml` | Cluster context (must be the NEW one), namespace, which Secrets (names only, never values), two 50 GB volumes | Saying yes |
+| G5 Public load balancer | `02-public-service.yaml` | A billable public LB with ports 80/443 open to the internet | Saying yes |
+| G6 Seed state | seed pod + `seed_oci_state.py` + reranker copy (section 7.4) | What files are written to `/data`, temporary password Secret created and deleted | Saying yes |
+| G7 Start the application | `03-config.yaml`, `04-workloads.yaml` | Images/digests, hostname, that the app becomes publicly reachable | Saying yes |
+| G8 Every later release | `Deploy-Aegis.ps1` (aegis-deploy skill) | The printed release plan | Typing `CONNECT`, then `PUBLISH` |
+
+Use this message shape before each gate:
+
+> **Gate G1: Provision infrastructure (needs your approval).** I am going to run `Provision-Aegis.ps1` against
+> tenancy `<name>`, region `<region>`, compartment `<name>`. It will create: <list>. Estimated cost: <...>.
+> The database and bucket are protected from deletion. Nothing has been created yet. Do you approve? If yes,
+> type `PROVISION` at the prompt yourself.
 
 ## 0. What you are building
 
@@ -87,8 +113,10 @@ An agent following this skill cannot invent these. Collect them up front:
 `ags_deploy/ags_terraform/` provisions everything in sections 2-5 that does not involve a secret: compartment, VCN,
 subnets, security lists, OKE cluster and node pool, Autonomous AI Database, bucket, OCIR repositories and (optionally) IAM.
 It needs three inputs (`tenancy_ocid`, `region`, `operator_cidr`) plus the ADMIN password at a prompt.
-Read its [README](../../../ags_deploy/ags_terraform/README.md), run `terraform plan`, show the plan to the human,
-and run `terraform apply` only after they approve. Then use `terraform output` for the kubeconfig and wallet commands,
+Read its [README](../../../ags_deploy/ags_terraform/README.md). Pass gate G0, run
+`.\Provision-Aegis.ps1 -PlanOnly`, show the human the printed list, then pass gate G1: the human runs
+`.\Provision-Aegis.ps1` and types `PROVISION` themselves (never run `terraform apply` directly or with `-auto-approve`).
+Then use `terraform output` for the kubeconfig and wallet commands,
 the LB subnet OCID, the deployment JSON values and the seed values, and continue at **section 4 step 4** (schema), the
 first image build in section 5, then sections 6-9. Sections 2-5 below describe the same resources for manual/Console
 creation and review.

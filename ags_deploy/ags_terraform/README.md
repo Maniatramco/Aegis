@@ -28,11 +28,15 @@ Three values in `terraform.tfvars`, plus the ADB ADMIN password at a prompt:
 cd ags_deploy\ags_terraform
 Copy-Item terraform.tfvars.example terraform.tfvars
 notepad terraform.tfvars        # tenancy_ocid, region, operator_cidr
-terraform init
-terraform plan -out tfplan      # prompts for adb_admin_password; review every resource
-terraform apply tfplan          # about 15-25 minutes
+.\Provision-Aegis.ps1 -PlanOnly # plan only: lists every resource, sizing and cost note; changes nothing
+.\Provision-Aegis.ps1           # same plan, then waits for you to type PROVISION before applying
 terraform output
 ```
+
+**Approval is mandatory.** `Provision-Aegis.ps1` applies only the saved, reviewed plan and only after the operator
+types `PROVISION` interactively (plus `DESTROY` if the plan would remove or replace anything). Redirected or piped input
+is refused. Do not use `terraform apply -auto-approve`. An AI agent must show the plan and get the human's approval
+first, and must never type the approval word itself.
 
 Prerequisites: Terraform 1.5 or newer, OCI CLI configured (`oci setup config`) with a user that can manage the compartment
 (tenancy admin if `create_iam = true` or a new compartment is created). Provider auth comes from
